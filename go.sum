@@ -57,16 +57,6 @@ github.com/envoyproxy/go-control-plane v0.9.1-0.20191026205805-5f8ba28d4473/go.m
 github.com/envoyproxy/go-control-plane v0.9.4/go.mod h1:6rpuAdCZL397s3pYoYcLgu1mIlRU8Am5FuJP05cCM98=
 github.com/envoyproxy/go-control-plane v0.9.7/go.mod h1:cwu0lG7PUMfa9snN8LXBig5ynNVH9qI8YYLbd1fK2po=
 github.com/envoyproxy/protoc-gen-validate v0.1.0/go.mod h1:iSmxcyjqTsJpI2R4NaDN7+kN2VEUnK/pcBlmesArF7c=
-github.com/ernestrc/blue v0.0.0-20210120000636-7ee39781b05c h1:ec7nDeRT8KgLTb55tRv9fvcT5x7vG65CeEANt9gByJw=
-github.com/ernestrc/blue v0.0.0-20210120000636-7ee39781b05c/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
-github.com/ernestrc/blue v0.0.0-20210209151414-aa1253693591 h1:PCOF93UImw21zA8VxEceJrm0vv31hSN3UAzpHqTjH0w=
-github.com/ernestrc/blue v0.0.0-20210209151414-aa1253693591/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
-github.com/ernestrc/blue v0.0.0-20210209154843-6cb358d2b555 h1:WTasSxNUn82ONwyhVx1vqhweP+crNxVcGJL1tcTY/dw=
-github.com/ernestrc/blue v0.0.0-20210209154843-6cb358d2b555/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
-github.com/ernestrc/blue v0.0.0-20210211002833-564d08ca94cd h1:1JAEn54O1ShWRUjV+jGqn+TdS+FToY4wIVCAb0C52rY=
-github.com/ernestrc/blue v0.0.0-20210211002833-564d08ca94cd/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
-github.com/ernestrc/blue v0.0.0-20210211003819-065065d11d7e h1:D/yZPnbU1/LecYCMddyaWYrJ72b7Z9rpjZvoBFyJfXk=
-github.com/ernestrc/blue v0.0.0-20210211003819-065065d11d7e/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
 github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3 h1:A+l6Sk18p2iNPKciMraO+TabkuVL09c0r1X05HIatug=
 github.com/ernestrc/blue v0.0.0-20210211011506-d4a38bdf2ac3/go.mod h1:7DR1dghzu3gWV6GYEOAvPHkXXdndOnW+XWcdGXMHuu0=
 github.com/ernestrc/dom v0.2.5-0.20201125033726-789c946aa938 h1:f/aC0hFDoMkao3chzwSlyBnwxcQj77I3i/D6HEbcuTE=
@@ -192,6 +182,9 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
+github.com/russross/blackfriday v1.6.0 h1:KqfZb0pUVN2lYqZUYRddxF4OR8ZMURnJIG5Y3VRLtww=
+github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
+github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/saracen/walker v0.1.1 h1:Ou2QIKTWqo0QxhtuHVmtObbmhjMCEUyJ82xp0uV+MGI=
 github.com/saracen/walker v0.1.1/go.mod h1:0oKYMsKVhSJ+ful4p/XbjvXbMgLEkLITZaxozsl4CGE=
 github.com/sirupsen/logrus v1.6.0 h1:UBcNElsrwanuuMsnGSlYmtmgbb23qDR5dG+6X6Oo89I=

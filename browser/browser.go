@@ -38,7 +38,7 @@ type WindowManager interface {
 	SplitVerticalLeft(Handler) (Window, error)
 	SplitHorizontalAbove(Handler) (Window, error)
 	SplitHorizontalBelow(Handler) (Window, error)
-	FloatingWindow(h Handler, at term.Coordinates, height, width int) (Window, error)
+	FloatingWindow(h Handler, at term.Coordinates, width, height int) (Window, error)
 }
 
 // EventHandler wraps the basic tui.Handler method Handle.

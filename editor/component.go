@@ -308,6 +308,7 @@ func (c *Component) DispatchCommand(
 		return false
 	}
 
+	// FIXME this does'nt work when scrolled!
 	cursor, _ := resource.Cursor()
 	strc := Command{
 		Name:         cmd,

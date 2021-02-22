@@ -17,5 +17,6 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6063", nil))
 	}()*/
 
-	plugutil.ServeEditorEventHandler(lspHandlerCommands, newLspHandler)
+	plugutil.ServeEditorEventHandler(lspHandlerCommands, newLspHandler,
+		lspHandlerPermissions...)
 }
