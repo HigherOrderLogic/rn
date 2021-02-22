@@ -18,10 +18,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/component/markdown"
 	"github.com/ernestrc/go-tui/editor"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	plugutil "github.com/ernestrc/go-tui/plugin/util"
+	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/golang-internal-tools/fakenet"
 	"github.com/ernestrc/golang-internal-tools/jsonrpc2"
@@ -34,17 +38,25 @@ import (
 )
 
 const (
+	maxHoverColumns          = 80
 	defaultRpcTimeout        = 10 * time.Second
 	defaultConnectTimeout    = 10 * time.Second
 	defaultDisconnectTimeout = 1 * time.Second
 	firstFileVersion         = 1
 	commandNextDiagnostic    = "lspNextDiagnostic"
 	commandPrevDiagnostic    = "lspPrevDiagnostic"
+	commandHover             = "lspHover"
+	commandGoToDef           = "lspGoToDefinition"
 	handleBackpressureEvs    = 64
 )
 
 var (
-	lspHandlerCommands          = []string{commandNextDiagnostic, commandPrevDiagnostic}
+	lspHandlerCommands    = []string{commandNextDiagnostic, commandPrevDiagnostic, commandHover, commandGoToDef}
+	lspHandlerPermissions = []plugin.Permission{
+		plugin.PermissionBrowserWindowManager,
+		plugin.PermissionBrowserResourceOpener,
+		plugin.PermissionBrowserMessenger,
+	}
 	defaultSemanticTokensListID = "lsp_syntax_highlighting"
 	defaultDiagnosticListID     = "lsp_diagnostic"
 	defaultDiagnosticAttr       = map[protocol.DiagnosticSeverity]term.Attributes{
@@ -109,6 +121,9 @@ type lspEditorHandler struct {
 	evChan chan editor.Event
 
 	ed editor.Editor
+	wm browser.WindowManager
+	m  browser.Messenger
+	o  browser.ResourceOpener
 
 	semanticTypesAttr    map[string]term.Attributes
 	diagnosticAttr       map[protocol.DiagnosticSeverity]term.Attributes
@@ -118,11 +133,12 @@ type lspEditorHandler struct {
 	connectTimeout       time.Duration
 	disconnectTimeout    time.Duration
 
-	exit            bool
-	files           map[span.URI]*file
-	pending         map[span.URI][]protocol.Diagnostic
-	servers         map[string]execServer
-	cancelTokensReq func()
+	exit              bool
+	files             map[span.URI]*file
+	pendingDiagnostic map[span.URI][]protocol.Diagnostic
+	pendingGoTo       map[span.URI]protocol.Range
+	servers           map[string]execServer
+	cancelTokensReq   func()
 }
 
 func sendInitializeRequest(
@@ -461,12 +477,15 @@ func getDuration(
 }
 
 func newLspHandler(
-	ed editor.Editor, pconfig plugin.Config,
+	ed editor.Editor, grants []plugin.Grant,
+	broker proto.MuxBroker, pconfig plugin.Config,
+
 ) (plugutil.CommandEventHandler, error) {
 	ret := new(lspEditorHandler)
 	ret.ed = ed
 	ret.files = make(map[span.URI]*file)
-	ret.pending = make(map[span.URI][]protocol.Diagnostic)
+	ret.pendingDiagnostic = make(map[span.URI][]protocol.Diagnostic)
+	ret.pendingGoTo = make(map[span.URI]protocol.Range)
 	ret.evChan = make(chan editor.Event, handleBackpressureEvs)
 
 	var err error
@@ -521,6 +540,26 @@ func newLspHandler(
 		return nil, err
 	}
 
+	for _, g := range grants {
+		switch g.Permission {
+		case plugin.PermissionBrowserResourceOpener:
+			ret.o, err = plugin.ResourceOpener(g.Token, broker)
+			if err != nil {
+				return nil, err
+			}
+		case plugin.PermissionBrowserWindowManager:
+			ret.wm, err = plugin.WindowManager(g.Token, broker)
+			if err != nil {
+				return nil, err
+			}
+		case plugin.PermissionBrowserMessenger:
+			ret.m, err = plugin.Messenger(g.Token, broker)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	go ret.handleEvents(ret.evChan)
 
 	return ret, nil
@@ -561,27 +600,82 @@ func (h *lspEditorHandler) newFile(handler editor.Handler, name, content string)
 	return f
 }
 
+func (h *lspEditorHandler) removePendingGoTo(uri span.URI) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.pendingGoTo, uri)
+}
+
+func (h *lspEditorHandler) addPendingGoTo(
+	uri span.URI, rs protocol.Range,
+) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	h.pendingGoTo[uri] = rs
+}
+
 func (h *lspEditorHandler) addPendingDiagnostics(
 	uri span.URI, ds []protocol.Diagnostic,
 ) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.pending[uri] = ds
+	h.pendingDiagnostic[uri] = ds
 }
 
 func (h *lspEditorHandler) dispatchPendingDiagnostics(
 	ctx context.Context, srv protocol.Server, uri span.URI,
 ) {
 	h.mu.Lock()
-	ds, ok := h.pending[uri]
-	delete(h.pending, uri)
+	ds, ok := h.pendingDiagnostic[uri]
+	delete(h.pendingDiagnostic, uri)
 	h.mu.Unlock()
 	if !ok {
 		return
 	}
 
 	h.handleDiagnostics(ctx, srv, uri, ds, firstFileVersion)
+}
+
+func (h *lspEditorHandler) getColumnMapper(f *file) protocol.ColumnMapper {
+	buf := cell.CellsToBuffer(h.getCells(f))
+	content := []byte(buf.String())
+	tc := span.NewContentConverter(f.uri.Filename(), content)
+	return protocol.ColumnMapper{
+		URI:       f.uri,
+		Content:   content,
+		Converter: tc,
+	}
+}
+
+func (h *lspEditorHandler) handleGoTo(f *file, rs protocol.Range) {
+	colmap := h.getColumnMapper(f)
+	pos, _, ok := convertRange(rs, h.getCells(f), colmap)
+	if !ok {
+		return
+	}
+
+	err := h.ed.SetCursor(f.handler, pos)
+	if err != nil {
+		log.Errorf("lspEditorHandler.SetCursor(%s): %v", f.name, err)
+	}
+}
+
+func (h *lspEditorHandler) dispatchPendingGoTo(
+	ctx context.Context, srv protocol.Server, f *file,
+) {
+	uri := f.uri
+
+	h.mu.Lock()
+	rs, ok := h.pendingGoTo[uri]
+	delete(h.pendingGoTo, uri)
+	h.mu.Unlock()
+	if !ok {
+		return
+	}
+
+	h.handleGoTo(f, rs)
 }
 
 func (h *lspEditorHandler) getFileWithName(name string) (*file, bool) {
@@ -940,6 +1034,7 @@ func (h *lspEditorHandler) handleFileOpen(ev editor.Event) {
 	log.Tracef("lspEditorHandler.Server.DidOpen(%s, %s)", f.name, f.languageID)
 
 	h.dispatchPendingDiagnostics(ctx, srv, f.uri)
+	h.dispatchPendingGoTo(ctx, srv, f)
 	ctx = h.newSemanticTokensCtx()
 	go h.semanticTokens(ctx, srv, f, h.getCells(f), ev.Content)
 }
@@ -996,14 +1091,7 @@ func (h *lspEditorHandler) parseDiagnostics(
 	f *file, d []protocol.Diagnostic,
 ) []editor.Location {
 	cells := h.getCells(f)
-	buf := cell.CellsToBuffer(cells)
-	content := []byte(buf.String())
-	tc := span.NewContentConverter(f.uri.Filename(), content)
-	colmap := protocol.ColumnMapper{
-		URI:       f.uri,
-		Content:   content,
-		Converter: tc,
-	}
+	colmap := h.getColumnMapper(f)
 
 	locs := make([]editor.Location, 0, len(d))
 	for _, d := range d {
@@ -1086,6 +1174,158 @@ func (h *lspEditorHandler) HandleDiagnostics(
 	}
 }
 
+func (h *lspEditorHandler) handleGoToDefinition(cursor term.Coordinates, ed editor.Handler, filename string) {
+
+	uri := span.URIFromPath(filename)
+	f, ok := h.getFile(uri)
+	if !ok {
+		log.Warnf("lspEditorHandler: Received hover request for an unknown file: %#v", uri)
+		return
+	}
+	srv, ok := h.getServer(f.languageID)
+	if !ok {
+		return
+	}
+
+	line, column, ok := cell.ConvertTermCoordinates(h.getCells(f), cursor)
+	if !ok {
+		log.Warnf("lspEditorHandler: Received hover request for an oob position: %#v", cursor)
+		return
+	}
+
+	p := protocol.DefinitionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: protocol.URIFromSpanURI(uri),
+			},
+			Position: protocol.Position{
+				Line:      float64(line),
+				Character: float64(column),
+			},
+		},
+	}
+
+	ctx := context.Background()
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
+	defer cancelFn()
+
+	locs, err := srv.Definition(ctx, &p)
+	if err != nil {
+		log.Errorf("lspEditorHandler.Server.Definition(%s, %s): %v", f.name, f.languageID, err)
+		return
+	}
+
+	log.Tracef("lspEditorHandler.Server.Definition(%s, %s): %#v", f.name, f.languageID, locs)
+
+	if len(locs) == 0 {
+		return
+	}
+
+	win, err := h.wm.Focus()
+	if err != nil {
+		log.Errorf("lspEditorHandler.Focus(): %v", err)
+		return
+	}
+
+	for _, l := range locs {
+		h.goToLocation(win, l)
+	}
+}
+
+func (h *lspEditorHandler) goToLocation(win browser.Window, l protocol.Location) {
+	uri := l.URI.SpanURI()
+	filename := uri.Filename()
+
+	f, alreadyOpen := h.getFileWithName(filename)
+	if !alreadyOpen {
+		h.addPendingGoTo(uri, l.Range)
+	}
+
+	// FIXME if file is already open by current focus, Open errors out
+	buf, err := h.o.Open(filename)
+	if err != nil {
+		h.m.SetMessage("Open: %v", err)
+		log.Errorf("lspEditorHandler.Open(%s): %v", filename, err)
+		h.removePendingGoTo(uri)
+		return
+	}
+
+	if alreadyOpen {
+		h.handleGoTo(f, l.Range)
+	}
+
+	err = win.SetContent(buf)
+	if err != nil {
+		// FIXME handle TabAlreadyWindow
+		log.Errorf("error SetContent: %v", err)
+		return
+	}
+}
+
+func (h *lspEditorHandler) handleHover(cursor term.Coordinates, ed editor.Handler, filename string) {
+	ctx := context.Background()
+	ctx, cancelFn := context.WithTimeout(ctx, h.rpcTimeout)
+	defer cancelFn()
+
+	uri := span.URIFromPath(filename)
+	f, ok := h.getFile(uri)
+	if !ok {
+		log.Warnf("lspEditorHandler: Received hover request for an unknown file: %#v", uri)
+		return
+	}
+	srv, ok := h.getServer(f.languageID)
+	if !ok {
+		return
+	}
+
+	line, column, ok := cell.ConvertTermCoordinates(h.getCells(f), cursor)
+	if !ok {
+		log.Warnf("lspEditorHandler: Received hover request for an oob position: %#v", cursor)
+		return
+	}
+
+	p := protocol.HoverParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: protocol.URIFromSpanURI(uri),
+			},
+			Position: protocol.Position{
+				Line:      float64(line),
+				Character: float64(column),
+			},
+		},
+	}
+
+	hover, err := srv.Hover(ctx, &p)
+	if err != nil || hover == nil {
+		log.Errorf("lspEditorHandler.Server.Hover(%s, %s): %v", f.name, f.languageID, err)
+		return
+	}
+
+	log.Tracef("lspEditorHandler.Server.Hover(%s, %s): %#v", f.name, f.languageID, hover)
+
+	if hover.Contents.Kind != "markdown" {
+		return
+	}
+
+	scroll := markdown.Parse([]byte(hover.Contents.Value))
+	scroll.Wrap = true
+	key := term.Event{Type: term.EventKey, Key: term.KeyEsc}
+	bh := browser.NopHandler(handler.KeyExit(scroll, key))
+	maxColumns := scroll.Buffer().MaxColumns()
+	width := int(math.Min(float64(maxColumns), maxHoverColumns)) + 2
+	height := scroll.Buffer().Rows() + 2 // frame
+
+	at := cursor
+	at.Y += 2
+	at.X = 2
+
+	_, err = h.wm.FloatingWindow(bh, at, width, height)
+	if err != nil {
+		log.Errorf("lspEditorHandler.FloatingWindow(%s): %v", f.name, err)
+	}
+}
+
 func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 	switch cmd.Name {
 	case commandNextDiagnostic:
@@ -1098,6 +1338,10 @@ func (h *lspEditorHandler) HandleCommand(cmd editor.Command) (exit bool) {
 		if err != nil {
 			log.Errorf("lspEditorHandler.MoveToNextLocation(%s): %v", cmd.Name, err)
 		}
+	case commandHover:
+		h.handleHover(cmd.Cursor, cmd.Resource, cmd.ResourceName)
+	case commandGoToDef:
+		h.handleGoToDefinition(cmd.Cursor, cmd.Resource, cmd.ResourceName)
 	}
 
 	return false

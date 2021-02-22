@@ -751,9 +751,14 @@ func (vi *Vi) SetLocationList(ID string, l editor.LocationList) {
 	_ = vi.cursor.SetLocationList(ID, l)
 }
 
-// SetCursor sets the cursor of this Vi handler.
-func (vi *Vi) SetCursor(pos term.Coordinates) bool {
+// SetCursorAtScroll sets the cursor of this Vi handler at content pos.
+func (vi *Vi) SetCursorAtScroll(pos term.Coordinates) bool {
 	_, ok := vi.cursor.MoveToScroll(pos)
 	vi.free, _ = vi.cursor.Cursor()
 	return ok
+}
+
+// CursorAtScroll sets the cursor of this Vi handler at content pos.
+func (vi *Vi) CursorAtScroll() term.Coordinates {
+	return vi.cursor.CursorAtScroll()
 }

@@ -212,6 +212,16 @@ func (b *Buffer) Columns(y int) int {
 	return b.reader.Columns(y)
 }
 
+// MaxColumns returns the max number of columns.
+func (b *Buffer) MaxColumns() (max int) {
+	for i := 0; i < b.Rows(); i++ {
+		if col := b.Columns(i); col > max {
+			max = col
+		}
+	}
+	return
+}
+
 // Cell returns the cell and true or a zero-valued cell and false if there is no
 // cell at position.
 func (b *Buffer) Cell(pos term.Coordinates) (term.Cell, bool) {
@@ -328,6 +338,13 @@ func (b *Buffer) Write(p []byte) (int, error) {
 func (b *Buffer) WriteString(p string) {
 	nextWrite := b.cells.nextWrite()
 	b.writer.Insert(nextWrite, p)
+}
+
+// WriteStringWithAttr inserts str with the given attr as the background
+// and foreground cell term.Attributes.
+func (b *Buffer) WriteStringWithAttr(str string, attr term.Attributes) {
+	at := b.cells.nextWrite()
+	b.InsertStringWithAttr(at, str, attr)
 }
 
 // Undo reverses the last update to the Buffer.

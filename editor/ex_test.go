@@ -85,6 +85,10 @@ func (e *testEditor) SetCursor(h Handler, pos term.Coordinates) error {
 	return nil
 }
 
+func (e *testEditor) Cursor(h Handler) (term.Coordinates, error) {
+	return h.(*testEditorHandler).CursorPos, nil
+}
+
 func (e *testEditor) Writer(h Handler) Writer {
 	return CellWriter(e.buf.Writer())
 }

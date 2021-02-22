@@ -14,6 +14,7 @@ require (
 	github.com/hashicorp/go-plugin v1.0.1
 	github.com/junegunn/fzf v0.0.0-20201216124428-ab3937ee5a62
 	github.com/nsf/termbox-go v0.0.0-20190817171036-93860e161317
+	github.com/russross/blackfriday/v2 v2.1.0
 	github.com/sirupsen/logrus v1.6.0
 	github.com/stretchr/testify v1.6.1
 	go.uber.org/goleak v1.0.0

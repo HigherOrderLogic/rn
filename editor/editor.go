@@ -65,6 +65,10 @@ type Editor interface {
 	// Moves cursor to the previous location on list with ID.
 	MoveToPrevLocation(h Handler, ID string) error
 
+	// Cursor gets the position of Handler's cursor in the underlying
+	// content buffer.
+	Cursor(Handler) (term.Coordinates, error)
+
 	// SetCursor sets the cursor of Handler to the given Coordinates.
 	SetCursor(Handler, term.Coordinates) error
 

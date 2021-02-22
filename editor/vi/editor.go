@@ -95,9 +95,14 @@ func (e *viEditor) Writer(h editor.Handler) editor.Writer {
 }
 
 func (e *viEditor) SetCursor(h editor.Handler, pos term.Coordinates) error {
-	ok := h.(*Vi).SetCursor(pos)
+	ok := h.(*Vi).SetCursorAtScroll(pos)
 	if !ok {
 		return errors.New("SetCursor: invalid cursor position")
 	}
 	return nil
+}
+
+func (e *viEditor) Cursor(h editor.Handler) (term.Coordinates, error) {
+	pos := h.(*Vi).CursorAtScroll()
+	return pos, nil
 }

@@ -222,17 +222,17 @@ func (m *MockCommandHandler) EXPECT() *MockCommandHandlerMockRecorder {
 }
 
 // HandleCommand mocks base method.
-func (m *MockCommandHandler) HandleCommand(cmd string, h Handler, name string) bool {
+func (m *MockCommandHandler) HandleCommand(arg0 Command) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "HandleCommand", cmd, h, name)
+	ret := m.ctrl.Call(m, "HandleCommand", arg0)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
 
 // HandleCommand indicates an expected call of HandleCommand.
-func (mr *MockCommandHandlerMockRecorder) HandleCommand(cmd, h, name interface{}) *gomock.Call {
+func (mr *MockCommandHandlerMockRecorder) HandleCommand(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCommand", reflect.TypeOf((*MockCommandHandler)(nil).HandleCommand), cmd, h, name)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleCommand", reflect.TypeOf((*MockCommandHandler)(nil).HandleCommand), arg0)
 }
 
 // MockEditor is a mock of Editor interface.
@@ -256,6 +256,21 @@ func NewMockEditor(ctrl *gomock.Controller) *MockEditor {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEditor) EXPECT() *MockEditorMockRecorder {
 	return m.recorder
+}
+
+// Cursor mocks base method.
+func (m *MockEditor) Cursor(arg0 Handler) (term.Coordinates, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Cursor", arg0)
+	ret0, _ := ret[0].(term.Coordinates)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Cursor indicates an expected call of Cursor.
+func (mr *MockEditorMockRecorder) Cursor(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockEditor)(nil).Cursor), arg0)
 }
 
 // Edit mocks base method.

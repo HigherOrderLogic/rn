@@ -231,6 +231,21 @@ func (c *Client) SetCursor(h Handler, pos term.Coordinates) error {
 	return err
 }
 
+// Cursor requests the editor server to move cursor to pos
+func (c *Client) Cursor(h Handler) (term.Coordinates, error) {
+	ctx := context.Background()
+	token, ok := h.(browser.Token)
+	if !ok {
+		panic("Cursor: invalid Handler argument")
+	}
+	req := proto.CursorRequest{HandlerId: uint32(token.ID)}
+	res, err := c.ed.Cursor(ctx, &req)
+	if err != nil {
+		return term.Coordinates{}, err
+	}
+	return res.GetPos().ToModel(), nil
+}
+
 // Writer satisfies editor.Editor.
 func (c *Client) Writer(h Handler) Writer {
 	token, ok := h.(browser.Token)

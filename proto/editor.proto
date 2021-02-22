@@ -111,11 +111,20 @@ message SetCursorRequest {
 message SetCursorResponse {
 }
 
+message CursorRequest {
+	uint32 handler_id = 1;
+}
+
+message CursorResponse {
+	Coordinates pos = 1;
+}
+
 service Editor {
 	rpc Edit(EditRequest) returns (EditResponse);
 	rpc Subscribe(EditorSubscribeRequest) returns (EditorSubscribeResponse);
 	rpc Register(RegisterCommandRequest) returns (RegisterCommandResponse);
 	rpc SetCursor(SetCursorRequest) returns (SetCursorResponse);
+	rpc Cursor(CursorRequest) returns (CursorResponse);
 
 	// locations
 	rpc SetLocationList(SetLocationListRequest) returns (SetLocationListResponse);

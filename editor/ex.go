@@ -82,7 +82,7 @@ func (e *Ex) moveFocusCursor(line int) error {
 	if line < 0 {
 		line = 0
 	}
-	return e.SetCursor(h, term.Coordinates{Y: line})
+	return e.comp.SetCursor(h, term.Coordinates{Y: line})
 }
 
 func (e *Ex) runSingleCommand(cmd string) (quit bool, err error) {
@@ -274,11 +274,6 @@ func (e *Ex) Cursor() (pos term.Coordinates, show bool) {
 		return pos, true
 	}
 	return e.comp.Browser().Cursor()
-}
-
-// SetCursor satisfies editor.Editor.
-func (e *Ex) SetCursor(h Handler, pos term.Coordinates) error {
-	return e.comp.SetCursor(h, pos)
 }
 
 // Man satisfies tui.Handler.

@@ -386,6 +386,31 @@ func (s *Server) SetCursor(ctx context.Context, in *proto.SetCursorRequest) (
 	return new(proto.SetCursorResponse), nil
 }
 
+// Cursor satisfies proto.EditorServer
+func (s *Server) Cursor(ctx context.Context, in *proto.CursorRequest) (
+	*proto.CursorResponse, error,
+) {
+	handlerID := in.GetHandlerId()
+
+	s.editor.Lock()
+	defer s.editor.Unlock()
+
+	h, ok := s.idToHandler[handlerID]
+	if !ok {
+		return nil, errHandlerNotFound
+	}
+
+	pos, err := s.editor.Cursor(h)
+	if err != nil {
+		return nil, err
+	}
+
+	var protoPos proto.Coordinates
+	protoPos.FromModel(pos)
+
+	return &proto.CursorResponse{Pos: &protoPos}, nil
+}
+
 func (s *Server) moveToLocation(
 	ctx context.Context, in *proto.MoveToLocationRequest, next bool,
 ) (res *proto.MoveToLocationResponse, err error) {
