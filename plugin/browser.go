@@ -60,7 +60,8 @@ func (s *browserResourceServer) Serve(
 			}
 			grpc := srv.GRPC()
 			s.srv = srv
-			server := browser.NewServer(broker, s.b, lock)
+			server := new(browser.Server)
+			server.Init(broker, s.b, lock, interruptWindowServer)
 			server.Logger = l
 			rpcServer := interruptBrowserServer(server, term.Interrupt)
 			proto.RegisterWindowManagerServer(grpc, rpcServer)

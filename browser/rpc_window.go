@@ -87,9 +87,8 @@ type windowServer struct {
 	s   *Server
 }
 
-func newWindowServer(
-	s *Server, win Window,
-) *windowServer {
+// NewWindowServer returns a proto.WindowServer.
+func NewWindowServer(s *Server, win Window) proto.WindowServer {
 	ret := new(windowServer)
 	ret.win = win
 	ret.s = s

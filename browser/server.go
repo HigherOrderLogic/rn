@@ -46,6 +46,8 @@ type Server struct {
 		Browser
 		sync.Locker
 	}
+
+	windowServer func(*Server, Window) proto.WindowServer
 }
 
 // browserServerHandler wraps a handler.Client to satisfy browser.Handler
@@ -76,13 +78,14 @@ func NewServer(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
 ) *Server {
 	ret := new(Server)
-	ret.Init(broker, browser, lock)
+	ret.Init(broker, browser, lock, NewWindowServer)
 	return ret
 }
 
 // Init initializes this Server with broker and browser.
 func (s *Server) Init(
 	broker proto.MuxBroker, browser Browser, lock sync.Locker,
+	windowServer func(*Server, Window) proto.WindowServer,
 ) {
 	s.broker = broker
 	s.browser.Browser = browser
@@ -91,6 +94,7 @@ func (s *Server) Init(
 	s.servers = make(map[uint64]io.Closer)
 	s.opened = make(map[uint32]Handler)
 	s.failureTimeout = defaultFailureTimeout
+	s.windowServer = windowServer
 	s.Server.Init(browser, nil)
 }
 
@@ -150,7 +154,7 @@ func (s *Server) serveWindow(win Window) uint64 {
 
 	brokerID, srv := proto.AcceptAndServe(s.broker, s.Logger,
 		func(windowBrokerID uint32, srv proto.MuxServer) {
-			winSrv := newWindowServer(s, win)
+			winSrv := s.windowServer(s, win)
 			proto.RegisterWindowServer(srv.GRPC(), winSrv)
 		})
 
