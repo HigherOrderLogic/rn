@@ -105,6 +105,7 @@ func (h *fuzzyFinderHandler) getSearchHistory() error {
 	if err == nil {
 		log.Debugf("retrieved query history; %#v", h.history.Queries)
 	}
+
 	return err
 }
 
@@ -117,14 +118,35 @@ func (h *fuzzyFinderHandler) addSearchHistory(searchQuery string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
 	defer cancel()
 
+	h.mu.Unlock()
+	defer h.mu.Lock()
+
 	return h.s.Set(ctx, searchHistoryDocumentID, &h.history)
+}
+
+func (h *fuzzyFinderHandler) open(resource string) (browser.Handler, error) {
+	h.mu.Unlock()
+	defer h.mu.Lock()
+	return h.f.Open(resource)
+}
+
+func (h *fuzzyFinderHandler) setContent(b browser.Handler) error {
+	h.mu.Unlock()
+	defer h.mu.Lock()
+	return h.invokeWindow.SetContent(b)
+}
+
+func (h *fuzzyFinderHandler) setMessage(msg string, args ...interface{}) error {
+	h.mu.Unlock()
+	defer h.mu.Lock()
+	return h.m.SetMessage(msg, args...)
 }
 
 func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 	resource := h.getResource(data)
-	buf, err := h.f.Open(resource)
+	buf, err := h.open(resource)
 	if err != nil {
-		merr := h.m.SetMessage("Open: %v", err)
+		merr := h.setMessage("Open: %v", err)
 		if merr != nil {
 			log.Errorf("error setting message: %v", merr)
 		}
@@ -132,7 +154,7 @@ func (h *fuzzyFinderHandler) openResource(searchQuery, data string) {
 		return
 	}
 
-	err = h.invokeWindow.SetContent(buf)
+	err = h.setContent(buf)
 	if err != nil {
 		log.Errorf("error SetContent: %v", err)
 		return
