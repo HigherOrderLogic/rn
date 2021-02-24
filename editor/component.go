@@ -196,8 +196,8 @@ func (c *Component) Init(ed Editor, config Config) (err error) {
 	return
 }
 
-func (c *Component) setFocusToTab(tabName string) (browser.Handler, error) {
-	t, ok := c.comp.Tab(tabName)
+func (c *Component) setFocusToTab(id string) (browser.Handler, error) {
+	t, ok := c.comp.Tab(id)
 	if !ok {
 		// NOTE: swap file was not cleaned up
 		// probably because prev process terminated
@@ -223,6 +223,12 @@ func (c *Component) setFocusToTab(tabName string) (browser.Handler, error) {
 func (c *Component) OpenFileTab(
 	filename, recoveryFilename string,
 ) (browser.Handler, error) {
+	// needed as tab ID
+	filename, err := filepath.Abs(filename)
+	if err != nil {
+		return nil, fmt.Errorf("could not evaluate file path '%s': %v", filename, err)
+	}
+
 	buf := c.newCellBuffer()
 	fc, err := c.newFileBuffer(filename, recoveryFilename, buf)
 	if err != nil {
