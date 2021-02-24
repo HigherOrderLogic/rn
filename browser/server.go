@@ -125,7 +125,7 @@ func (s *Server) dialHandler(handlerID uint64) (handlerCloser, error) {
 	pbClient := proto.NewHandlerClient(handlerConn)
 	cc := handler.NewClient(pbClient)
 	cc.Logger = s.Logger
-	client := newIOWaitUnlockHandler(cc, s.browser)
+	client := newIOWaitUnlockHandler(cc, s.browser.Locker)
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 

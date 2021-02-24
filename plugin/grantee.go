@@ -58,7 +58,7 @@ type granteePlugin struct {
 
 // GRPCServer satisfies plugin.GRPCPlugin
 func (p *granteePlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
-	server := newGranteeServer(p.broker, p.grantee, p.requested, p.keepAlive, &pluginLock)
+	server := newGranteeServer(p.broker, p.grantee, p.requested, p.keepAlive)
 	if p.logger.IsLevelEnabled(log.TraceLevel) {
 		server = &loggingGranteeServer{Logger: p.logger, GranteeServer: server}
 	}

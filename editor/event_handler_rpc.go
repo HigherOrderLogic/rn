@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/ernestrc/go-tui/proto"
@@ -98,17 +97,15 @@ func (c *eventHandlerClient) Close() error {
 
 type eventHandlerServer struct {
 	handler EventHandler
-	lock    sync.Locker
 	logger  *log.Logger
 	onExit  func()
 }
 
 func newEventHandlerServer(
-	lock sync.Locker, handler EventHandler, onExit func(),
+	handler EventHandler, onExit func(),
 ) *eventHandlerServer {
 	ret := new(eventHandlerServer)
 	ret.handler = handler
-	ret.lock = lock
 	ret.onExit = onExit
 	return ret
 }
@@ -128,9 +125,7 @@ func (s *eventHandlerServer) Handle(
 		return nil, err
 	}
 
-	s.lock.Lock()
 	quit := s.handler.Handle(ev)
-	s.lock.Unlock()
 
 	resp := &proto.EditorEventHandleResponse{Quit: quit}
 

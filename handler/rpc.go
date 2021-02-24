@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
 	"time"
 
 	"github.com/ernestrc/go-tui"
@@ -230,33 +229,25 @@ func (c *Client) Close() error {
 
 // Server serves a tui.Handler implementation over GRPC.
 type Server struct {
-	mu      sync.Locker
 	handler tui.Handler
 	Logger  *log.Logger
 }
 
 // NewServer allocates storage for a new Server and initializes it.
-func NewServer(handler tui.Handler, mu sync.Locker) *Server {
+func NewServer(handler tui.Handler) *Server {
 	ret := new(Server)
-	ret.Init(handler, mu)
+	ret.Init(handler)
 	return ret
 }
 
-// Init initializes this Server to serve handler. It uses locker
-// to synchronize access to handler, so it's goroutine-safe
-// to share a handler between multiple servers, as long as the
-// same locker is used.
-func (s *Server) Init(handler tui.Handler, locker sync.Locker) {
+// Init initializes this Server to serve handler.
+func (s *Server) Init(handler tui.Handler) {
 	s.handler = handler
-	s.mu = locker
 }
 
 func (s *Server) draw(ctx context.Context, in *proto.DrawRequest) (
 	*proto.DrawResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.handler.Resize(int(in.Width), int(in.Height))
 	cursor, show := s.handler.Cursor()
 	res := proto.NewDrawResponse(s.handler, int(in.Width), int(in.Height))
@@ -282,9 +273,7 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 
 	var exit, handled bool
 	if ev.Type != term.EventInterrupt {
-		s.mu.Lock()
 		exit, handled = s.handler.Handle(ev)
-		s.mu.Unlock()
 	}
 
 	resp, err := s.draw(ctx, req.GetDraw())
@@ -304,9 +293,6 @@ func (s *Server) Handle(ctx context.Context, req *proto.HandleRequest) (
 func (s *Server) Man(context.Context, *proto.ManRequest) (
 	*proto.ManResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	man := s.handler.Man()
 	protoMan := new(proto.Manual)
 	protoMan.FromModel(man)
@@ -318,8 +304,6 @@ func (s *Server) Man(context.Context, *proto.ManRequest) (
 func (s *Server) OnUnmount(context.Context, *proto.OnUnmountRequest) (
 	*proto.OnUnmountResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	unmounter, ok := s.handler.(interface{ OnUnmount() error })
 	if ok {
 		err := unmounter.OnUnmount()

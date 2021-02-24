@@ -8,7 +8,4 @@ var (
 	// but each plugin should have at least 1 browser and editor
 	// per permission per process so in practice it's not a problem
 	clients sync.Map
-
-	// Used to synchronize plugin access across host clients.
-	pluginLock sync.Mutex
 )

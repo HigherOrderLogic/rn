@@ -17,7 +17,7 @@ const (
 )
 
 type granteeServer struct {
-	mu        sync.Locker
+	mu        sync.Mutex
 	req       []Permission
 	broker    proto.MuxBroker
 	grantee   Grantee
@@ -31,13 +31,12 @@ type granteeServer struct {
 
 func newGranteeServer(
 	broker proto.MuxBroker, grantee Grantee, req []Permission,
-	keepAlive time.Duration, locker sync.Locker,
+	keepAlive time.Duration,
 ) proto.GranteeServer {
 	ret := new(granteeServer)
 	ret.broker = broker
 	ret.grantee = grantee
 	ret.req = req
-	ret.mu = locker
 	ret.durationGracefulShut = defDurationGracefulShutServer
 	ret.osExit = os.Exit
 	if keepAlive != time.Duration(0) {
@@ -79,9 +78,6 @@ func (s *granteeServer) monitorKeepAlive() {
 func (s *granteeServer) Permissions(ctx context.Context, req *proto.PermRequest) (
 	*proto.PermResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	resp := new(proto.PermResponse)
 	for _, perm := range s.req {
 		resp.Perms = append(resp.Perms, &proto.Permission{Id: string(perm)})
@@ -98,9 +94,15 @@ func (s *granteeServer) Permissions(ctx context.Context, req *proto.PermRequest)
 		}
 	}
 
-	if !s.connected {
-		s.connected = true
+	s.mu.Lock()
+	connected := s.connected
+	s.mu.Unlock()
+
+	if !connected {
 		s.grantee.Connected(s.broker, cfg)
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.connected = true
 		if s.keepAlive != nil {
 			go s.monitorKeepAlive()
 		}
@@ -112,9 +114,6 @@ func (s *granteeServer) Permissions(ctx context.Context, req *proto.PermRequest)
 func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantRequest) (
 	*proto.OnPermGrantResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	/* only trigger OnPermission* for permissions that were actually requested */
 
 	var denied []Permission
@@ -147,12 +146,13 @@ func (s *granteeServer) OnGrant(ctx context.Context, req *proto.OnPermGrantReque
 }
 
 func (s *granteeServer) doShutdown(reason string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if err := s.grantee.Shutdown(reason); err != nil {
 		return err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.keepAlive != nil {
 		close(s.keepAlive)
 		s.keepAlive = nil
@@ -179,14 +179,17 @@ func (s *granteeServer) Shutdown(ctx context.Context, in *proto.ShutdownRequest)
 func (s *granteeServer) Health(context.Context, *proto.HealthRequest) (
 	*proto.HealthResponse, error,
 ) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	if err := s.grantee.Health(); err != nil {
 		return nil, err
 	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if s.keepAlive != nil {
-		s.keepAlive <- struct{}{}
+		select {
+		case s.keepAlive <- struct{}{}:
+		}
 	}
 	return new(proto.HealthResponse), nil
 }

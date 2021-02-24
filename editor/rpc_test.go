@@ -32,7 +32,7 @@ func setupIntTest(
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	client = NewClient(broker, conn, new(sync.Mutex))
+	client = NewClient(broker, conn)
 	closeFn = func() {
 		client.Close()
 		grpcServer.Stop()
@@ -125,11 +125,12 @@ func TestClientServerIntegration(t *testing.T) {
 			tcase := _tcase
 			t.Run(tcase.name, func(t *testing.T) {
 				var wg sync.WaitGroup
+				var mu sync.Mutex
 				ctrl := gomock.NewController(t)
 				defer ctrl.Finish()
 				b := proto.NewDialBroker()
 				ed := &testEditor{}
-				s := NewServer(b, ed, new(sync.Mutex))
+				s := NewServer(b, ed, &mu)
 
 				client, closeFn := setupIntTest(t, b, s)
 				defer closeFn()
@@ -151,7 +152,10 @@ func TestClientServerIntegration(t *testing.T) {
 
 				wg.Add(1)
 				buf := cell.NewBuffer()
+				// simulate runtime mutex
+				mu.Lock()
 				tcase.trigger(t, strconv.Itoa(i), ed, buf)
+				mu.Unlock()
 				wg.Wait()
 
 				assert.NoError(t, s.Close())

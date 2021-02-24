@@ -85,7 +85,6 @@ func newTestRPCBrowser(t *testing.T,
 
 		broker := proto.NewDialBroker()
 
-		var clientMutex sync.Mutex
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
 		server := browser.NewServer(broker, b.Browser(), &serverMutex)
@@ -101,7 +100,7 @@ func newTestRPCBrowser(t *testing.T,
 		conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 		require.NoError(t, err)
 
-		bc := browser.NewClient(broker, conn, &clientMutex)
+		bc := browser.NewClient(broker, conn)
 		bc.Logger = logger
 		h := &safeHandler{Handler: b, mu: &serverMutex}
 		*destructor = func() {

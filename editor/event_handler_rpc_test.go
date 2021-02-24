@@ -16,14 +16,14 @@ import (
 )
 
 func newClientServerIntegration(
-	t *testing.T, h *MockEventHandler, lock sync.Locker,
+	t *testing.T, h *MockEventHandler,
 	serverQuitCallback, clientQuitCallback func(),
 ) (*eventHandlerClient, func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	server := newEventHandlerServer(lock, h, serverQuitCallback)
+	server := newEventHandlerServer(h, serverQuitCallback)
 	proto.RegisterEditorEventHandlerServer(grpcServer, server)
 
 	go grpcServer.Serve(lis)
@@ -64,7 +64,7 @@ func TestEventHandlerRPC(t *testing.T) {
 		defer ctrl.Finish()
 		h := NewMockEventHandler(ctrl)
 
-		client, closeFn := newClientServerIntegration(t, h, new(sync.Mutex), func() {}, func() {})
+		client, closeFn := newClientServerIntegration(t, h, func() {}, func() {})
 		defer closeFn()
 
 		go consumeError(t, &wg, client)
@@ -83,13 +83,12 @@ func TestEventHandlerRPC(t *testing.T) {
 
 	t.Run("client/server call exit callback if remote handler returns true to a Handle call", func(t *testing.T) {
 		var wg sync.WaitGroup
-		var mu sync.Mutex
 
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		h := NewMockEventHandler(ctrl)
 
-		client, closeFn := newClientServerIntegration(t, h, &mu, wg.Done, wg.Done)
+		client, closeFn := newClientServerIntegration(t, h, wg.Done, wg.Done)
 		defer closeFn()
 
 		go consumeError(t, &wg, client)
@@ -109,7 +108,7 @@ func TestEventHandlerRPC(t *testing.T) {
 		defer ctrl.Finish()
 		h := NewMockEventHandler(ctrl)
 
-		client, closeFn := newClientServerIntegration(t, h, new(sync.Mutex), func() {}, func() {})
+		client, closeFn := newClientServerIntegration(t, h, func() {}, func() {})
 		defer closeFn()
 
 		go func() {

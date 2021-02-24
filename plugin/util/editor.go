@@ -2,6 +2,7 @@ package util
 
 import (
 	"io"
+	"sync"
 
 	"github.com/ernestrc/go-tui/editor"
 	"github.com/ernestrc/go-tui/plugin"
@@ -17,6 +18,7 @@ type CommandEventHandler interface {
 }
 
 type editorGrantee struct {
+	mu         sync.Mutex
 	broker     proto.MuxBroker
 	ed         editor.Editor
 	handler    CommandEventHandler
@@ -27,9 +29,27 @@ type editorGrantee struct {
 }
 
 func (t *editorGrantee) Connected(broker proto.MuxBroker, config plugin.Config) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	log.Infof("plugin connected; config: %#v", config)
 	t.broker = broker
 	t.pconfig = config
+}
+
+func (t *editorGrantee) setNewHandler(
+	ed editor.Editor, grants []plugin.Grant,
+	broker proto.MuxBroker, config plugin.Config,
+) (CommandEventHandler, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	h, err := t.newHandler(ed, grants, broker, config)
+	if err == nil {
+		t.handler = h
+	}
+
+	return h, err
 }
 
 func (t *editorGrantee) subscribeToEvents(grants []plugin.Grant) error {
@@ -40,11 +60,10 @@ func (t *editorGrantee) subscribeToEvents(grants []plugin.Grant) error {
 		editor.EventTypeInsert,
 		editor.EventTypeDelete,
 	}
-	h, err := t.newHandler(t.ed, grants, t.broker, t.pconfig)
+	h, err := t.setNewHandler(t.ed, grants, t.broker, t.pconfig)
 	if err != nil {
 		return err
 	}
-	t.handler = h
 	for _, ev := range evs {
 		err := t.ed.SubscribeEditor(ev, h)
 		if err != nil {
@@ -86,8 +105,13 @@ func (t *editorGrantee) PermissionDenied(perms []plugin.Permission) {
 
 func (t *editorGrantee) Shutdown(reason string) error {
 	log.Warningf("plugin being shutdown: %s", reason)
-	if t.handler != nil {
-		return t.handler.Close()
+
+	t.mu.Lock()
+	handler := t.handler
+	t.mu.Unlock()
+
+	if handler != nil {
+		return handler.Close()
 	}
 	return nil
 }

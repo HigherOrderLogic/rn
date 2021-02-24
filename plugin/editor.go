@@ -70,7 +70,7 @@ func dialEditor(token uint32, broker proto.MuxBroker) (
 	if err != nil {
 		return nil, err
 	}
-	c := editor.NewClient(broker, conn, &pluginLock)
+	c := editor.NewClient(broker, conn)
 	c.Logger = &pluginLogger
 	clients.Store(token, c)
 	return c, nil

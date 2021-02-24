@@ -308,3 +308,28 @@ func TestServerSetCursor(t *testing.T) {
 		require.NotNil(t, res)
 	})
 }
+
+func TestServerCursor(t *testing.T) {
+	t.Run("calls underlying editor Cursor", func(t *testing.T) {
+		ctx := context.Background()
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		broker, mock, s := newTestServer(t, ctrl)
+
+		name := "Cursorer"
+		nextID := uint32(12888)
+		expectEdit(t, mock, name, "")
+		callServerEdit(t, ctx, broker, s, nextID, name, "")
+
+		pos := term.Coordinates{X: 4, Y: 5}
+		mock.EXPECT().Cursor(gomock.Any()).Return(pos, nil).Times(1)
+
+		req := proto.CursorRequest{HandlerId: nextID}
+		res, err := s.Cursor(ctx, &req)
+		require.NoError(t, err)
+		require.NotNil(t, res)
+
+		assert.Equal(t, pos, res.GetPos().ToModel())
+	})
+}

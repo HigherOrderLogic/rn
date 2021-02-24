@@ -24,9 +24,6 @@ type Client struct {
 	// resources invariant
 	mu sync.Mutex
 
-	// synchronize access to plugin state
-	pluginLock sync.Locker
-
 	// time this client waits for a grpc connection transient failure
 	// to recover before we shutdown connection.
 	failureTimeout time.Duration
@@ -75,10 +72,9 @@ func (c browserClientHandler) Handle(ev term.Event) (bool, bool) {
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
-	pluginLock sync.Locker,
 ) *Client {
 	ret := new(Client)
-	ret.Init(broker, cc, pluginLock)
+	ret.Init(broker, cc)
 	return ret
 }
 
@@ -92,7 +88,6 @@ func (c *Client) tryLog(msg string, args ...interface{}) {
 // Init initializes this Client with broker and client.
 func (c *Client) Init(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
-	pluginLock sync.Locker,
 ) {
 	c.storage.Init(cc)
 	c.wm = proto.NewWindowManagerClient(cc)
@@ -106,7 +101,6 @@ func (c *Client) Init(
 	c.clients = make(map[uint64]io.Closer)
 	c.servers = make(map[uint64]io.Closer)
 	c.failureTimeout = defaultFailureTimeout
-	c.pluginLock = pluginLock
 }
 
 func (c *Client) serveHandler(h Handler) uint64 {
@@ -124,7 +118,7 @@ func (c *Client) serveHandler(h Handler) uint64 {
 					c:         c,
 					handlerID: uint64(handlerID),
 				}
-				hsrv := handler.NewServer(h, c.pluginLock)
+				hsrv := handler.NewServer(h)
 				hsrv.Logger = c.Logger
 				proto.RegisterHandlerServer(srv.GRPC(), hsrv)
 			})

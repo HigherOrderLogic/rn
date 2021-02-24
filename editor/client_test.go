@@ -20,7 +20,7 @@ func newTestClient(ctrl *gomock.Controller) (
 ) {
 	broker := proto.NewMockMuxBroker(ctrl)
 	cc := proto.NewMockClientConnInterface(ctrl)
-	c := NewClient(broker, cc, nopLocker{})
+	c := NewClient(broker, cc)
 	return broker, cc, c
 }
 

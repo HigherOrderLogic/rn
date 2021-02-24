@@ -3,6 +3,7 @@ package util
 import (
 	"fmt"
 	"io"
+	"sync"
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
@@ -18,6 +19,7 @@ var requiredPermissions = []plugin.Permission{
 }
 
 type keySplitHandler struct {
+	mu     sync.Mutex
 	config KeySplitHandlerConfig
 
 	broker  proto.MuxBroker
@@ -36,25 +38,45 @@ func (t *keySplitHandler) Connected(broker proto.MuxBroker, config plugin.Config
 }
 
 func (t *keySplitHandler) closeHandler() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	if t.h == nil {
 		return false
 	}
+
+	defer func() {
+		t.h = nil
+	}()
+
 	if closer, ok := t.h.(io.Closer); ok {
+		t.mu.Unlock()
+		defer t.mu.Lock()
 		err := closer.Close()
 		if err != nil {
 			log.Errorf("error closing plugin: %v", err)
 		}
 	}
-	t.h = nil
 	return true
 }
 
 func (t *keySplitHandler) cleanWindow() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	if t.win == nil {
 		return false
 	}
+
+	defer func() {
+		t.win = nil
+	}()
+
+	t.mu.Unlock()
+	defer t.mu.Lock()
+
 	t.closeWindow()
-	t.win = nil
+
 	return true
 }
 
@@ -76,31 +98,42 @@ func (t *keySplitHandler) exitClean() {
 }
 
 func (t *keySplitHandler) handleKeyEvent() {
-	if t.win != nil {
+	t.mu.Lock()
+	win := t.win
+	wm := t.wm
+	t.mu.Unlock()
+
+	if win != nil {
 		log.Debug("received key event but win is already open")
 		return
 	}
-	if t.wm == nil {
+	if wm == nil {
 		log.Warn("could not handle key event: could not resolve wm permission")
 		return
 	}
-	focus, err := t.wm.Focus()
+
+	focus, err := wm.Focus()
 	if err != nil {
 		log.Errorf("failed to get focus: %s", err)
 		return
 	}
 
-	t.h, err = t.config.Handler(t.grants, t.broker, focus, t.pconfig)
+	h, err := t.config.Handler(t.grants, t.broker, focus, t.pconfig)
 	if err != nil {
 		log.Errorf("error building window handler: %v", err)
 		return
 	}
-	h := browser.CallbackHandler(t.h, t.exitClean)
-	win, err := t.config.Split(t.wm, h)
+
+	win, err = t.config.Split(t.wm, browser.CallbackHandler(h, t.exitClean))
 	if err != nil {
 		log.Errorf("error opening new window: %s", err)
 		return
 	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.h = h
 	t.win = win
 }
 
@@ -120,6 +153,9 @@ func (t *keySplitHandler) subscribeToEvents() error {
 }
 
 func (t *keySplitHandler) PermissionGranted(grants []plugin.Grant) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	var err error
 	log.Infof("permissions granted: %+v", grants)
 

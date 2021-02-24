@@ -51,7 +51,7 @@ func newMockedClient(ctrl *gomock.Controller) (
 ) {
 	mockCC = proto.NewMockClientConnInterface(ctrl)
 	mockMux = proto.NewMockMuxBroker(ctrl)
-	client = NewClient(mockMux, mockCC, new(sync.Mutex))
+	client = NewClient(mockMux, mockCC)
 	return
 }
 
@@ -174,9 +174,9 @@ func TestClientMergeKeyMap(t *testing.T) {
 		out := new(proto.MergeKeyMapResponse)
 
 		expectedReq := []*proto.Mapping{
-			&proto.Mapping{From: &protoKey1, To: &protoKey2},
-			&proto.Mapping{From: &protoKey2, To: &protoKey3},
-			&proto.Mapping{From: &protoKey3, To: &protoKey1},
+			{From: &protoKey1, To: &protoKey2},
+			{From: &protoKey2, To: &protoKey3},
+			{From: &protoKey3, To: &protoKey1},
 		}
 
 		mockCC.EXPECT().

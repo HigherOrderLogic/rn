@@ -61,6 +61,10 @@ func (s *serverEventHandler) Handle(ev Event) bool {
 	}
 	ev.Resource = browser.Token{ID: uint64(brokerID)}
 
+	// do not hold mutex while waiting for I/O
+	s.s.editor.Unlock()
+	defer s.s.editor.Lock()
+
 	// cleaning up upon exit=true is performed via quitCallback
 	// of eventHandlerClient so there's no need to check for exit here.
 	return s.eventHandlerClient.Handle(ev)

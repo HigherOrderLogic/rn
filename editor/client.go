@@ -27,9 +27,6 @@ type Client struct {
 	// resources invariant
 	mu sync.Mutex
 
-	// synchronize access to plugin state
-	pluginLock sync.Locker
-
 	broker proto.MuxBroker
 	cc     grpc.ClientConnInterface
 	ed     proto.EditorClient
@@ -42,22 +39,19 @@ type Client struct {
 // NewClient allocates storage for a new Client and initializes it.
 func NewClient(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
-	pluginLock sync.Locker,
 ) *Client {
 	ret := new(Client)
-	ret.Init(broker, cc, pluginLock)
+	ret.Init(broker, cc)
 	return ret
 }
 
 // Init initializes this Client with broker and client.
 func (c *Client) Init(
 	broker proto.MuxBroker, cc grpc.ClientConnInterface,
-	pluginLock sync.Locker,
 ) {
 	c.ed = proto.NewEditorClient(cc)
 	c.cc = cc
 	c.broker = broker
-	c.pluginLock = pluginLock
 	c.servers = make(map[uint64]io.Closer)
 }
 
@@ -81,7 +75,7 @@ func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
 func (c *Client) serveHandler(h EventHandler) uint32 {
 	brokerID, srv := proto.AcceptAndServe(c.broker, c.Logger,
 		func(handlerID uint32, srv proto.MuxServer) {
-			s := newEventHandlerServer(c.pluginLock, h, func() {
+			s := newEventHandlerServer(h, func() {
 				time.Sleep(gracefulShutdownWait)
 				c.safeForceCloseHandler(handlerID, "editorEventHandlerServer.onExit")
 			})
