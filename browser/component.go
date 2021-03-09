@@ -604,11 +604,18 @@ func (c *Component) barSize() int {
 }
 
 // Bar adds a bar to the orientation of the main window.
+// TODO continue
 func (c *Component) Bar(o Orientation, h tui.Handler) {
 	if c.config.Frame {
 		f := handler.NewFrame(h)
 		f.FrameCharSet = c.config.FrameCharSet
 		f.Attributes = c.config.FrameAttr
+		//if cfg.FrameCharSet != nil {
+		//	f.FrameCharSet = *cfg.FrameCharSet
+		//}
+		//if cfg.FrameCharSetAttr != nil {
+		//	f.Attributes= *cfg.FrameCharSetAttr
+		//}
 		h = f
 	}
 	size := c.barSize()

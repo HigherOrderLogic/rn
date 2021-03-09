@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/term"
+	"github.com/ernestrc/go-tui/component"
 )
 
 // Handler adds io.Closer to a tui.Handler.
@@ -39,6 +40,15 @@ const (
 	OrientationLeft
 	OrientationRight
 )
+
+type BarConfig struct {
+	Orientation
+
+	// optional. If browser is not setup with frames
+	// then adding these two properties does nothing.
+	FrameCharSet     *component.FrameCharSet
+	FrameCharSetAttr *term.Attributes
+}
 
 // WindowManager is the interface that groups tile
 // window management methods.
