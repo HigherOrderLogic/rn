@@ -16,7 +16,7 @@ func TestDrawOverlay(t *testing.T) {
 	background := &TestComponent{Ch: '*'}
 	cover := NewFrame(StringCentered("a"))
 
-	o := Overlay(background, cover, cfg)
+	o := NewOverlay(background, cover, cfg)
 
 	w := term.NewStringWriter(16, 9)
 

@@ -708,7 +708,7 @@ func (c *Cursor) InsertString(str string) {
 // Delete deletes the cell at the current cursor position.
 func (c *Cursor) Delete() (ok bool) {
 	var pos term.Coordinates
-	pos, ok = c.buffer().DeleteCell(c.cursorAtScroll())
+	pos, _, ok = c.buffer().DeleteCell(c.cursorAtScroll())
 	if ok {
 		c.setCursor(c.scrollToWindowCoordinates(pos))
 	}

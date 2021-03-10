@@ -51,18 +51,16 @@ func (l *FocusList) InitWithAttr(text, focus term.Attributes) {
 	l.focusAttr = focus
 }
 
-func setFocusFrameCharSet(focus ListNode, attr term.Attributes) {
-	v := focus.Value()
-	if v == nil {
-		return
-	}
-	v.(WithAttributes).SetAttr(attr)
+func setAttr(n ListNode, attr term.Attributes) {
+	n.Value().(WithAttributes).SetAttr(attr)
 }
 
 func (l *FocusList) switchFocus(newFocus ListNode) {
-	setFocusFrameCharSet(l.focus, l.textAttr)
+	if l.focus.Value() != nil {
+		setAttr(l.focus, l.textAttr)
+	}
 	l.focus = newFocus
-	setFocusFrameCharSet(l.focus, l.focusAttr)
+	setAttr(l.focus, l.focusAttr)
 }
 
 func (l *FocusList) trySetFirstFocus(node ListNode) bool {
@@ -118,6 +116,7 @@ func (l *FocusList) Len() int {
 // returns the linked node.
 func (l *FocusList) PushBack(c WithAttributes) ListNode {
 	n := l.list.PushBack(c)
+	setAttr(n, l.textAttr)
 	l.trySetFirstFocus(n)
 	return n
 }
@@ -127,7 +126,7 @@ func (l *FocusList) PushBack(c WithAttributes) ListNode {
 func (l *FocusList) PushBackList(other *FocusList) {
 	focus, ok := other.Focus()
 	if ok {
-		setFocusFrameCharSet(focus, l.textAttr)
+		setAttr(focus, l.textAttr)
 	}
 	other.Iterate(func(c WithAttributes) {
 		l.PushBack(c)
@@ -138,6 +137,7 @@ func (l *FocusList) PushBackList(other *FocusList) {
 // returns e.
 func (l *FocusList) PushFront(c WithAttributes) ListNode {
 	n := l.list.PushFront(c)
+	setAttr(n, l.textAttr)
 	if !l.trySetFirstFocus(n) {
 		l.focusOffset++
 	}
@@ -149,7 +149,7 @@ func (l *FocusList) PushFront(c WithAttributes) ListNode {
 func (l *FocusList) PushFrontList(other *FocusList) {
 	focus, ok := other.Focus()
 	if ok {
-		setFocusFrameCharSet(focus, l.textAttr)
+		setAttr(focus, l.textAttr)
 	}
 	for node, ok := other.Back(); ok; node, ok = node.Prev() {
 		l.PushFront(node.Value().(WithAttributes))
@@ -304,9 +304,14 @@ func (l *FocusList) Sort(less func(a, b WithAttributes) bool) {
 		return less(a.(WithAttributes), b.(WithAttributes))
 	})
 
-	setFocusFrameCharSet(l.focus, l.textAttr)
+	if l.focus.Value() != nil {
+		setAttr(l.focus, l.textAttr)
+	}
 	l.focusOffset = 0
-	l.focus, _ = l.Front()
-	setFocusFrameCharSet(l.focus, l.focusAttr)
+	var ok bool
+	l.focus, ok = l.Front()
+	if ok {
+		setAttr(l.focus, l.focusAttr)
+	}
 	l.list.SeekStart()
 }

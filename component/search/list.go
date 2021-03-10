@@ -395,7 +395,7 @@ func (l *List) Search(str string) {
 
 // SearchQueryDelete removes the last rune added to the search query,
 // canceling the previous search if any. It asynchronously performs
-// starts a new search.
+// a new search.
 func (l *List) SearchQueryDelete() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -407,6 +407,21 @@ func (l *List) SearchQueryDelete() bool {
 		return true
 	}
 	return false
+}
+
+// DataReset resets the current data list.
+func (l *List) DataReset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.input = l.input[:0]
+}
+
+// SearchReset removes the current search query and cancels any ongoing search.
+func (l *List) SearchReset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.searchBar.Reset()
+	l.asyncSearch()
 }
 
 // Wait waits for the current search to finish if any and returns.

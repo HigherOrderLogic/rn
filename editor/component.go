@@ -576,6 +576,17 @@ func (c *Component) SubscribeEditor(ev EventType, h EventHandler) error {
 	return nil
 }
 
+// Commands returns a list of commands registered via Register.
+func (c *Component) Commands() (ret []string) {
+	ret = make([]string, len(c.cmdSubscribers))
+	var i int
+	for cmd := range c.cmdSubscribers {
+		ret[i] = cmd
+		i++
+	}
+	return ret
+}
+
 // Register installs cm as a command handler of cmd or returns
 // an error if there's already a CommandHandler installed for this cmd.
 func (c *Component) Register(cmd string, cm CommandHandler) error {
