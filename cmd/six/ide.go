@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 
@@ -20,7 +21,7 @@ import (
 // IDE binds together a text editor/browser with a plugin manager.
 type IDE struct {
 	ideConfig
-	ex        *ex
+	root      tui.Handler
 	manager   *plugin.Manager
 	workspace *workspace.Manager
 	clipboard *plugin.ClipboardManager
@@ -184,10 +185,10 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 	if err != nil {
 		return err
 	}
-	i.ex = ex
+	i.root = ex
 
-	res := plugin.BrowserResources(i.ex.Browser())
-	res = plugin.MergeResourceMap(res, plugin.EditorResources(i.ex.Editor()))
+	res := plugin.BrowserResources(ex.Browser())
+	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
 	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(i.workspace))
 	res[plugin.PermissionClipboard] = i.clipboard
 
@@ -207,7 +208,7 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		term.SetInputMode(i.ideConfig.inputMode())
 	}
 
-	reportNonFatalErrs(i.ex.Browser(), l, configErr, i.ideConfig.errors)
+	reportNonFatalErrs(ex.Browser(), l, configErr, i.ideConfig.errors)
 	return nil
 }
 
@@ -231,7 +232,7 @@ func reportNonFatalErrs(
 // Run initialzes the underlying terminal environment and runs
 // it with this tui.Handler.
 func (i *IDE) Run() error {
-	err := tui.RunWithLocker(i.ex, i.manager.ResourceLocker())
+	err := tui.RunWithLocker(i.root, i.manager.ResourceLocker())
 	if err != nil {
 		return err
 	}
@@ -245,10 +246,13 @@ func (i *IDE) closeResources() (ret error) {
 			ret = multierr.Append(ret, err)
 		}
 	}
-
-	if err := i.ex.Close(); err != nil {
-		ret = multierr.Append(ret, err)
+	if closer, ok := i.root.(io.Closer); ok {
+		err := closer.Close()
+		if err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
+
 	if err := i.clipboard.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
