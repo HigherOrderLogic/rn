@@ -1,7 +1,11 @@
 package main
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"io"
+	"strconv"
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
@@ -16,7 +20,7 @@ var (
 	emptyWorkspace = handler.Nop(component.StringWithConfig("such empty!", component.StringConfig{
 		Alignment: component.SpanAlignmentCentered,
 	}))
-	workspaceCommands = map[string]func(*workspaceHandler, ...string) (bool, error){
+	workspaceCommands = map[string]func(*workspaceHandler, ...string) error{
 		"addWorkspace":      (*workspaceHandler).commandAddWorkspace,
 		"switchToWorkspace": (*workspaceHandler).commandSwitchToWorkspace,
 	}
@@ -61,9 +65,16 @@ func (h *workspaceHandler) init(
 	h.workspaces[0] = hm
 	h.focus = hm
 
-	for id, cmd := range workspaceCommands {
+	for id, fn := range workspaceCommands {
+		ed.SubscribeCommand(id, text.FuncCommandHandler(func(ctx context.Context, cmd text.Command) bool {
+			_ = fn(h, cmd.Args...)
+			// TODO
+			// if err != nil {
+			// ed.SetMessage()
+			// }
+			return false
+		}))
 	}
-	ed.SubscribeCommand()
 	return nil
 }
 
@@ -76,6 +87,10 @@ func (h *workspaceHandler) Resize(width, height int) {
 }
 
 func (h *workspaceHandler) Draw(w term.Writer) {
+	// TODO
+	// if workspaces is > 1 then draw bar with
+	// workspaces and name of workspace on bottom right
+	// otherwise do not draw bar
 	h.focus.Draw(w)
 }
 
@@ -145,10 +160,18 @@ func (h *workspaceHandler) Close() error {
 	return nil
 }
 
-func (e *workspaceHandler) commandAddWorkspace(args ...string) (bool, error) {
+func (h *workspaceHandler) commandAddWorkspace(args ...string) error {
 
 }
 
-func (e *workspaceHandler) commandSwitchToWorkspace(args ...string) (bool, error) {
-
+func (h *workspaceHandler) commandSwitchToWorkspace(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("invalid arguments. Expecting 1 argument with workspace number")
+	}
+	n, err := strconv.Atoi(args[0])
+	if err != nil {
+		return fmt.Errorf("invalid workspace number: %s", err)
+	}
+	h.switchToWorkspace(n)
+	return nil
 }
