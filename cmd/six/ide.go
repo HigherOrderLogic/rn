@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
-	"github.com/ernestrc/go-tui/text"
 	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
@@ -21,9 +19,7 @@ import (
 // IDE binds together a text editor/browser with a plugin manager.
 type IDE struct {
 	ideConfig
-	root      tui.Handler
-	manager   *plugin.Manager
-	workspace *workspace.Manager
+	root      *workspaceHandler
 	clipboard *plugin.ClipboardManager
 }
 
@@ -53,36 +49,20 @@ func NewRecovery(
 	return
 }
 
-func (i *IDE) initPlugins(l *log.Logger) {
-	for id, p := range i.ideConfig.plugins() {
-		path, ok := p.path()
-		if !ok {
-			continue
-		}
-		config, ok := p.config()
-		if !ok {
-			config = plugin.MapConfig(make(map[string]interface{}))
-		}
-		err := i.manager.Run(id, path, config)
-		if err != nil {
-			l.Errorf("failed to run plugin: could not run plugin with id '%s': %v", id, err)
-		}
-	}
-}
-
 func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames ...string) error {
 	configErr := loadConfig(&i.ideConfig, cfgfilename)
 
-	var (
-		opts          []text.Option
-		viOpts        []vi.Option
-		pluginOpts    []plugin.Option
-		workspaceOpts []workspace.Option
-	)
+	cwdURI, err := workspace.ParseURI(cwd)
+	if err != nil {
+		return err
+	}
+
+	var viOpts []vi.Option
 
 	var l *log.Logger
 	if i.ideConfig.logOutputPath() != "" {
-		f, err := os.OpenFile(i.ideConfig.logOutputPath(), os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+		f, err := os.OpenFile(i.ideConfig.logOutputPath(),
+			os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 		if err != nil {
 			return err
 		}
@@ -95,110 +75,35 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		l.SetOutput(f)
 		l.SetLevel(level)
 		l.SetFormatter(&logging.LogrusFormatter{})
-		opts = append(opts, text.WithLogger(l))
 		viOpts = append(viOpts, vi.WithLogger(l))
-		pluginOpts = append(pluginOpts, plugin.WithLogger(l))
 	} else {
 		l = log.New()
 		l.Out = ioutil.Discard
 		l.Level = log.PanicLevel
 	}
 
-	for _, key := range i.ideConfig.workspaceSSHPrivateKeys() {
-		workspaceOpts = append(workspaceOpts, workspace.WithSSHPrivateKey(key))
-	}
-	if cmd := i.ideConfig.workspaceSSHCommand(); cmd != "" {
-		workspaceOpts = append(workspaceOpts, workspace.WithSSHCommand(cmd))
-	}
-	workspaceOpts = append(workspaceOpts,
-		workspace.WithSSHTimeout(i.ideConfig.workspaceSSHTimeout()))
-
-	cwdURI, err := workspace.ParseURI(cwd)
-	if err != nil {
-		return err
-	}
-
-	i.workspace, err = workspace.NewManager(l, cwdURI, workspaceOpts...)
-	if err != nil {
-		return err
-	}
-
-	// workspace manager local configs and logger config for Manager
-	// are ignored
-	localConfigErr := loadLocalConfig(i.workspace, cwdURI, &i.ideConfig)
-	if localConfigErr != nil {
-		configErr = multierr.Append(configErr, localConfigErr)
-	}
-
-	if recfilename != "" {
-		recFile, err := i.workspace.URI(recfilename)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, text.WithRecoveryFile(recFile))
-	}
-
-	for _, filename := range filenames {
-		file, err := i.workspace.URI(filename)
-		if err != nil {
-			return err
-		}
-		opts = append(opts, text.WithFile(file))
-	}
-
-	opts = append(opts,
-		text.WithTabspaces(i.ideConfig.browserTabspaces()),
-		text.WithStartText(i.ideConfig.browserStartText()),
-		text.WithWindowManagerConfig(i.ideConfig.windowManagerConfig()),
-		text.WithFrameUnionCharSet(i.ideConfig.frameUnionCharset()),
-		text.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
-		text.WithCommandMaxHistory(i.ideConfig.commandMaxHistory()),
-		text.WithMessageBarAttr(i.ideConfig.messageBarAttr()),
-		text.WithFocusTabAttr(i.ideConfig.focusTabAttr()),
-		text.WithNonFocusTabAttr(i.ideConfig.nonFocusTabAttr()),
-		text.WithStartTextAttr(i.ideConfig.startTextAttr()),
-		text.WithStartTextBackgroundAttr(i.ideConfig.startTextBackgroundAttr()),
-		text.WithDirtyTabAttr(i.ideConfig.dirtyTabAttr()),
-		text.WithCommandOverlayConfig(i.commandOverlayConfig()),
-		text.WithPromptConfig(i.promptConfig()),
-	)
-
-	for seq, cmd := range i.ideConfig.commandKeyMappings() {
-		if seq.Last != (term.Event{}) {
-			opts = append(opts, text.WithCommandSequenceBinding(seq, cmd))
-		} else {
-			opts = append(opts, text.WithCommandKeyBinding(seq.First, cmd))
-		}
-	}
+	i.clipboard = plugin.NewClipboardManager()
 
 	viOpts = append(viOpts,
 		vi.WithResAttr(i.ideConfig.viResultAttr()),
 		vi.WithDebug(i.ideConfig.viDebug()),
 		vi.WithWrap(i.ideConfig.viWrap()),
+		vi.WithClipboard(i.clipboard),
 	)
 
-	i.clipboard = plugin.NewClipboardManager()
-	viOpts = append(viOpts, vi.WithClipboard(i.clipboard))
-
-	vi := vi.Editor(viOpts...)
-	ex, err := newEx(vi, i.workspace, opts...)
-	if err != nil {
-		return err
-	}
-	i.root = ex
-
-	res := plugin.BrowserResources(ex.Browser())
-	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
-	res = plugin.MergeResourceMap(res, plugin.WorkspaceResources(i.workspace))
-	res[plugin.PermissionClipboard] = i.clipboard
+	// TODO
+	var msg browser.Messenger
 
 	if initTUI {
-		i.manager, err = plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
-		if err != nil {
-			return fmt.Errorf("error initializing plugin manager: %v", err)
-		}
-		go i.initPlugins(l)
 
+		vi := vi.Editor(viOpts...)
+
+		root, err := newHandler(vi, msg, l, i.clipboard, cwdURI,
+			i.ideConfig, recfilename, filenames)
+		if err != nil {
+			return err
+		}
+		i.root = root
 		err = tui.Init()
 		if err != nil {
 			return err
@@ -208,31 +113,32 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		term.SetInputMode(i.ideConfig.inputMode())
 	}
 
-	reportNonFatalErrs(ex.Browser(), l, configErr, i.ideConfig.errors)
+	reportNonFatalErrs(l, msg, configErr, i.ideConfig.errors)
 	return nil
 }
 
 func reportNonFatalErrs(
-	b browser.Browser, l *log.Logger, configErr error,
+	l *log.Logger, messenger browser.Messenger,
+	configErr error,
 	configErrs map[string]error,
 ) {
-	if l != nil {
-		for key, err := range configErrs {
-			l.Warnf("error with config %s: %v", key, err)
-		}
-		if configErr != nil {
-			l.Errorf("failed to load configuration: %v", configErr)
-		}
+	all := configErr
+	for key, err := range configErrs {
+		err = fmt.Errorf("Failed to load %q: %v", key, err)
+		all = multierr.Append(all, err)
 	}
-	if configErr != nil {
-		b.SetMessage("Error loading config: %v", configErr)
+	if l != nil && all != nil {
+		l.Warn(all)
+	}
+	if messenger != nil {
+		messenger.SetMessage("Error: %s", all)
 	}
 }
 
 // Run initialzes the underlying terminal environment and runs
 // it with this tui.Handler.
 func (i *IDE) Run() error {
-	err := tui.RunWithLocker(i.root, i.manager.ResourceLocker())
+	err := tui.RunWithLocker(i.root, &i.root.mu)
 	if err != nil {
 		return err
 	}
@@ -241,22 +147,13 @@ func (i *IDE) Run() error {
 }
 
 func (i *IDE) closeResources() (ret error) {
-	if i.manager != nil {
-		if err := i.manager.Close(); err != nil {
-			ret = multierr.Append(ret, err)
-		}
-	}
-	if closer, ok := i.root.(io.Closer); ok {
-		err := closer.Close()
-		if err != nil {
+	if i.root != nil {
+		if err := i.root.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
 	}
 
 	if err := i.clipboard.Close(); err != nil {
-		ret = multierr.Append(ret, err)
-	}
-	if err := i.workspace.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}
 

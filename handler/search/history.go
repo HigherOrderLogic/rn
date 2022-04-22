@@ -31,21 +31,18 @@ type History struct {
 }
 
 // NewHistory allocates storage for a new instance of History and initializes it.
-func NewHistory(store document.Service, documentID string, maxHistory int) (
-	*History, error,
-) {
+func NewHistory(
+	store document.Service, documentID string, maxHistory int,
+) *History {
 	ret := new(History)
-	err := ret.Init(store, documentID, maxHistory)
-	if err != nil {
-		return nil, err
-	}
-	return ret, nil
+	ret.Init(store, documentID, maxHistory)
+	return ret
 }
 
-// Init initializes this history and loads any queries persisted in store.
+// Init initializes this history with the given store, documentID and maximum history.
 func (h *History) Init(
 	store document.Service, documentID string, maxHistory int,
-) error {
+) {
 	if documentID == "" || store == nil || maxHistory == 0 {
 		err := fmt.Sprintf("invalid Init args: documentID=%q, store=%v, max=%d",
 			documentID, store, maxHistory)
@@ -55,10 +52,11 @@ func (h *History) Init(
 	h.docID = documentID
 	h.timeout = defaultStoreTimeout
 	h.max = maxHistory
-	return h.loadCommandHistory()
 }
 
-func (h *History) loadCommandHistory() error {
+// Load fetches any queries persisted in store and populates
+// this instance of History.
+func (h *History) Load() error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultStoreTimeout)
 	defer cancel()
 

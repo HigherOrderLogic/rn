@@ -251,7 +251,8 @@ func (h *fuzzyFinderHandler) initGrants(
 		case plugin.PermissionBrowserStorage:
 			h.s, err = plugin.Storage(grant.Token, broker)
 			if err == nil {
-				err = h.history.Init(h.s, historyDocumentID, maxHistory)
+				h.history.Init(h.s, historyDocumentID, maxHistory)
+				err = h.history.Load()
 			}
 		}
 		if err != nil {

@@ -26,6 +26,7 @@ var defaultManagerConfig = managerConfig{
 	healthCheckTicker: defaultHealthCheckTicker,
 	healthRetries:     defaultHealthRetries,
 	logger:            &pluginLogger,
+	locker:            new(sync.Mutex),
 }
 
 type granteeClientWrap struct {
@@ -50,6 +51,7 @@ type managerConfig struct {
 	handshakeTimeout  time.Duration
 	healthCheckTicker time.Duration
 	healthRetries     int
+	locker            sync.Locker
 }
 
 // Option is a configuration option for a manager.
@@ -66,7 +68,7 @@ type Manager struct {
 
 	// resource mutex used to synchronize term event loop with
 	// access to resources by plugins.
-	rmu *sync.Mutex
+	rmu sync.Locker
 
 	// used to abstract out go-plugin specific functionality
 	builder pluginBuilder
@@ -92,12 +94,12 @@ func NewManager(grantor Grantor, opts ...Option) (*Manager, error) {
 func (m *Manager) Init(grantor Grantor, opts ...Option) (err error) {
 	m.grantor = grantor
 	m.clients = make(map[string]*granteeClientWrap)
-	m.rmu = new(sync.Mutex)
 
 	m.config = defaultManagerConfig
 	for _, o := range opts {
 		o(&m.config)
 	}
+	m.rmu = m.config.locker
 
 	cache := document.NewInMemoryCache()
 	m.brokerServer = document.NewServer(cache)
@@ -441,15 +443,5 @@ func (m *Manager) Close() error {
 // ResourceLocker returns a Locker that synchronizes access to
 // resources that have been shared with this manager.
 func (m *Manager) ResourceLocker() sync.Locker {
-	return (*rpcMutex)(m)
-}
-
-type rpcMutex Manager
-
-func (m *rpcMutex) Lock() {
-	m.rmu.Lock()
-}
-
-func (m *rpcMutex) Unlock() {
-	m.rmu.Unlock()
+	return m.rmu
 }
