@@ -1,18 +1,17 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 
+	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-multierror"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
-	"github.com/ernestrc/go-tui/component"
-	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
@@ -26,6 +25,7 @@ var (
 		"closeWorkspace":    (*workspaceHandler).commandCloseWorkspace,
 		"switchToWorkspace": (*workspaceHandler).commandSwitchToWorkspace,
 	}
+	defaultCommandEvent = term.Event{Type: term.EventKey, Ch: ':'}
 )
 
 // rename to workspaceHandler
@@ -42,6 +42,7 @@ type workspaceHandler struct {
 	cfg       ideConfig
 	logger    *log.Logger
 	ed        text.Editor
+	storage   browser.Storage
 	messenger browser.Messenger
 
 	width, height int
@@ -78,32 +79,27 @@ func (h *workspaceHandler) init(
 	h.clipboard = clipboard
 	h.messenger = messenger
 	h.ed = ed
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	// TODO
-	/*h.empty = newCommandHandler(func(workspace string) error {
-		// TODO
-	})*/
-	h.empty = handler.Nop(component.String("wasup"))
-
-	for id, fn := range workspaceCommands {
-		ed.SubscribeCommand(id, text.FuncCommandHandler(
-			func(ctx context.Context, cmd text.Command) bool {
-				err := fn(h, cmd.Args...)
-				if err == nil {
-					return false
-				}
-				msg := fmt.Sprintf("%s error: %s", id, err)
+	h.storage = document.NewInMemoryCache()
+	// TODO empty needs to be tuned
+	h.empty = newCommandHandler(h.storage, h.cfg.commandMaxHistory(),
+		cfg.commandOverlayConfig(), defaultCommandEvent,
+		func(command string, cmdAndArgs string) bool {
+			fn, ok := workspaceCommands[command]
+			if !ok {
+				return false
+			}
+			argv := strings.Split(cmdAndArgs, " ")
+			err := fn(h, argv[1:]...)
+			if err != nil {
+				msg := fmt.Sprintf("%s error: %s", argv[0], err)
 				logger.Error(err)
 				err = messenger.SetMessage(msg)
 				if err != nil {
 					logger.Error(fmt.Sprintf("SetMessage error: %s", err))
 				}
-				return false
-			}))
-	}
+			}
+			return false
+		})
 
 	return h.addWorkspace(uri, h.cfg, recfilename, filenames)
 }
@@ -244,7 +240,7 @@ func (h *workspaceHandler) addWorkspace(
 		text.WithStartText(cfg.browserStartText()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
 		text.WithFrameUnionCharSet(cfg.frameUnionCharset()),
-		text.WithCommandEvent(term.Event{Type: term.EventKey, Ch: ':'}),
+		text.WithCommandEvent(defaultCommandEvent),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
 		text.WithMessageBarAttr(cfg.messageBarAttr()),
 		text.WithFocusTabAttr(cfg.focusTabAttr()),
@@ -254,6 +250,7 @@ func (h *workspaceHandler) addWorkspace(
 		text.WithDirtyTabAttr(cfg.dirtyTabAttr()),
 		text.WithCommandOverlayConfig(cfg.commandOverlayConfig()),
 		text.WithPromptConfig(cfg.promptConfig()),
+		text.WithStorage(h.storage),
 		// TODO validate not perf hit
 		text.WithLogger(h.logger),
 	)

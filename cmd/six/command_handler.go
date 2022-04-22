@@ -4,6 +4,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/cell"
 	"github.com/ernestrc/go-tui/component"
@@ -226,6 +227,10 @@ func (h *commandHandler) Cursor() (term.Coordinates, bool) {
 		pos.Y += y
 	}
 	return pos, true
+}
+
+func (h *commandHandler) Man() tui.Manual {
+	panic("TODO")
 }
 
 func (h *commandHandler) Close() error {
