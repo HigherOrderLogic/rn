@@ -134,7 +134,7 @@ func (h *commandHandler) writeLastCommandQuery() {
 func (h *commandHandler) Handle(ev term.Event) (quit, handled bool) {
 	handled = true
 
-	if ev == h.commandEvent {
+	if h.Buffer.Columns(0) == 0 && ev == h.commandEvent {
 		h.writeLastCommandQuery()
 		return
 	}

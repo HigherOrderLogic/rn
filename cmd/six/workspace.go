@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"sync"
 
 	"github.com/ernestrc/blue/datastore/document"
@@ -19,14 +18,30 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const cmdSwitchToWorkspace = "switchToWorkspace"
+
 var (
-	workspaceCommands = map[string]func(*workspaceHandler, ...string) error{
-		"addWorkspace":      (*workspaceHandler).commandAddWorkspace,
-		"closeWorkspace":    (*workspaceHandler).commandCloseWorkspace,
-		"switchToWorkspace": (*workspaceHandler).commandSwitchToWorkspace,
+	workspaceCommands = map[string]func(*workspaceHandler, ...string) (bool, error){
+		"addWorkspace":       (*workspaceHandler).commandAddWorkspace,
+		"closeWorkspace":     (*workspaceHandler).commandCloseWorkspace,
+		cmdSwitchToWorkspace: (*workspaceHandler).commandSwitchToWorkspace,
+		"quit":               (*workspaceHandler).commandQuit,
 	}
 	defaultCommandEvent = term.Event{Type: term.EventKey, Ch: ':'}
+
+	workspaceCommandList []string
+	exCommandList        []string
 )
+
+func init() {
+	for cmd := range workspaceCommands {
+		workspaceCommandList = append(workspaceCommandList, cmd)
+	}
+	for cmd := range exCommands {
+		exCommandList = append(exCommandList, cmd)
+	}
+	exCommandList = append(exCommandList, cmdSwitchToWorkspace)
+}
 
 // rename to workspaceHandler
 type handlerManager struct {
@@ -80,26 +95,17 @@ func (h *workspaceHandler) init(
 	h.messenger = messenger
 	h.ed = ed
 	h.storage = document.NewInMemoryCache()
-	// TODO empty needs to be tuned
-	h.empty = newCommandHandler(h.storage, h.cfg.commandMaxHistory(),
-		cfg.commandOverlayConfig(), defaultCommandEvent,
-		func(command string, cmdAndArgs string) bool {
-			fn, ok := workspaceCommands[command]
+
+	globalOpts := h.textOpts(h.cfg)
+	h.empty, _ = newEx(ed, nopWorkspace{}, workspaceCommandList,
+		func(argv []string) (bool, bool, error) {
+			fn, ok := workspaceCommands[argv[0]]
 			if !ok {
-				return false
+				return false, false, nil
 			}
-			argv := strings.Split(cmdAndArgs, " ")
-			err := fn(h, argv[1:]...)
-			if err != nil {
-				msg := fmt.Sprintf("%s error: %s", argv[0], err)
-				logger.Error(err)
-				err = messenger.SetMessage(msg)
-				if err != nil {
-					logger.Error(fmt.Sprintf("SetMessage error: %s", err))
-				}
-			}
-			return false
-		})
+			quit, err := fn(h, argv[1:]...)
+			return quit, true, err
+		}, globalOpts...)
 
 	return h.addWorkspace(uri, h.cfg, recfilename, filenames)
 }
@@ -209,33 +215,8 @@ func (h *workspaceHandler) initPlugins(l *log.Logger, manager *plugin.Manager, c
 	}
 }
 
-func (h *workspaceHandler) addWorkspace(
-	uri workspace.URI, cfg ideConfig, recfilename string, filenames []string,
-) error {
-
-	var (
-		textOpts      []text.Option
-		workspaceOpts []workspace.Option
-	)
-
-	for _, key := range cfg.workspaceSSHPrivateKeys() {
-		workspaceOpts = append(workspaceOpts, workspace.WithSSHPrivateKey(key))
-	}
-	if cmd := cfg.workspaceSSHCommand(); cmd != "" {
-		workspaceOpts = append(workspaceOpts, workspace.WithSSHCommand(cmd))
-	}
-	workspaceOpts = append(workspaceOpts,
-		workspace.WithSSHTimeout(cfg.workspaceSSHTimeout()))
-
-	// workspace manager local configs and logger config for Manager are ignored
-	workspaceManager, err := workspace.NewManager(h.logger, uri, workspaceOpts...)
-	if err != nil {
-		return fmt.Errorf("Failed to create new workspace manager: %s", err)
-	}
-
-	configErr := loadLocalConfig(workspaceManager, uri, &cfg)
-
-	textOpts = append(textOpts,
+func (h *workspaceHandler) textOpts(cfg ideConfig) []text.Option {
+	ret := []text.Option{
 		text.WithTabspaces(cfg.browserTabspaces()),
 		text.WithStartText(cfg.browserStartText()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
@@ -253,17 +234,72 @@ func (h *workspaceHandler) addWorkspace(
 		text.WithStorage(h.storage),
 		// TODO validate not perf hit
 		text.WithLogger(h.logger),
-	)
+	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {
 		if seq.Last != (term.Event{}) {
-			textOpts = append(textOpts, text.WithCommandSequenceBinding(seq, cmd))
+			ret = append(ret, text.WithCommandSequenceBinding(seq, cmd))
 		} else {
-			textOpts = append(textOpts, text.WithCommandKeyBinding(seq.First, cmd))
+			ret = append(ret, text.WithCommandKeyBinding(seq.First, cmd))
 		}
 	}
 
-	ex, err := newEx(h.ed, workspaceManager, textOpts...)
+	return ret
+}
+
+func (h *workspaceHandler) workspaceOpts(cfg ideConfig) []workspace.Option {
+	var workspaceOpts []workspace.Option
+
+	for _, key := range cfg.workspaceSSHPrivateKeys() {
+		workspaceOpts = append(workspaceOpts, workspace.WithSSHPrivateKey(key))
+	}
+	if cmd := cfg.workspaceSSHCommand(); cmd != "" {
+		workspaceOpts = append(workspaceOpts, workspace.WithSSHCommand(cmd))
+	}
+	workspaceOpts = append(workspaceOpts,
+		workspace.WithSSHTimeout(cfg.workspaceSSHTimeout()))
+
+	return workspaceOpts
+}
+
+func (h *workspaceHandler) addWorkspace(
+	uri workspace.URI, cfg ideConfig, recfilename string, filenames []string,
+) error {
+
+	// workspace manager local configs and logger config for Manager are ignored
+	workspaceOpts := h.workspaceOpts(cfg)
+	workspaceManager, err := workspace.NewManager(h.logger, uri, workspaceOpts...)
+	if err != nil {
+		return fmt.Errorf("Failed to create new workspace manager: %s", err)
+	}
+
+	configErr := loadLocalConfig(workspaceManager, uri, &cfg)
+
+	textOpts := h.textOpts(cfg)
+	if recfilename != "" {
+		recFile, err := workspaceManager.URI(recfilename)
+		if err != nil {
+			return err
+		}
+		textOpts = append(textOpts, text.WithRecoveryFile(recFile))
+	}
+
+	for _, filename := range filenames {
+		file, err := workspaceManager.URI(filename)
+		if err != nil {
+			return err
+		}
+		textOpts = append(textOpts, text.WithFile(file))
+	}
+
+	ex, err := newEx(h.ed, workspaceManager, exCommandList,
+		func(argv []string) (bool, bool, error) {
+			if argv[0] != cmdSwitchToWorkspace {
+				return false, false, nil
+			}
+			quit, err := h.commandSwitchToWorkspace(argv[1:]...)
+			return quit, true, err
+		}, textOpts...)
 	if err != nil {
 		return err
 	}
@@ -283,22 +319,6 @@ func (h *workspaceHandler) addWorkspace(
 		return fmt.Errorf("error initializing plugin manager: %v", err)
 	}
 
-	if recfilename != "" {
-		recFile, err := workspaceManager.URI(recfilename)
-		if err != nil {
-			return err
-		}
-		textOpts = append(textOpts, text.WithRecoveryFile(recFile))
-	}
-
-	for _, filename := range filenames {
-		file, err := workspaceManager.URI(filename)
-		if err != nil {
-			return err
-		}
-		textOpts = append(textOpts, text.WithFile(file))
-	}
-
 	go h.initPlugins(h.logger, pluginManager, cfg)
 
 	h.workspaces[h.focus] = &handlerManager{Handler: ex, Manager: workspaceManager, Plugins: pluginManager}
@@ -308,25 +328,25 @@ func (h *workspaceHandler) addWorkspace(
 	return nil
 }
 
-func (h *workspaceHandler) commandAddWorkspace(args ...string) error {
+func (h *workspaceHandler) commandAddWorkspace(args ...string) (bool, error) {
 	if len(args) == 0 {
-		return errors.New("invalid arguments. " +
+		return false, errors.New("invalid arguments. " +
 			"Expecting 1 argument with workspace URI")
 	}
 	if h.focusHandler() != h.empty {
-		return errors.New("workspace tab is not empty. " +
+		return false, errors.New("workspace tab is not empty. " +
 			"Switch to an empty workspace tab to add a workspace")
 	}
 	uri, err := workspace.ParseURI(args[0])
 	if err != nil {
-		return fmt.Errorf("ParseURI: %s", err)
+		return false, fmt.Errorf("ParseURI: %s", err)
 	}
-	return h.addWorkspace(uri, h.cfg, "", nil)
+	return false, h.addWorkspace(uri, h.cfg, "", nil)
 }
 
-func (h *workspaceHandler) commandCloseWorkspace(args ...string) (ret error) {
+func (h *workspaceHandler) commandCloseWorkspace(args ...string) (quit bool, ret error) {
 	if h.focusHandler() == h.empty {
-		return errors.New("workspace tab is empty")
+		return false, errors.New("workspace tab is empty")
 	}
 
 	hm := h.workspaces[h.focus]
@@ -341,18 +361,23 @@ func (h *workspaceHandler) commandCloseWorkspace(args ...string) (ret error) {
 	}
 
 	h.workspaces[h.focus] = nil
-	return ret
+	return false, ret
 }
 
-func (h *workspaceHandler) commandSwitchToWorkspace(args ...string) error {
+func (h *workspaceHandler) commandQuit(args ...string) (bool, error) {
+	return true, nil
+}
+
+func (h *workspaceHandler) commandSwitchToWorkspace(args ...string) (bool, error) {
 	if len(args) == 0 {
-		return errors.New("invalid arguments. " +
+		return false, errors.New("invalid arguments. " +
 			"Expecting 1 argument with workspace number")
 	}
 	n, err := strconv.Atoi(args[0])
 	if err != nil {
-		return fmt.Errorf("invalid workspace number: %s", err)
+		return false, fmt.Errorf("invalid workspace number: %s", err)
 	}
+	n++ // UI does not use 0-based indexing
 	h.switchToWorkspace(n)
-	return nil
+	return false, nil
 }

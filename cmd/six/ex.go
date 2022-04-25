@@ -62,22 +62,25 @@ type workspaceURI interface {
 // ex implements a tui.Handler by wrapping an editor.Component and
 // providing an ex editor type of interface.
 type ex struct {
-	config    text.Config
-	comp      text.Component
-	ed        text.Editor
-	workspace workspaceURI
-	sequencer handler.Sequencer
-	mode      mode
-
-	cmd     commandHandler
-	overlay component.Overlay
+	config          text.Config
+	comp            text.Component
+	ed              text.Editor
+	workspace       workspaceURI
+	sequencer       handler.Sequencer
+	cmdOverride     func([]string) (bool, bool, error)
+	enabledCommands []string
+	mode            mode
+	cmd             commandHandler
+	overlay         component.Overlay
 }
 
-func newEx(ed text.Editor, m workspaceURI, opts ...text.Option) (
-	e *ex, err error,
-) {
+func newEx(
+	ed text.Editor, m workspaceURI, enabledCommands []string,
+	commandOverride func([]string) (bool, bool, error),
+	opts ...text.Option,
+) (e *ex, err error) {
 	e = new(ex)
-	err = e.init(ed, m, opts...)
+	err = e.init(ed, m, enabledCommands, commandOverride, opts...)
 	if err != nil {
 		return
 	}
@@ -87,10 +90,12 @@ func newEx(ed text.Editor, m workspaceURI, opts ...text.Option) (
 // Init initializes this ex with the given editor and Options.
 // It returns an error if an initial filepath was given through WithFilePath option
 // and the file failed to be opened.
-func (e *ex) init(ed text.Editor, m workspaceURI, opts ...text.Option) (
-	err error,
-) {
-	err = e.doInit(ed, m, opts...)
+func (e *ex) init(
+	ed text.Editor, m workspaceURI, enabledCommands []string,
+	commandOverride func([]string) (bool, bool, error),
+	opts ...text.Option,
+) (err error) {
+	err = e.doInit(ed, m, enabledCommands, commandOverride, opts...)
 	if err != nil {
 		return
 	}
@@ -104,10 +109,14 @@ func (e *ex) init(ed text.Editor, m workspaceURI, opts ...text.Option) (
 
 // init is used for internal testing
 func (e *ex) doInit(
-	ed text.Editor, m workspaceURI, opts ...text.Option,
+	ed text.Editor, m workspaceURI, enabledCommands []string,
+	commandOverride func([]string) (bool, bool, error),
+	opts ...text.Option,
 ) (err error) {
 	e.mode = modeDefault
 	e.workspace = m
+	e.cmdOverride = commandOverride
+	e.enabledCommands = enabledCommands
 
 	e.config = text.DefaultConfig()
 
@@ -305,10 +314,16 @@ func (e *ex) reloadFile(args ...string) (bool, error) {
 
 func (e *ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {
 	parts := strings.Split(cmdAndArgs, " ")
-	if len(parts) == 1 {
-		if len(cmd) == 0 {
-			cmd = cmdAndArgs
+	parts[0] = cmd // cmdAndArgs contains fuzzy completed command
+
+	if e.cmdOverride != nil {
+		quit, handled, err := e.cmdOverride(parts)
+		if quit || handled || err != nil {
+			return quit, err
 		}
+	}
+
+	if len(parts) == 1 {
 		return e.runSingleCommand(cmd)
 	}
 
@@ -364,7 +379,7 @@ func (e *ex) handleProxy(ev term.Event) (
 		}
 	}
 
-	// dispatch bound event command or sequence command and dispatch event as well
+	// dispatch bound event command or sequence command
 	if cmd != "" {
 		quit, err := e.runCommand(cmd, cmd)
 		if err != nil {
@@ -397,7 +412,7 @@ func (e *ex) setCommandMode() {
 	// commands can be registered dynamicall via Editor.Register:
 	// compile a new list every time we switch to command mode
 	var commands []string
-	for cmd := range exCommands {
+	for _, cmd := range e.enabledCommands {
 		commands = append(commands, cmd)
 	}
 	for _, cmd := range e.comp.Commands() {
