@@ -8,7 +8,6 @@ import (
 	"github.com/ernestrc/blue/logging"
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
-	"github.com/ernestrc/go-tui/browser"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text/vi"
@@ -91,14 +90,10 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		vi.WithClipboard(i.clipboard),
 	)
 
-	// TODO
-	var msg browser.Messenger
-
 	if initTUI {
 
 		vi := vi.Editor(viOpts...)
-
-		root, err := newHandler(vi, msg, l, i.clipboard, cwdURI,
+		root, err := newWorkspaceHandler(vi, l, i.clipboard, cwdURI,
 			i.ideConfig, recfilename, filenames)
 		if err != nil {
 			return err
@@ -113,26 +108,9 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 		term.SetInputMode(i.ideConfig.inputMode())
 	}
 
-	reportNonFatalErrs(l, msg, configErr, i.ideConfig.errors)
-	return nil
-}
+	logNonFatalErrs(l, configErr, i.ideConfig.errors)
 
-func reportNonFatalErrs(
-	l *log.Logger, messenger browser.Messenger,
-	configErr error,
-	configErrs map[string]error,
-) {
-	all := configErr
-	for key, err := range configErrs {
-		err = fmt.Errorf("Failed to load %q: %v", key, err)
-		all = multierr.Append(all, err)
-	}
-	if l != nil && all != nil {
-		l.Warn(all)
-	}
-	if messenger != nil {
-		messenger.SetMessage("Error: %s", all)
-	}
+	return nil
 }
 
 // Run initialzes the underlying terminal environment and runs

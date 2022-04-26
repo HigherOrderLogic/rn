@@ -172,7 +172,7 @@ func (h *fileBarEditorHandler) refreshBarContent(name string) {
 	h.bar.coords.Init(cell.NewBuffer())
 	file, ok := h.files[name]
 	if !ok || file == nil {
-		log.Tracef("could not find file info file %s", name)
+		log.Errorf("could not find file info for file %q", name)
 		return
 	}
 
@@ -238,6 +238,10 @@ func (h *fileBarEditorHandler) setFileDirty(filename string, dirty bool) {
 
 func (h *fileBarEditorHandler) handleEvents() {
 	for ev := range h.ch {
+		if ev.Resource == nil {
+			continue
+		}
+
 		var start time.Time
 		if log.IsLevelEnabled(log.TraceLevel) {
 			start = time.Now()

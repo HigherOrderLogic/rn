@@ -11,6 +11,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
@@ -18,14 +19,18 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const cmdSwitchToWorkspace = "switchToWorkspace"
+const (
+	cmdSwitchToWorkspace = "switchToWorkspace"
+	cmdCloseWorkspace    = "closeWorkspace"
+)
 
 var (
 	workspaceCommands = map[string]func(*workspaceHandler, ...string) (bool, error){
 		"addWorkspace":       (*workspaceHandler).commandAddWorkspace,
-		"closeWorkspace":     (*workspaceHandler).commandCloseWorkspace,
+		cmdCloseWorkspace:    (*workspaceHandler).commandCloseWorkspace,
 		cmdSwitchToWorkspace: (*workspaceHandler).commandSwitchToWorkspace,
 		"quit":               (*workspaceHandler).commandQuit,
+		"forceQuit!":         (*workspaceHandler).commandQuit,
 	}
 	defaultCommandEvent = term.Event{Type: term.EventKey, Ch: ':'}
 
@@ -41,6 +46,7 @@ func init() {
 		exCommandList = append(exCommandList, cmd)
 	}
 	exCommandList = append(exCommandList, cmdSwitchToWorkspace)
+	exCommandList = append(exCommandList, cmdCloseWorkspace)
 }
 
 // rename to workspaceHandler
@@ -58,24 +64,24 @@ type workspaceHandler struct {
 	logger    *log.Logger
 	ed        text.Editor
 	storage   browser.Storage
-	messenger browser.Messenger
 
-	width, height int
-	workspaces    []*handlerManager
-	focus         int
-	empty         tui.Handler
+	union          handler.FrameUnion
+	bar            handler.Tabs
+	focusProxy     handler.Proxy
+	width, height  int
+	workspaces     []*handlerManager
+	workspaceCount int
+	focus          int
+	empty          tui.Handler
 }
 
-// newHandler allocates storage for a new workspace tui.Handler and initializes it
-// with the given initial workspace.Manager and an instance created
-// with tue given tui.Handler factory function.
-func newHandler(
-	ed text.Editor, messenger browser.Messenger, logger *log.Logger,
+func newWorkspaceHandler(
+	ed text.Editor, logger *log.Logger,
 	clipboard *plugin.ClipboardManager, initial workspace.URI,
 	cfg ideConfig, recfilename string, filenames []string,
 ) (*workspaceHandler, error) {
 	ret := new(workspaceHandler)
-	err := ret.init(ed, messenger, logger,
+	err := ret.init(ed, logger,
 		clipboard, initial, cfg, recfilename, filenames)
 	if err != nil {
 		return nil, err
@@ -84,7 +90,7 @@ func newHandler(
 }
 
 func (h *workspaceHandler) init(
-	ed text.Editor, messenger browser.Messenger, logger *log.Logger,
+	ed text.Editor, logger *log.Logger,
 	clipboard *plugin.ClipboardManager, uri workspace.URI, cfg ideConfig,
 	recfilename string, filenames []string,
 ) error {
@@ -92,7 +98,6 @@ func (h *workspaceHandler) init(
 	h.logger = logger
 	h.cfg = cfg
 	h.clipboard = clipboard
-	h.messenger = messenger
 	h.ed = ed
 	h.storage = document.NewInMemoryCache()
 
@@ -107,17 +112,30 @@ func (h *workspaceHandler) init(
 			return quit, true, err
 		}, globalOpts...)
 
-	return h.addWorkspace(uri, h.cfg, recfilename, filenames)
-}
+	h.bar.Init()
+	h.bar.OnClick = h.switchToWorkspace
+	h.bar.SetAttr(cfg.focusTabAttr(), cfg.nonFocusTabAttr(),
+		cfg.windowFrameAttr(), cfg.windowFrameAttr())
+	h.bar.SetFrameCharSet(cfg.windowFrameCharset())
+	h.bar.SetBorder(cfg.frame())
 
-func (h *workspaceHandler) Resize(width, height int) {
-	h.width, h.height = width, height
-	for _, w := range h.workspaces {
-		if w != nil {
-			w.Resize(width, height)
-		}
+	h.union.Init(&h.focusProxy)
+	h.union.Attributes = cfg.windowFrameAttr()
+	h.union.Frame = cfg.frame()
+
+	charset := cfg.frameUnionCharset()
+	h.union.Right = charset.Right
+	h.union.Left = charset.Left
+	h.union.Top = charset.Top
+	h.union.Bottom = charset.Bottom
+
+	err := h.addWorkspace(uri, h.cfg, recfilename, filenames)
+	if err != nil {
+		return err
 	}
-	h.empty.Resize(width, height)
+	h.focusProxy.Target = h.focusHandler()
+	h.union.UnionBottom(&h.bar, h.barSize())
+	return nil
 }
 
 func (h *workspaceHandler) focusHandler() tui.Handler {
@@ -130,16 +148,70 @@ func (h *workspaceHandler) focusHandler() tui.Handler {
 	return h.empty
 }
 
+func (h *workspaceHandler) drawBar() bool {
+	return h.workspaceCount > 1 || h.focusHandler() == h.empty
+}
+
+func (h *workspaceHandler) barSize() int {
+	frame := h.cfg.frame()
+	ret := 1
+	if frame {
+		ret += 2
+	}
+	return ret
+}
+
+func (h *workspaceHandler) Resize(width, height int) {
+	h.width, h.height = width, height
+	h.bar.RemoveAll()
+
+	drawBar := h.drawBar()
+	if drawBar {
+		height -= h.barSize()
+	}
+	barFocusIdx := -1
+	for i, w := range h.workspaces {
+		if w != nil {
+			w.Resize(width, height)
+			idx := h.bar.Add(strconv.Itoa(i + 1))
+			if i == h.focus {
+				barFocusIdx = idx
+			}
+		}
+	}
+	// focus is empty workspace, add tab
+	if barFocusIdx == -1 {
+		idx := h.bar.Add(strconv.Itoa(h.focus + 1))
+		barFocusIdx = idx
+	}
+	h.bar.SetFocus(barFocusIdx)
+	h.empty.Resize(width, height)
+	// bar needs to be drawn last so frame union characters
+	// are drawn last
+	if drawBar {
+		h.union.Resize(h.width, h.height)
+	}
+}
+
 func (h *workspaceHandler) Draw(w term.Writer) {
 	// TODO
 	// if workspaces is > 1 then draw bar with
 	// workspaces and name of workspace on bottom right
 	// otherwise do not draw bar
-	h.focusHandler().Draw(w)
+	target := h.focusHandler()
+	h.focusProxy.Target = target
+	if h.drawBar() {
+		h.union.Draw(w)
+	} else {
+		target.Draw(w)
+	}
 }
 
 func (h *workspaceHandler) switchToWorkspace(i int) {
 	h.focus = i
+	h.focusProxy.Target = h.focusHandler()
+	// resize so disappearing bar feature can be implemented
+	h.Resize(h.width, h.height)
 }
 
 func (h *workspaceHandler) Handle(ev term.Event) (exit, handled bool) {
@@ -218,6 +290,7 @@ func (h *workspaceHandler) initPlugins(l *log.Logger, manager *plugin.Manager, c
 func (h *workspaceHandler) textOpts(cfg ideConfig) []text.Option {
 	ret := []text.Option{
 		text.WithTabspaces(cfg.browserTabspaces()),
+		// TODO override for workspace with workspace wallpaper option
 		text.WithStartText(cfg.browserStartText()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
 		text.WithFrameUnionCharSet(cfg.frameUnionCharset()),
@@ -265,7 +338,6 @@ func (h *workspaceHandler) workspaceOpts(cfg ideConfig) []workspace.Option {
 func (h *workspaceHandler) addWorkspace(
 	uri workspace.URI, cfg ideConfig, recfilename string, filenames []string,
 ) error {
-
 	// workspace manager local configs and logger config for Manager are ignored
 	workspaceOpts := h.workspaceOpts(cfg)
 	workspaceManager, err := workspace.NewManager(h.logger, uri, workspaceOpts...)
@@ -294,16 +366,21 @@ func (h *workspaceHandler) addWorkspace(
 
 	ex, err := newEx(h.ed, workspaceManager, exCommandList,
 		func(argv []string) (bool, bool, error) {
-			if argv[0] != cmdSwitchToWorkspace {
-				return false, false, nil
+			var err error
+			handled := true
+			switch argv[0] {
+			case cmdSwitchToWorkspace:
+				_, err = h.commandSwitchToWorkspace(argv[1:]...)
+			case cmdCloseWorkspace:
+				_, err = h.commandCloseWorkspace()
+			default:
+				handled = false
 			}
-			quit, err := h.commandSwitchToWorkspace(argv[1:]...)
-			return quit, true, err
+			return false, handled, err
 		}, textOpts...)
 	if err != nil {
 		return err
 	}
-	ex.Resize(h.width, h.height)
 
 	res := plugin.BrowserResources(ex.Browser())
 	res = plugin.MergeResourceMap(res, plugin.EditorResources(ex.Editor()))
@@ -321,11 +398,32 @@ func (h *workspaceHandler) addWorkspace(
 
 	go h.initPlugins(h.logger, pluginManager, cfg)
 
-	h.workspaces[h.focus] = &handlerManager{Handler: ex, Manager: workspaceManager, Plugins: pluginManager}
+	h.workspaces[h.focus] = &handlerManager{
+		Handler: ex,
+		Manager: workspaceManager,
+		Plugins: pluginManager,
+	}
+	h.workspaceCount++
+	h.switchToWorkspace(h.focus)
 
-	reportNonFatalErrs(h.logger, h.messenger, configErr, cfg.errors)
+	logNonFatalErrs(h.logger, configErr, cfg.errors)
 
 	return nil
+}
+
+func logNonFatalErrs(
+	l *log.Logger,
+	configErr error,
+	configErrs map[string]error,
+) {
+	all := configErr
+	for key, err := range configErrs {
+		err = fmt.Errorf("Failed to load %q: %v", key, err)
+		all = multierr.Append(all, err)
+	}
+	if l != nil && all != nil {
+		l.Warn(all)
+	}
 }
 
 func (h *workspaceHandler) commandAddWorkspace(args ...string) (bool, error) {
@@ -344,7 +442,9 @@ func (h *workspaceHandler) commandAddWorkspace(args ...string) (bool, error) {
 	return false, h.addWorkspace(uri, h.cfg, "", nil)
 }
 
-func (h *workspaceHandler) commandCloseWorkspace(args ...string) (quit bool, ret error) {
+func (h *workspaceHandler) commandCloseWorkspace(args ...string) (
+	quit bool, ret error,
+) {
 	if h.focusHandler() == h.empty {
 		return false, errors.New("workspace tab is empty")
 	}
@@ -361,6 +461,15 @@ func (h *workspaceHandler) commandCloseWorkspace(args ...string) (quit bool, ret
 	}
 
 	h.workspaces[h.focus] = nil
+	h.workspaceCount--
+
+	for i := h.focus; i >= 0; i-- {
+		if h.workspaces[i] != nil {
+			h.switchToWorkspace(i)
+			break
+		}
+	}
+
 	return false, ret
 }
 

@@ -38,8 +38,6 @@ type Manager struct {
 	isInitProxy     bool
 
 	initRemote func() (err error)
-	osChdir    func(string) error
-	osGetwd    func() (string, error)
 	userLookup func(string) (*user.User, error)
 }
 
@@ -72,11 +70,9 @@ func NewManager(
 	return ret, nil
 }
 
-// Init initializes m with workspace and calles os.Chdir to the new workspace
-// if current working directory is not already equal to the given workspace.
+// Init initializes m or returns an error if there was a problem with
+// the given workspace URI.
 func (m *Manager) Init(l *log.Logger, workspace URI, opts ...Option) error {
-	m.osChdir = os.Chdir
-	m.osGetwd = os.Getwd
 	m.initRemote = func() (err error) {
 		return m.initWorkspaceClient(m.managerCfg, m.workspace)
 	}
@@ -144,20 +140,13 @@ func extractAbsPath(
 }
 
 func (m *Manager) initLocal() error {
-	cwd, err := m.osGetwd()
-	if err != nil {
-		return fmt.Errorf("Failed to get working directory: %s", err)
-	}
 	workspacewd := m.workspace.Path()
-	if !filepath.IsAbs(workspacewd) {
-		workspacewd = filepath.Join(cwd, workspacewd)
+	fs, err := os.Stat(workspacewd)
+	if err != nil {
+		return err
 	}
-	if cwd != workspacewd {
-		err = m.osChdir(workspacewd)
-		if err != nil {
-			return fmt.Errorf("failed to change to workspace directory %s: %s",
-				workspacewd, err)
-		}
+	if !fs.IsDir() {
+		return errors.New("workspace is not a directory")
 	}
 	return nil
 }
@@ -212,6 +201,7 @@ func (m *Manager) commandLocal(name string, arg ...string) (Pid, error) {
 	defer m.mu.Unlock()
 
 	cmd := exec.Command(name, arg...)
+	cmd.Dir = m.workspace.Path()
 	m.nextPid++
 	m.cmds[Pid(m.nextPid)] = cmd
 	return Pid(m.nextPid), nil
