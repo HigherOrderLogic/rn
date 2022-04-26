@@ -15,6 +15,7 @@ import (
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/text/vi"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
@@ -62,7 +63,6 @@ type workspaceHandler struct {
 	clipboard *plugin.ClipboardManager
 	cfg       ideConfig
 	logger    *log.Logger
-	ed        text.Editor
 	storage   browser.Storage
 
 	union          handler.FrameUnion
@@ -76,12 +76,12 @@ type workspaceHandler struct {
 }
 
 func newWorkspaceHandler(
-	ed text.Editor, logger *log.Logger,
+	logger *log.Logger,
 	clipboard *plugin.ClipboardManager, initial workspace.URI,
 	cfg ideConfig, recfilename string, filenames []string,
 ) (*workspaceHandler, error) {
 	ret := new(workspaceHandler)
-	err := ret.init(ed, logger,
+	err := ret.init(logger,
 		clipboard, initial, cfg, recfilename, filenames)
 	if err != nil {
 		return nil, err
@@ -89,8 +89,18 @@ func newWorkspaceHandler(
 	return ret, nil
 }
 
+func (h *workspaceHandler) newEditor(cfg ideConfig) text.Editor {
+	viOpts := append([]vi.Option{},
+		vi.WithResAttr(cfg.viResultAttr()),
+		vi.WithDebug(cfg.viDebug()),
+		vi.WithWrap(cfg.viWrap()),
+		vi.WithClipboard(h.clipboard),
+	)
+	return vi.Editor(viOpts...)
+}
+
 func (h *workspaceHandler) init(
-	ed text.Editor, logger *log.Logger,
+	logger *log.Logger,
 	clipboard *plugin.ClipboardManager, uri workspace.URI, cfg ideConfig,
 	recfilename string, filenames []string,
 ) error {
@@ -98,11 +108,10 @@ func (h *workspaceHandler) init(
 	h.logger = logger
 	h.cfg = cfg
 	h.clipboard = clipboard
-	h.ed = ed
 	h.storage = document.NewInMemoryCache()
 
 	globalOpts := h.textOpts(h.cfg)
-	h.empty, _ = newEx(ed, nopWorkspace{}, workspaceCommandList,
+	h.empty, _ = newEx(h.newEditor(cfg), nopWorkspace{}, workspaceCommandList,
 		func(argv []string) (bool, bool, error) {
 			fn, ok := workspaceCommands[argv[0]]
 			if !ok {
@@ -364,7 +373,7 @@ func (h *workspaceHandler) addWorkspace(
 		textOpts = append(textOpts, text.WithFile(file))
 	}
 
-	ex, err := newEx(h.ed, workspaceManager, exCommandList,
+	ex, err := newEx(h.newEditor(cfg), workspaceManager, exCommandList,
 		func(argv []string) (bool, bool, error) {
 			var err error
 			handled := true
@@ -390,6 +399,7 @@ func (h *workspaceHandler) addWorkspace(
 	pluginOpts := []plugin.Option{
 		plugin.WithLogger(h.logger),
 		plugin.WithLocker(&h.mu),
+		plugin.WithWorkspace(uri),
 	}
 	pluginManager, err := plugin.NewManager(plugin.GrantAll(res), pluginOpts...)
 	if err != nil {

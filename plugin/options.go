@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -48,5 +49,13 @@ func WithHealthRetries(retries int) Option {
 func WithLocker(locker sync.Locker) Option {
 	return func(cfg *managerConfig) {
 		cfg.locker = locker
+	}
+}
+
+// WithWorkspace returns an option that configures the
+// workspace directory.
+func WithWorkspace(uri workspace.URI) Option {
+	return func(cfg *managerConfig) {
+		cfg.workspace = uri
 	}
 }

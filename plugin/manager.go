@@ -11,6 +11,7 @@ import (
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/util"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -52,6 +53,7 @@ type managerConfig struct {
 	healthCheckTicker time.Duration
 	healthRetries     int
 	locker            sync.Locker
+	workspace         workspace.URI
 }
 
 // Option is a configuration option for a manager.

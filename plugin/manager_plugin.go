@@ -23,6 +23,10 @@ func goPluginGranteeBuilder(m *Manager) pluginBuilder {
 		}
 
 		cmd := exec.Command(path)
+		// if URI is zero-valued, then Path returns an empty string
+		// which fits the default in exec.Cmd.Dir which is to not
+		// set the command's dir.
+		cmd.Dir = m.config.workspace.Path()
 		cmd.Env = append(cmd.Env, makeBrokerRemoteAddrEnv(m.brokerAddr.String()))
 		cmd.Env = append(cmd.Env, makeLogLevelEnv(logger.GetLevel()))
 

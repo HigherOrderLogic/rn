@@ -575,6 +575,8 @@ func newLspHandler(
 		return nil, err
 	}
 
+	log.Infof("Setting up lsp handler with cwd %q", ret.cwd)
+
 	err = ret.initLanguageServers(pconfig)
 	if err != nil {
 		return nil, err

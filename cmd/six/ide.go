@@ -92,8 +92,7 @@ func (i *IDE) init(initTUI bool, cwd, cfgfilename, recfilename string, filenames
 
 	if initTUI {
 
-		vi := vi.Editor(viOpts...)
-		root, err := newWorkspaceHandler(vi, l, i.clipboard, cwdURI,
+		root, err := newWorkspaceHandler(l, i.clipboard, cwdURI,
 			i.ideConfig, recfilename, filenames)
 		if err != nil {
 			return err
