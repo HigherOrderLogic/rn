@@ -39,10 +39,9 @@ type Component struct {
 	width      int
 	height     int
 
-	config       Config
-	startHandler Handler
-	buffers      []*Tab
-	windows      map[uint64]*browserWindow
+	config  Config
+	buffers []*Tab
+	windows map[uint64]*browserWindow
 }
 
 // component.WindowManager sinchronously removes tui.Handlers
@@ -162,6 +161,22 @@ func NewComponent(config Config) *Component {
 	return ret
 }
 
+func (c *Component) wallpaper() Handler {
+	strcfg := component.StringConfig{
+		Attributes:           c.config.WallpaperAttr,
+		BackgroundAttributes: c.config.WallpaperBackgroundAttr,
+		Alignment:            component.SpanAlignmentCentered,
+	}
+	wallpaper := component.StringWithConfig(c.config.Wallpaper, strcfg)
+	return &browserContent{
+		Handler: FuncHandler(
+			handler.Nop(wallpaper),
+			func() {},
+		),
+		c: c,
+	}
+}
+
 // Init initializes this Component with config.
 func (c *Component) Init(config Config) {
 	c.config = config
@@ -184,20 +199,7 @@ func (c *Component) Init(config Config) {
 		FocusFrameCharSet:   config.WindowManagerConfig.FrameCharSet,
 		WindowManagerConfig: config.WindowManagerConfig,
 	}
-	strcfg := component.StringConfig{
-		Attributes:           c.config.WallpaperAttr,
-		BackgroundAttributes: c.config.WallpaperBackgroundAttr,
-		Alignment:            component.SpanAlignmentCentered,
-	}
-	wallpaper := component.StringWithConfig(c.config.Wallpaper, strcfg)
-	c.startHandler = &browserContent{
-		Handler: FuncHandler(
-			handler.Nop(wallpaper),
-			func() {},
-		),
-		c: c,
-	}
-	c.wm.Init(c.startHandler, handlerWmConfig)
+	c.wm.Init(c.wallpaper(), handlerWmConfig)
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
 	c.union.Init(&c.wm)
 	c.buffers = make([]*Tab, 0)
@@ -478,7 +480,7 @@ func (c *Component) freeTabs() []int {
 func (c *Component) getFreeTab() (Handler, bool) {
 	freeBufs := c.freeTabs()
 	if len(freeBufs) == 0 {
-		return c.startHandler, false
+		return c.wallpaper(), false
 	}
 
 	id := freeBufs[0]
@@ -552,6 +554,9 @@ func (c *Component) splitInverted(
 }
 
 func (c *Component) newWindowContent(h Handler) (Handler, bool) {
+	if h == nil {
+		h = c.wallpaper()
+	}
 	_, ok := h.(*Tab)
 	if !ok {
 		h = &browserContent{

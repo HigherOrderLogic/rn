@@ -24,25 +24,31 @@ var (
 	commandBarAttr      = term.Attributes{Bg: term.ColorWhite, Fg: term.ColorBlack}
 	errInvalidSetCursor = errors.New("Cannot set cursor on this buffer")
 	exCommands          = map[string]func(*ex, ...string) (bool, error){
-		"bufferPrev":      (*ex).previousBuffer,
-		"bufferNext":      (*ex).nextBuffer,
-		"bufferClose":     (*ex).closeBuffer,
-		"bufferCloseAll":  (*ex).closeAllBuffers,
-		"close":           (*ex).closeFocusWindow,
-		"writeQuit":       (*ex).flushCloseIgnoreNonFlushed,
-		"writeForceQuit!": (*ex).flushCloseIgnoreNonFlushed,
-		"write":           (*ex).forceFlush,
-		"forceWrite!":     (*ex).forceFlush,
-		"forceQuit!":      (*ex).forceQuit,
-		"quit":            (*ex).forceQuit,
-		"edit":            (*ex).editFile,
-		"reload":          (*ex).reloadFile,
+		"bufferPrev":             (*ex).previousBuffer,
+		"bufferNext":             (*ex).nextBuffer,
+		"bufferClose":            (*ex).closeBuffer,
+		"bufferCloseAll":         (*ex).closeAllBuffers,
+		"close":                  (*ex).closeFocusWindow,
+		"writeQuit":              (*ex).flushCloseIgnoreNonFlushed,
+		"writeForceQuit!":        (*ex).flushCloseIgnoreNonFlushed,
+		"write":                  (*ex).forceFlush,
+		"forceWrite!":            (*ex).forceFlush,
+		"forceQuit!":             (*ex).forceQuit,
+		"quit":                   (*ex).forceQuit,
+		"edit":                   (*ex).editFile,
+		"reload":                 (*ex).reloadFile,
+		"changeSplitOrientation": (*ex).splitDirectionChange,
+		"splitWindow":            (*ex).splitWindow,
+		"newWindow":              (*ex).splitWindow,
 	}
 	exDefaultBindings = map[term.Event]string{
 		{Type: term.EventKey, Key: term.KeyCtrlA}: "bufferCloseAll",
 		{Type: term.EventKey, Key: term.KeyCtrlW}: "bufferClose",
 		{Type: term.EventKey, Key: term.KeyCtrlL}: "bufferNext",
 		{Type: term.EventKey, Key: term.KeyCtrlH}: "bufferPrev",
+		{Type: term.EventKey, Key: term.KeyCtrlN}: "newWindow",
+		{Type: term.EventKey, Key: term.KeyCtrlO}: "changeSplitOrientation",
+		{Type: term.EventKey, Key: term.KeyCtrlQ}: "close",
 	}
 )
 
@@ -69,9 +75,10 @@ type ex struct {
 	sequencer       handler.Sequencer
 	cmdOverride     func([]string) (bool, bool, error)
 	enabledCommands []string
-	mode            mode
 	cmd             commandListHandler
 	overlay         component.Overlay
+	mode            mode
+	nextSplit       bool
 }
 
 func newEx(
@@ -310,6 +317,39 @@ func (e *ex) reloadFile(args ...string) (bool, error) {
 	}
 	b.RemoveWindowContent(focus)
 	return false, e.editFileURI(uri)
+}
+
+func (e *ex) splitDirectionChange(args ...string) (bool, error) {
+	e.nextSplit = !e.nextSplit
+	b := e.comp.Browser()
+	if e.nextSplit {
+		b.SetMessage("changed split direction to horizontal")
+	} else {
+		b.SetMessage("changed split direction to vertical")
+	}
+	return false, nil
+}
+
+func (e *ex) newWindowHandler(h browser.Handler) {
+	eb := e.comp.Browser()
+
+	var o browser.Orientation
+	var focusFn func() bool
+	if e.nextSplit {
+		o = browser.OrientationBottom
+		focusFn = eb.FocusDown
+	} else {
+		o = browser.OrientationRight
+		focusFn = eb.FocusRight
+	}
+
+	eb.Split(o, h)
+	focusFn()
+}
+
+func (e *ex) splitWindow(args ...string) (bool, error) {
+	e.newWindowHandler(nil)
+	return false, nil
 }
 
 func (e *ex) runCommand(cmd string, cmdAndArgs string) (quit bool, err error) {

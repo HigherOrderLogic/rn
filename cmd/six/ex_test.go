@@ -769,6 +769,41 @@ func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option)
 	initExForTestingWithWorkspace(t, ex, &testWorkspace{}, ed, opts...)
 }
 
+func TestNewWindow(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{":newWindow>:changeSplitOrientation>:newWindow>",
+			`┌──────────────────┐
+│                  │
+├────────┐┌────────┤
+│        ││        │
+│        ││        │
+│        │└────────┘
+│changed split dire┐
+│ction to horizonta│
+│l                 │
+└────────┘└────────┘`},
+		{":close>:close>aaaaaaa",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│changed split dire│
+│ction to horizonta│
+│l                 │
+└──────────────────┘`},
+	}
+
+	b := new(ex)
+	opts := []text.Option{
+		text.WithCommandEvent(testCommandEvent),
+	}
+	initExForTesting(t, b, text.Mock(), opts...)
+	defer b.Close()
+
+	testutil.TestHandlerSequence(t, b, 20, 10, cases)
+}
 func TestCommandHistory(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
 		{":e hello.go>:e wi.go>1234",

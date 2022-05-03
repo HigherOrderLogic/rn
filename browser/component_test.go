@@ -648,3 +648,28 @@ func TestComponentPrompt(t *testing.T) {
 
 	testutil.TestComponent(t, c, w, tests)
 }
+
+func TestComponentSplitNil(t *testing.T) {
+	t.Run("Split with nil sets a wallpaper", func(t *testing.T) {
+		w := term.NewStringWriter(24, 8)
+		cfg := DefaultConfig()
+		cfg.Wallpaper = "BART"
+		c := NewComponent(cfg)
+		c.Resize(20, 8)
+		c.Split(OrientationLeft, nil)
+		tests := []testutil.ComponentTestCase{
+			{
+				nil, `
+┌──────────────────┐    
+│                  │    
+├────────┐┌────────┤    
+│        ││        │    
+│  BART  ││  BART  │    
+│        ││        │    
+│        ││        │    
+└────────┘└────────┘    `,
+			},
+		}
+		testutil.TestComponent(t, c, w, tests)
+	})
+}
