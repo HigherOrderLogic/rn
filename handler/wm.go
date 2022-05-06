@@ -300,6 +300,8 @@ func (wm *WindowManager) SetFocus(tile Window) (
 	if wm.config.Frame {
 		wm.focus.Window.SetFrameAttr(wm.config.FrameAttr)
 		tile.Window.SetFrameAttr(wm.config.FocusFrameAttr)
+		wm.focus.Window.SetFrameCharSet(wm.config.FrameCharSet)
+		tile.Window.SetFrameCharSet(wm.config.FocusFrameCharSet)
 	}
 	prev = wm.focus
 	wm.focus = tile

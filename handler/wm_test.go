@@ -671,6 +671,19 @@ func TestComponentWindowSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
+		}, {func() {
+			cfg := DefaultWindowManagerConfig()
+			cfg.FocusFrameCharSet.TopLeft = 'X'
+			wm.SetFrameCharSet(cfg.FrameCharSet, cfg.FocusFrameCharSet)
+		}, `
+X──────────────────┐
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`,
 		},
 	}
 
