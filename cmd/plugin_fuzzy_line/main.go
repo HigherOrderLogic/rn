@@ -22,7 +22,7 @@ const (
 	defaultHistoryDocumentID = "plugin-fuzzy-line-history"
 )
 
-var defaultHistoryKey = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
+var defaultHistoryKey = term.KeyComb{Key: term.KeyCtrlBackslash}
 
 func parseLine(workspace workspace.Workspace, data string) (
 	workspace.URI, term.Coordinates,
@@ -45,7 +45,7 @@ func newHandler(grants []plugin.Grant, broker proto.MuxBroker,
 		}
 		cmdStr = defaultCommand
 	}
-	historyKey, err := plugin.GetEvent(config, "history_key")
+	historyKey, err := plugin.GetKey(config, "history_key")
 	if err != nil {
 		if err != plugin.ErrNotFound {
 			log.Printf("failed to load 'command' config: %v", err)

@@ -357,12 +357,12 @@ func GetFrameCharset(c Config, key string, def component.FrameCharSet) (
 	return cs, nil
 }
 
-// GetEvent is a helper which extracts and parses a term.Event as a string
+// GetKey is a helper which extracts and parses a term.KeyComb as a string
 // from a Config.
-func GetEvent(c Config, key string) (term.Event, error) {
+func GetKey(c Config, key string) (term.KeyComb, error) {
 	s, err := c.GetString(key)
 	if err != nil {
-		return term.Event{}, err
+		return term.KeyComb{}, err
 	}
 	return term.ParseKey(s)
 }

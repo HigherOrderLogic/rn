@@ -414,11 +414,13 @@ func (m *Manual) ToModel() (tui.Manual, error) {
 	}
 
 	for _, key := range m.GetKeys() {
-		ev, err := key.GetEvent().ToModel()
+		protoEv := Event{Key: key.GetKey(), Char: key.GetChar(), Mod: key.GetMod()}
+		ev, err := protoEv.ToModel()
 		if err != nil {
 			return tui.Manual{}, err
 		}
-		ret.Keys[ev] = tui.EventDesc{
+		tkey := term.KeyComb{Key: ev.Key, Mod: ev.Mod, Ch: ev.Ch}
+		ret.Keys[tkey] = tui.EventDesc{
 			ID:          key.GetId(),
 			Description: key.GetDescription(),
 		}
@@ -431,14 +433,16 @@ func (m *Manual) ToModel() (tui.Manual, error) {
 func (m *Manual) FromModel(t tui.Manual) {
 	m.Summary = t.Summary
 
-	for ev, desc := range t.Keys {
+	for kk, desc := range t.Keys {
 		protoEv := new(Event)
-		protoEv.FromModel(ev)
+		protoEv.FromModel(term.Event{Key: kk.Key, Mod: kk.Mod, Ch: kk.Ch})
 
 		m.Keys = append(m.Keys, &Key{
 			Id:          desc.ID,
 			Description: desc.Description,
-			Event:       protoEv,
+			Char:        protoEv.Char,
+			Mod:         protoEv.Mod,
+			Key:         protoEv.Key,
 		})
 	}
 }

@@ -13,17 +13,17 @@ import (
 // only Event.Mod, Event.Key and Event.Ch are considered,
 // the rest of fields are ignored.
 type Sequence struct {
-	First term.Event
-	Last  term.Event
+	First term.KeyComb
+	Last  term.KeyComb
 }
 
 // Sequencer is a key event sequencer which detects sequences of (2) term.EventKey
 // events that are triggered within a specified time.
 type Sequencer struct {
-	interests map[term.Event]map[term.Event]struct{}
+	interests map[term.KeyComb]map[term.KeyComb]struct{}
 	timeout   time.Duration
 
-	first    term.Event
+	first    term.KeyComb
 	firstCtx context.Context
 	ctxClean func()
 }
@@ -35,22 +35,14 @@ func NewSequencer(interests []Sequence, timeout time.Duration) *Sequencer {
 	return ret
 }
 
-func cleanEvent(ev term.Event) term.Event {
-	return term.Event{
-		Mod: ev.Mod,
-		Key: ev.Key,
-		Ch:  ev.Ch,
-	}
-}
-
 // Init initializes this sequencer with the given interests and a timeout.
 func (s *Sequencer) Init(interests []Sequence, timeout time.Duration) {
 	s.timeout = timeout
-	s.interests = make(map[term.Event]map[term.Event]struct{})
+	s.interests = make(map[term.KeyComb]map[term.KeyComb]struct{})
 	for _, i := range interests {
-		first, last := cleanEvent(i.First), cleanEvent(i.Last)
+		first, last := i.First, i.Last
 		if _, ok := s.interests[first]; !ok {
-			s.interests[first] = make(map[term.Event]struct{})
+			s.interests[first] = make(map[term.KeyComb]struct{})
 		}
 		s.interests[first][last] = struct{}{}
 	}
@@ -71,7 +63,7 @@ func (s *Sequencer) Handle(ev term.Event) (seq Sequence, match bool) {
 	first := s.first
 	firstCtx := s.firstCtx
 	ctxClean := s.ctxClean
-	last := cleanEvent(ev)
+	last := ev.KeyComb()
 
 	defer ctxClean()
 	s.firstCtx, s.ctxClean = context.WithTimeout(context.Background(), s.timeout)
@@ -117,8 +109,8 @@ func ParseSequence(str string) (Sequence, error) {
 		return Sequence{}, errors.New("invalid sequence")
 	case 2:
 		return Sequence{
-			First: term.Event{Type: term.EventKey, Ch: runestr[0]},
-			Last:  term.Event{Type: term.EventKey, Ch: runestr[1]},
+			First: term.KeyComb{Ch: runestr[0]},
+			Last:  term.KeyComb{Ch: runestr[1]},
 		}, nil
 	default:
 		idxGt := strings.IndexRune(str, '>')
@@ -128,7 +120,7 @@ func ParseSequence(str string) (Sequence, error) {
 			return Sequence{}, errors.New("invalid sequence")
 		}
 
-		ev, err := term.ParseKey(string(runestr[idxLt : idxGt+1]))
+		key, err := term.ParseKey(string(runestr[idxLt : idxGt+1]))
 		if err != nil {
 			return Sequence{}, err
 		}
@@ -138,10 +130,10 @@ func ParseSequence(str string) (Sequence, error) {
 		case -1:
 			return Sequence{}, errors.New("invalid sequence")
 		case 0:
-			ret.First = ev
+			ret.First = key
 			ret.Last, err = term.ParseKey(string(runestr[idxGt+1:]))
 		default:
-			ret.Last = ev
+			ret.Last = key
 			ret.First, err = term.ParseKey(string(runestr[:idxLt]))
 		}
 		if err != nil {

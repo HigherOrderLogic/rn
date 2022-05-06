@@ -12,7 +12,7 @@ func TestFrameProxyMan(t *testing.T) {
 	myManual := tui.Manual{
 		Summary: "sup",
 		Keys: tui.KeyMap{
-			term.Event{Ch: 'j'}: {
+			term.KeyComb{Ch: 'j'}: {
 				ID:          "wow",
 				Description: "now",
 			},

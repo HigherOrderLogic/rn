@@ -154,8 +154,8 @@ func (c ideConfig) commandOverlayFrame() (ret bool) {
 	return
 }
 
-func (c ideConfig) commandEvent() (ret term.Event) {
-	ret = defaultCommandEvent
+func (c ideConfig) commandKey() (ret term.KeyComb) {
+	ret = defaultCommandKey
 	cfg, ok := c.command()
 	if !ok {
 		return

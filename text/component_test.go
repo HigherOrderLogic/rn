@@ -20,9 +20,8 @@ import (
 )
 
 var (
-	keya        = term.Event{Type: term.EventKey, Ch: 'a'}
-	keyb        = term.Event{Type: term.EventKey, Ch: 'b'}
-	evInterrupt = term.Event{Type: term.EventInterrupt}
+	keya = term.KeyComb{Ch: 'a'}
+	keyb = term.KeyComb{Ch: 'b'}
 )
 
 type testFlusherCloser struct {
@@ -114,25 +113,10 @@ func TestComponentKeyMapper(t *testing.T) {
 		assert.Equal(t, keya, ev)
 	})
 
-	t.Run("only allows Key event mappings", func(t *testing.T) {
-		c := newTestComponent(t, &testEditor{})
-
-		m1 := map[term.Event]term.Event{
-			evInterrupt: keya,
-		}
-		m2 := map[term.Event]term.Event{
-			keya: evInterrupt,
-		}
-		for _, m := range []map[term.Event]term.Event{m1, m2} {
-			err := c.MergeKeyMap(m)
-			require.Error(t, err)
-		}
-	})
-
 	t.Run("KeyMapping returns mapped event", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
 
-		m := map[term.Event]term.Event{
+		m := map[term.KeyComb]term.KeyComb{
 			keya: keyb,
 		}
 		err := c.MergeKeyMap(m)
@@ -147,7 +131,7 @@ func TestComponentKeyMapper(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
 		c.config.CommandKeyBindings[keyb] = "myCmd"
 
-		m := map[term.Event]term.Event{
+		m := map[term.KeyComb]term.KeyComb{
 			keya: keyb,
 		}
 		err := c.MergeKeyMap(m)

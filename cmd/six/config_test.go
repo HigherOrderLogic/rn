@@ -182,20 +182,20 @@ func TestConfigSetting(t *testing.T) {
 	assert.True(t, cfg.viDebug())
 	assert.True(t, cfg.viWrap())
 	wantMappings := map[handler.Sequence]string{
-		{First: term.Event{Type: term.EventKey, Ch: 'f'}}:            "searchFile",
-		{First: term.Event{Type: term.EventKey, Ch: 'l'}}:            "searchLine",
-		{First: term.Event{Type: term.EventKey, Key: term.KeyCtrlX}}: "closeDoors",
+		{First: term.KeyComb{Ch: 'f'}}:            "searchFile",
+		{First: term.KeyComb{Ch: 'l'}}:            "searchLine",
+		{First: term.KeyComb{Key: term.KeyCtrlX}}: "closeDoors",
 		{
-			First: term.Event{Type: term.EventKey, Key: term.KeyCtrlX},
-			Last:  term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+			First: term.KeyComb{Key: term.KeyCtrlX},
+			Last:  term.KeyComb{Key: term.KeyCtrlP},
 		}: "openAllDoors",
 		{
-			First: term.Event{Type: term.EventKey, Ch: 'f'},
-			Last:  term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+			First: term.KeyComb{Ch: 'f'},
+			Last:  term.KeyComb{Key: term.KeyCtrlP},
 		}: "openSmallDoors",
 		{
-			First: term.Event{Type: term.EventKey, Key: term.KeyCtrlX},
-			Last:  term.Event{Type: term.EventKey, Ch: 'f'},
+			First: term.KeyComb{Key: term.KeyCtrlX},
+			Last:  term.KeyComb{Ch: 'f'},
 		}: "openLargeDoors",
 	}
 	assert.Equal(t, wantMappings, cfg.commandKeyMappings())

@@ -31,15 +31,15 @@ func TestKeyMappedLessHandle(t *testing.T) {
 		term.Event{},
 	})
 	less1, writer3 := setup(t, nil, 8, 4)
-	testutil.TestHandler(t, WithMapping(less1, map[term.Event]term.Event{
-		term.Event{Ch: 'k', Type: term.EventKey}:                    term.Event{Ch: 'k', Type: term.EventKey},
-		term.Event{Ch: 'U', Type: term.EventKey}:                    term.Event{Ch: 'j', Type: term.EventKey},
-		term.Event{Ch: '%', Type: term.EventKey}:                    term.Event{Ch: 'h', Type: term.EventKey},
-		term.Event{Ch: '\\', Type: term.EventKey}:                   term.Event{Ch: '/', Type: term.EventKey},
-		term.Event{Key: term.KeyArrowRight, Type: term.EventKey}:    term.Event{Ch: '$', Type: term.EventKey},
-		term.Event{Key: term.KeyArrowLeft, Type: term.EventKey}:     term.Event{Ch: '0', Type: term.EventKey},
-		term.Event{Key: 'N', Type: term.EventKey, Mod: term.ModAlt}: term.Event{Ch: 'N', Type: term.EventKey},
-		term.Event{Key: 'n', Type: term.EventKey, Mod: term.ModAlt}: term.Event{Ch: 'n', Type: term.EventKey},
+	testutil.TestHandler(t, WithMapping(less1, map[term.KeyComb]term.KeyComb{
+		term.KeyComb{Ch: 'k'}:                    term.KeyComb{Ch: 'k'},
+		term.KeyComb{Ch: 'U'}:                    term.KeyComb{Ch: 'j'},
+		term.KeyComb{Ch: '%'}:                    term.KeyComb{Ch: 'h'},
+		term.KeyComb{Ch: '\\'}:                   term.KeyComb{Ch: '/'},
+		term.KeyComb{Key: term.KeyArrowRight}:    term.KeyComb{Ch: '$'},
+		term.KeyComb{Key: term.KeyArrowLeft}:     term.KeyComb{Ch: '0'},
+		term.KeyComb{Key: 'N', Mod: term.ModAlt}: term.KeyComb{Ch: 'N'},
+		term.KeyComb{Key: 'n', Mod: term.ModAlt}: term.KeyComb{Ch: 'n'},
 	}), cases, writer3)
 }
 
@@ -47,8 +47,8 @@ func TestKeyMappingMan(t *testing.T) {
 	mySummary := "My Summary"
 	myID := "myID"
 	myDesc := "myDesc"
-	kKey := term.Event{Ch: 'k', Type: term.EventKey}
-	jKey := term.Event{Ch: 'j', Type: term.EventKey}
+	kKey := term.KeyComb{Ch: 'k'}
+	jKey := term.KeyComb{Ch: 'j'}
 
 	var handler tui.Handler
 	handler = &TestHandler{Manual: tui.Manual{
@@ -66,7 +66,7 @@ func TestKeyMappingMan(t *testing.T) {
 	}}
 
 	manualBefore := handler.Man()
-	handler = WithMapping(handler, map[term.Event]term.Event{
+	handler = WithMapping(handler, map[term.KeyComb]term.KeyComb{
 		kKey: jKey,
 	})
 

@@ -28,9 +28,9 @@ type Config struct {
 	Tabspaces               int
 	Filepaths               []workspace.URI
 	RecoveryFilepath        workspace.URI
-	CommandEvent            term.Event
+	CommandEvent            term.KeyComb
 	CommandMaxHistory       int
-	CommandKeyBindings      map[term.Event]string
+	CommandKeyBindings      map[term.KeyComb]string
 	CommandSequenceBindings map[handler.Sequence]string
 	SequencerTimeout        time.Duration
 	Storage                 document.Service
@@ -60,12 +60,12 @@ func DefaultConfig() Config {
 		Tabspaces:               4,
 		Filepaths:               nil,
 		RecoveryFilepath:        workspace.URI{},
-		CommandEvent:            term.Event{Ch: ':', Type: term.EventKey},
+		CommandEvent:            term.KeyComb{Ch: ':'},
 		CommandMaxHistory:       10,
 		Config:                  browser.DefaultConfig(),
 		Storage:                 document.NewInMemoryCache(),
 		DirtyTabAttr:            term.Attributes{Fg: term.AttrBold},
-		CommandKeyBindings:      make(map[term.Event]string),
+		CommandKeyBindings:      make(map[term.KeyComb]string),
 		CommandSequenceBindings: make(map[handler.Sequence]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
@@ -108,9 +108,9 @@ func WithFile(file workspace.URI) Option {
 	}
 }
 
-// WithCommandEvent returns an Option that defines what event triggers the editor's
+// WithCommandKey returns an Option that defines what key triggers the editor's
 // command mode.
-func WithCommandEvent(event term.Event) Option {
+func WithCommandKey(event term.KeyComb) Option {
 	return func(cfg *Config) {
 		cfg.CommandEvent = event
 	}
@@ -189,12 +189,9 @@ func WithWallpaperBackgroundAttr(attr term.Attributes) Option {
 }
 
 // WithCommandKeyBinding maps key to issue cmd.
-func WithCommandKeyBinding(ev term.Event, cmd string) Option {
+func WithCommandKeyBinding(key term.KeyComb, cmd string) Option {
 	return func(cfg *Config) {
-		if ev.Type != term.EventKey {
-			panic("invalid command key binding")
-		}
-		sum := term.Event{Type: term.EventKey, Mod: ev.Mod, Ch: ev.Ch, Key: ev.Key}
+		sum := term.KeyComb{Mod: key.Mod, Ch: key.Ch, Key: key.Key}
 		cfg.CommandKeyBindings[sum] = cmd
 	}
 }
@@ -210,19 +207,16 @@ func WithCommandMaxHistory(max int) Option {
 // cmd when key sequence is pressed.
 func WithCommandSequenceBinding(sequence handler.Sequence, cmd string) Option {
 	return func(cfg *Config) {
-		for _, ev := range []term.Event{sequence.First, sequence.Last} {
-			if ev.Type != term.EventKey {
-				panic("invalid command key binding")
-			}
-		}
 		seq := handler.Sequence{
-			First: term.Event{
-				Type: term.EventKey, Mod: sequence.First.Mod,
-				Ch: sequence.First.Ch, Key: sequence.First.Key,
+			First: term.KeyComb{
+				Mod: sequence.First.Mod,
+				Ch:  sequence.First.Ch,
+				Key: sequence.First.Key,
 			},
-			Last: term.Event{
-				Type: term.EventKey, Mod: sequence.Last.Mod,
-				Ch: sequence.Last.Ch, Key: sequence.Last.Key,
+			Last: term.KeyComb{
+				Mod: sequence.Last.Mod,
+				Ch:  sequence.Last.Ch,
+				Key: sequence.Last.Key,
 			},
 		}
 		cfg.CommandSequenceBindings[seq] = cmd

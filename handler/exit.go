@@ -7,16 +7,16 @@ import (
 
 type keyExit struct {
 	tui.Component
-	key term.Event
+	key term.KeyComb
 }
 
 // KeyExit wraps a tui.Component which exits upon receiveing key.
-func KeyExit(c tui.Component, key term.Event) tui.Handler {
+func KeyExit(c tui.Component, key term.KeyComb) tui.Handler {
 	return &keyExit{Component: c, key: key}
 }
 
 func (e *keyExit) Handle(ev term.Event) (exit, handled bool) {
-	exit = e.key == ev
+	exit = e.key == ev.KeyComb()
 	handled = exit
 	return
 }

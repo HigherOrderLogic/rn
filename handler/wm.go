@@ -254,23 +254,23 @@ func (wm *WindowManager) Man() tui.Manual {
 	return tui.Manual{
 		Summary: "WindowManager implements a tiled window manager.",
 		Keys: tui.KeyMap{
-			term.Event{Mod: term.ModAlt, Ch: 'q'}: {
+			term.KeyComb{Mod: term.ModAlt, Ch: 'q'}: {
 				ID:          "Exit",
 				Description: "Exit handler.",
 			},
-			term.Event{Mod: term.ModAlt, Ch: 'j'}: {
+			term.KeyComb{Mod: term.ModAlt, Ch: 'j'}: {
 				ID:          "FocusDown",
 				Description: "Switch focus to tile below tile in focus.",
 			},
-			term.Event{Mod: term.ModAlt, Ch: 'k'}: {
+			term.KeyComb{Mod: term.ModAlt, Ch: 'k'}: {
 				ID:          "FocusUp",
 				Description: "Switch focus to tile above tile in focus.",
 			},
-			term.Event{Mod: term.ModAlt, Ch: 'h'}: {
+			term.KeyComb{Mod: term.ModAlt, Ch: 'h'}: {
 				ID:          "FocusLeft",
 				Description: "Switch focus to tile on the left of tile in focus.",
 			},
-			term.Event{Mod: term.ModAlt, Ch: 'l'}: {
+			term.KeyComb{Mod: term.ModAlt, Ch: 'l'}: {
 				ID:          "FocusRight",
 				Description: "Switch focus to tile on the right of tile in focus.",
 			},

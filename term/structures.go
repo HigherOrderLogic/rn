@@ -1,5 +1,7 @@
 package term
 
+import "fmt"
+
 type (
 	InputMode  int
 	OutputMode int
@@ -27,6 +29,13 @@ type Cell struct {
 	Bg, Fg Attribute
 }
 
+// KeyComb represents is a key combination. See event for more details.
+type KeyComb struct {
+	Mod Modifier
+	Key Key
+	Ch  rune
+}
+
 // Event represents a terminal event. The 'Mod', 'Key' and 'Ch' fields are
 // valid if 'Type' is EventKey. The 'Width' and 'Height' fields are valid if
 // 'Type' is EventResize. The 'Err' field is valid if 'Type' is EventError.
@@ -42,6 +51,14 @@ type Event struct {
 	MouseY int       // y coord of mouse
 }
 
+func (e Event) KeyComb() KeyComb {
+	return KeyComb{
+		Key: e.Key,
+		Mod: e.Mod,
+		Ch:  e.Ch,
+	}
+}
+
 // Writer abstracts termbox write functionality to decouple components from
 // termbox, so they're easier to test.
 type Writer interface {
@@ -49,4 +66,25 @@ type Writer interface {
 	Flush() error
 	Clear(Attributes) error
 	SetCursor(Coordinates)
+}
+
+func (e EventType) String() string {
+	switch e {
+	case EventKey:
+		return "Key"
+	case EventResize:
+		return "Resize"
+	case EventMouse:
+		return "Mouse"
+	case EventError:
+		return "Error"
+	case EventInterrupt:
+		return "Interrupt"
+	case EventRaw:
+		return "Raw"
+	case EventNone:
+		return "None"
+	default:
+		panic(fmt.Sprintf("Not a valid EventType: %d", e))
+	}
 }

@@ -35,7 +35,7 @@ type Component struct {
 	workspace      workspace.ResourceOpener
 	ed             Editor
 	config         Config
-	keymap         map[term.Event]term.Event
+	keymap         map[term.KeyComb]term.KeyComb
 	edSubscribers  map[EventType][]EventHandler
 	cmdSubscribers map[string]CommandHandler
 }
@@ -307,7 +307,7 @@ open by another process or
 an edit session for this file crashed.`, file)
 
 	c.comp.Prompt(msg, []string{recoverOpt, readOnlyOpt, skipOpt},
-		[]term.Event{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'S'}},
+		[]term.KeyComb{{Ch: 'R'}, {Ch: 'O'}, {Ch: 'S'}},
 		func(i int, opt string) {
 
 			var h browser.Handler
@@ -363,31 +363,28 @@ func (c *Component) Editor(file workspace.URI) (Handler, error) {
 	return nil, errors.New("handler not found")
 }
 
-// KeyMapping returns a key mapping for ev and true
+// KeyMapping returns a key mapping for input key and true
 // or the original ev and false if there's
 // no mapping. It also returns any command that was mapped
 // to the return mapping (or the original event, if there's no event mapping).
 // Mappings are created via MergeKeyMap.
-func (c *Component) KeyMapping(ev term.Event) (term.Event, string, bool) {
-	mev, ok := c.keymap[ev]
+func (c *Component) KeyMapping(key term.KeyComb) (term.KeyComb, string, bool) {
+	mev, ok := c.keymap[key]
 	if !ok {
-		mev = ev
+		mev = key
 	}
 	cmd, _ := c.config.CommandKeyBindings[mev]
-	c.tryLog(log.TraceLevel, "KeyMapping(%#v): %#v, %s", ev, mev, cmd)
+	c.tryLog(log.TraceLevel, "KeyMapping(%#v): %#v, %s", key, mev, cmd)
 	return mev, cmd, ok
 }
 
 // MergeKeyMap takes the given keymap and merges it with the Browser's keymap
 // to override the current event key mappings.
-func (c *Component) MergeKeyMap(keymap map[term.Event]term.Event) error {
+func (c *Component) MergeKeyMap(keymap map[term.KeyComb]term.KeyComb) error {
 	if c.keymap == nil {
-		c.keymap = make(map[term.Event]term.Event)
+		c.keymap = make(map[term.KeyComb]term.KeyComb)
 	}
 	for k, v := range keymap {
-		if k.Type != term.EventKey || v.Type != term.EventKey {
-			return errors.New("invalid mapping of non-key event")
-		}
 		c.keymap[k] = v
 	}
 	return nil

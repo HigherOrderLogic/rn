@@ -23,7 +23,7 @@ import (
 
 // testutil.TestHandlerSequence maps ':' characters to the following event
 // this is to work around ex's assumptions on underlying handler.
-var testCommandEvent = term.Event{Type: term.EventKey, Key: term.KeyCtrlBackslash}
+var testCommandKey = term.KeyComb{Key: term.KeyCtrlBackslash}
 
 type browserConstructor func(ed text.Editor, opts ...text.Option) (tui.Handler, browser.Browser, error)
 
@@ -220,8 +220,8 @@ func testBrowserHandlerDraw(t *testing.T, constructor browserConstructor) {
 └──────────────────┘`},
 	}
 	bh, b, err := constructor(text.Mock(),
-		text.WithCommandEvent(testCommandEvent),
-		text.WithCommandKeyBinding(term.Event{Type: term.EventKey, Ch: '4'}, "close"),
+		text.WithCommandKey(testCommandKey),
+		text.WithCommandKeyBinding(term.KeyComb{Ch: '4'}, "close"),
 	)
 	require.NoError(t, err)
 
@@ -565,7 +565,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 	opts := []text.Option{
 		text.WithFile(file1),
 		text.WithFile(file2),
-		text.WithCommandEvent(testCommandEvent),
+		text.WithCommandKey(testCommandKey),
 	}
 	mockBuf := testFileBuffer{}
 	workspace := testWorkspace{buf: &mockBuf}
@@ -618,7 +618,7 @@ func TestExCommandResponsive(t *testing.T) {
 	fn := func(t *testing.T) tui.Handler {
 		b := new(ex)
 		opts := []text.Option{
-			text.WithCommandEvent(testCommandEvent),
+			text.WithCommandKey(testCommandKey),
 			text.WithWindowManagerConfig(component.WindowManagerConfig{
 				Frame: false,
 			}),
@@ -674,14 +674,14 @@ func TestExKeySequence(t *testing.T) {
 		opts := []text.Option{
 			text.WithFile(file1),
 			text.WithFile(file2),
-			text.WithCommandEvent(testCommandEvent),
+			text.WithCommandKey(testCommandKey),
 			text.WithCommandSequenceBinding(handler.Sequence{
-				First: term.Event{Type: term.EventKey, Ch: 'g'},
-				Last:  term.Event{Type: term.EventKey, Ch: 'l'},
+				First: term.KeyComb{Ch: 'g'},
+				Last:  term.KeyComb{Ch: 'l'},
 			}, "bufferNext"),
 			text.WithCommandSequenceBinding(handler.Sequence{
-				First: term.Event{Type: term.EventKey, Ch: 'g'},
-				Last:  term.Event{Type: term.EventKey, Ch: 'g'},
+				First: term.KeyComb{Ch: 'g'},
+				Last:  term.KeyComb{Ch: 'g'},
 			}, "bufferCloseAll"),
 			text.WithSequencerTimeout(10 * time.Second),
 		}
@@ -707,12 +707,18 @@ func TestExExit(t *testing.T) {
 		t.Run(fmt.Sprintf("ex exits %s command is issued", cmd), func(t *testing.T) {
 			b := new(ex)
 			initExForTesting(t, b, text.Mock(),
-				text.WithCommandEvent(testCommandEvent),
+				text.WithCommandKey(testCommandKey),
 			)
 			defer b.Close()
 
 			// start command prompt
-			exit, handled := b.Handle(testCommandEvent)
+			ev := term.Event{
+				Type: term.EventKey,
+				Ch:   testCommandKey.Ch,
+				Mod:  testCommandKey.Mod,
+				Key:  testCommandKey.Key,
+			}
+			exit, handled := b.Handle(ev)
 			assert.True(t, handled)
 			require.False(t, exit)
 
@@ -797,7 +803,7 @@ func TestNewWindow(t *testing.T) {
 
 	b := new(ex)
 	opts := []text.Option{
-		text.WithCommandEvent(testCommandEvent),
+		text.WithCommandKey(testCommandKey),
 	}
 	initExForTesting(t, b, text.Mock(), opts...)
 	defer b.Close()
@@ -832,7 +838,7 @@ func TestCommandHistory(t *testing.T) {
 
 	b := new(ex)
 	opts := []text.Option{
-		text.WithCommandEvent(testCommandEvent),
+		text.WithCommandKey(testCommandKey),
 	}
 	initExForTesting(t, b, text.Mock(), opts...)
 	defer b.Close()

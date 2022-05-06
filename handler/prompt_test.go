@@ -44,7 +44,7 @@ func TestPromptHandle(t *testing.T) {
 			calledI = i
 			calledOpt = opt
 		},
-		OptionBindings: []term.Event{
+		OptionBindings: []term.KeyComb{
 			{Ch: 'W'},
 			{Ch: 'Y'},
 		},

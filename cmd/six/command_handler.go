@@ -14,9 +14,9 @@ import (
 )
 
 type commandListHandler struct {
-	commandEvent term.Event
-	overlayCfg   text.CommandOverlayConfig
-	callback     func(string, string) bool
+	commandKey term.KeyComb
+	overlayCfg text.CommandOverlayConfig
+	callback   func(string, string) bool
 
 	responsive component.Responsive
 	buf        cell.Buffer
@@ -36,10 +36,10 @@ type commandListHandler struct {
 
 func newCommandListHandler(
 	b browser.Storage, max int, overlayCfg text.CommandOverlayConfig,
-	commandEvent term.Event, callback func(string, string) bool,
+	commandKey term.KeyComb, callback func(string, string) bool,
 ) *commandListHandler {
 	ret := new(commandListHandler)
-	ret.init(b, max, overlayCfg, commandEvent, callback)
+	ret.init(b, max, overlayCfg, commandKey, callback)
 	return ret
 }
 
@@ -49,9 +49,9 @@ func (h *commandListHandler) loadHistory() error {
 
 func (h *commandListHandler) init(
 	store browser.Storage, max int, overlayCfg text.CommandOverlayConfig,
-	commandEvent term.Event, callback func(string, string) bool,
+	commandKey term.KeyComb, callback func(string, string) bool,
 ) {
-	h.commandEvent = commandEvent
+	h.commandKey = commandKey
 	h.overlayCfg = overlayCfg
 	h.callback = callback
 
@@ -136,9 +136,10 @@ func (h *commandListHandler) writeLastCommandQuery() {
 }
 
 func (h *commandListHandler) Handle(ev term.Event) (quit, handled bool) {
-	if (ev == h.commandEvent && h.commandEvent.Ch == 0) ||
-		(ev == h.commandEvent && h.buf.Columns(0) == 0) ||
-		(ev == h.commandEvent && h.prevCommandCycle) {
+	key := ev.KeyComb()
+	if (key == h.commandKey && h.commandKey.Ch == 0) ||
+		(key == h.commandKey && h.buf.Columns(0) == 0) ||
+		(key == h.commandKey && h.prevCommandCycle) {
 		h.writeLastCommandQuery()
 		h.prevCommandCycle = true
 		return false, true

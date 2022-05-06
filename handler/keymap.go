@@ -8,13 +8,13 @@ import (
 type keyMappingHandler struct {
 	tui.Component
 	inner    tui.Handler
-	mappings map[term.Event]term.Event
+	mappings map[term.KeyComb]term.KeyComb
 }
 
 // WithMapping takes a handler and a set of event mappings to provide
 // key and event mapping to override default handler event handler.
 func WithMapping(
-	inner tui.Handler, mappings map[term.Event]term.Event,
+	inner tui.Handler, mappings map[term.KeyComb]term.KeyComb,
 ) tui.Handler {
 	return keyMappingHandler{inner, inner, mappings}
 }
@@ -22,9 +22,17 @@ func WithMapping(
 // Handle finds a mapping and overwrites event or delegates the event to
 // underlying handler.
 func (k keyMappingHandler) Handle(ev term.Event) (bool, bool) {
-	mapped, ok := k.mappings[ev]
+	if ev.Type != term.EventKey {
+		return k.inner.Handle(ev)
+	}
+	mapped, ok := k.mappings[ev.KeyComb()]
 	if ok {
-		ev = mapped
+		ev = term.Event{
+			Type: term.EventKey,
+			Ch:   mapped.Ch,
+			Mod:  mapped.Mod,
+			Key:  mapped.Key,
+		}
 	}
 	return k.inner.Handle(ev)
 }

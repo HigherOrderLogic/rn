@@ -98,18 +98,3 @@ func (mr *MockClipboardSetterMockRecorder) SetRegister(registerID, r interface{}
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRegister", reflect.TypeOf((*MockClipboardSetter)(nil).SetRegister), registerID, r)
 }
-
-// register mocks base method.
-func (m *MockClipboardSetter) register(registerID string) (ClipboardRegister, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "register", registerID)
-	ret0, _ := ret[0].(ClipboardRegister)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// register indicates an expected call of register.
-func (mr *MockClipboardSetterMockRecorder) register(registerID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "register", reflect.TypeOf((*MockClipboardSetter)(nil).register), registerID)
-}

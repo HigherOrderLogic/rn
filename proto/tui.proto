@@ -7,9 +7,11 @@ import "term.proto";
 package proto;
 
 message Key {
-	Event event = 1;
-	string id = 2;
-	string description = 3;
+	string id = 1;
+	string description = 2;
+	uint32 Char = 3;
+	Event.Mod mod = 4;
+	Event.Key key = 5;
 }
 
 message Manual {
@@ -21,4 +23,3 @@ message Coordinates {
 	int32 X = 1;
 	int32 Y = 2;
 }
-

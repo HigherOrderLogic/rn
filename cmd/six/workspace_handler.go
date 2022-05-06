@@ -36,7 +36,7 @@ var (
 		"quit":               (*workspaceManagerHandler).commandQuit,
 		"forceQuit!":         (*workspaceManagerHandler).commandQuit,
 	}
-	defaultCommandEvent = term.Event{Type: term.EventKey, Ch: ':'}
+	defaultCommandKey = term.KeyComb{Ch: ':'}
 
 	workspaceCommandList []string
 	exCommandList        []string
@@ -285,7 +285,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithTabspaces(cfg.browserTabspaces()),
 		text.WithWindowManagerConfig(cfg.windowManagerConfig()),
 		text.WithFrameUnionCharSet(cfg.frameUnionCharset()),
-		text.WithCommandEvent(cfg.commandEvent()),
+		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
 		text.WithMessageBarAttr(cfg.messageBarAttr()),
 		text.WithFocusTabAttr(cfg.focusTabAttr()),
@@ -300,7 +300,7 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {
-		if seq.Last != (term.Event{}) {
+		if seq.Last != (term.KeyComb{}) {
 			ret = append(ret, text.WithCommandSequenceBinding(seq, cmd))
 		} else {
 			ret = append(ret, text.WithCommandKeyBinding(seq.First, cmd))

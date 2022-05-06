@@ -56,7 +56,7 @@ type EventDesc struct {
 }
 
 // KeyMap represents a Handler's key mapping information in the Manual.
-type KeyMap map[term.Event]EventDesc
+type KeyMap map[term.KeyComb]EventDesc
 
 // Init initializes this library. This function should be called before any
 // other functions. 'Close' must be called at the end to ensure graceful shutdown.

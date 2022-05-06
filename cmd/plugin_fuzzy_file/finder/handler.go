@@ -45,7 +45,7 @@ type fuzzyFinderHandler struct {
 	ed           text.Editor
 	executor     workspace.Workspace
 	invokeWindow browser.Window
-	historyKey   term.Event
+	historyKey   term.KeyComb
 	mu           sync.Mutex
 	cmdStr       string
 	getResource  func(workspace.Workspace, string) (workspace.URI, term.Coordinates)
@@ -270,7 +270,7 @@ func (h *fuzzyFinderHandler) initGrants(
 func New(
 	grants []plugin.Grant, broker proto.MuxBroker,
 	invokeWindow browser.Window, config plugin.Config,
-	historyKey term.Event, historyDocumentID string, command string,
+	historyKey term.KeyComb, historyDocumentID string, command string,
 	getResource func(exec workspace.Workspace, line string) (workspace.URI, term.Coordinates),
 ) (tui.Handler, error) {
 	h := new(fuzzyFinderHandler)
@@ -400,7 +400,7 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	if ev == h.historyKey {
+	if ev.KeyComb() == h.historyKey {
 		h.writeLastSearchQuery()
 		handled = true
 		return

@@ -23,12 +23,10 @@ var testHandlerKeys tui.KeyMap
 
 func init() {
 	testHandlerKeys = make(tui.KeyMap)
-	ev1 := term.Event{Type: term.EventKey, Key: term.KeyCtrlSpace}
-	ev2 := term.Event{Mod: term.ModAlt, Type: term.EventKey, Ch: '@'}
-	ev3 := term.Event{Type: term.EventMouse, MouseX: 0, MouseY: 1, Key: term.MouseLeft}
+	ev1 := term.KeyComb{Key: term.KeyCtrlSpace}
+	ev2 := term.KeyComb{Mod: term.ModAlt, Ch: '@'}
 	testHandlerKeys[ev1] = tui.EventDesc{ID: "sup", Description: "media soup"}
 	testHandlerKeys[ev2] = tui.EventDesc{ID: "hiperio", Description: "is dead; or is it?"}
-	testHandlerKeys[ev3] = tui.EventDesc{ID: "catalonia", Description: "is not free"}
 }
 
 func testHandler() tui.Handler {

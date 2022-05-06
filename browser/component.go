@@ -790,7 +790,7 @@ func (c *Component) Cursor() (pos term.Coordinates, show bool) {
 // an option.
 func (c *Component) Prompt(
 	message string, options []string,
-	bindings []term.Event,
+	bindings []term.KeyComb,
 	cb func(int, string),
 ) {
 	promptConfig := handler.PromptConfig{

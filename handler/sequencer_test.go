@@ -13,8 +13,8 @@ import (
 func TestSequencer(t *testing.T) {
 	t.Run("returns sequence match", func(t *testing.T) {
 		interests := []Sequence{{
-			First: term.Event{Type: term.EventKey, Ch: 'd'},
-			Last:  term.Event{Type: term.EventKey, Ch: 'd'},
+			First: term.KeyComb{Ch: 'd'},
+			Last:  term.KeyComb{Ch: 'd'},
 		}}
 		s := NewSequencer(interests, 1*time.Hour)
 
@@ -26,28 +26,10 @@ func TestSequencer(t *testing.T) {
 		require.True(t, match)
 		assert.Equal(t, interests[0], seq)
 	})
-	t.Run("ignores superfluous event fields in interests arg", func(t *testing.T) {
-		interests := []Sequence{{
-			First: term.Event{Type: term.EventKey, MouseX: 10, Ch: 'd'},
-			Last:  term.Event{Type: term.EventKey, MouseX: 10, Ch: 'd'},
-		}}
-		s := NewSequencer(interests, 1*time.Hour)
-
-		seq, match := s.Handle(term.Event{Type: term.EventKey, Ch: 'd'})
-		assert.False(t, match)
-		assert.Zero(t, seq)
-
-		seq, match = s.Handle(term.Event{Type: term.EventKey, Ch: 'd'})
-		require.True(t, match)
-		assert.Equal(t, Sequence{
-			First: term.Event{Type: term.EventKey, Ch: 'd'},
-			Last:  term.Event{Type: term.EventKey, Ch: 'd'},
-		}, seq)
-	})
 	t.Run("ignores superfluous event fields in Handle", func(t *testing.T) {
 		interests := []Sequence{{
-			First: term.Event{Type: term.EventKey, Ch: 'd'},
-			Last:  term.Event{Type: term.EventKey, Ch: 'd'},
+			First: term.KeyComb{Ch: 'd'},
+			Last:  term.KeyComb{Ch: 'd'},
 		}}
 		s := NewSequencer(interests, time.Hour)
 
@@ -61,8 +43,8 @@ func TestSequencer(t *testing.T) {
 	})
 	t.Run("does not return match if it took too long for second event", func(t *testing.T) {
 		interests := []Sequence{{
-			First: term.Event{Type: term.EventKey, Ch: 'd'},
-			Last:  term.Event{Type: term.EventKey, Ch: 'd'},
+			First: term.KeyComb{Ch: 'd'},
+			Last:  term.KeyComb{Ch: 'd'},
 		}}
 		s := NewSequencer(interests, 1*time.Nanosecond)
 
@@ -78,8 +60,8 @@ func TestSequencer(t *testing.T) {
 	})
 	t.Run("returns sequence match even if last event failed to match with initial event", func(t *testing.T) {
 		interests := []Sequence{{
-			First: term.Event{Type: term.EventKey, Ch: 'd'},
-			Last:  term.Event{Type: term.EventKey, Ch: 'd'},
+			First: term.KeyComb{Ch: 'd'},
+			Last:  term.KeyComb{Ch: 'd'},
 		}}
 		s := NewSequencer(interests, 25*time.Millisecond)
 
@@ -118,36 +100,35 @@ func TestParseSequence(t *testing.T) {
 		{"f>c-p<", Sequence{}, true},
 		{"><><", Sequence{}, true},
 		{"ff", Sequence{
-			First: term.Event{Type: term.EventKey, Ch: 'f'},
-			Last:  term.Event{Type: term.EventKey, Ch: 'f'},
+			First: term.KeyComb{Ch: 'f'},
+			Last:  term.KeyComb{Ch: 'f'},
 		}, false},
 		{">>", Sequence{
-			First: term.Event{Type: term.EventKey, Ch: '>'},
-			Last:  term.Event{Type: term.EventKey, Ch: '>'},
+			First: term.KeyComb{Ch: '>'},
+			Last:  term.KeyComb{Ch: '>'},
 		}, false},
 		{"<<", Sequence{
-			First: term.Event{Type: term.EventKey, Ch: '<'},
-			Last:  term.Event{Type: term.EventKey, Ch: '<'},
+			First: term.KeyComb{Ch: '<'},
+			Last:  term.KeyComb{Ch: '<'},
 		}, false},
 		{"f<c-p>", Sequence{
-			First: term.Event{Type: term.EventKey, Ch: 'f'},
-			Last:  term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+			First: term.KeyComb{Ch: 'f'},
+			Last:  term.KeyComb{Key: term.KeyCtrlP},
 		}, false},
 		{"<c-p>f", Sequence{
-			First: term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
-			Last:  term.Event{Type: term.EventKey, Ch: 'f'},
+			First: term.KeyComb{Key: term.KeyCtrlP},
+			Last:  term.KeyComb{Ch: 'f'},
 		}, false},
 		{"<c-x><c-p>", Sequence{
-			First: term.Event{Type: term.EventKey, Key: term.KeyCtrlX},
-			Last:  term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+			First: term.KeyComb{Key: term.KeyCtrlX},
+			Last:  term.KeyComb{Key: term.KeyCtrlP},
 		}, false},
 		{"<m-c-]><c-p>", Sequence{
-			First: term.Event{
-				Type: term.EventKey,
-				Key:  term.KeyCtrlRsqBracket,
-				Mod:  term.ModAlt,
+			First: term.KeyComb{
+				Key: term.KeyCtrlRsqBracket,
+				Mod: term.ModAlt,
 			},
-			Last: term.Event{Type: term.EventKey, Key: term.KeyCtrlP},
+			Last: term.KeyComb{Key: term.KeyCtrlP},
 		}, false},
 	}
 

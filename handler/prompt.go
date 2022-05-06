@@ -9,7 +9,7 @@ import (
 type PromptConfig struct {
 	component.PromptConfig
 
-	OptionBindings []term.Event
+	OptionBindings []term.KeyComb
 	OptionCallback func(i int, option string)
 	HighlightAttr  term.Attributes
 	OptionAttr     term.Attributes
@@ -20,7 +20,7 @@ type Prompt struct {
 
 	hi       int
 	cfg      PromptConfig
-	bindings map[term.Event]int
+	bindings map[term.KeyComb]int
 }
 
 // NewPrompt allocates storage for a new Prompt and initializes it.
@@ -54,7 +54,7 @@ func (f *Prompt) Init(cfg PromptConfig) {
 	}
 
 	f.cfg = cfg
-	f.bindings = make(map[term.Event]int)
+	f.bindings = make(map[term.KeyComb]int)
 	for i, ev := range f.cfg.OptionBindings {
 		f.bindings[ev] = i
 	}
@@ -72,7 +72,7 @@ func (f *Prompt) highlightOption() {
 
 // Handle satisfies tui.Handler.
 func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
-	if i, ok := f.bindings[ev]; ok {
+	if i, ok := f.bindings[ev.KeyComb()]; ok {
 		f.cfg.OptionCallback(i, f.cfg.Options[i])
 		exit = true
 		handled = true
