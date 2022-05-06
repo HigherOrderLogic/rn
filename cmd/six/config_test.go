@@ -95,7 +95,10 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	assert.Len(t, cfg.plugins(), 0)
 	assert.Equal(t, 4, cfg.browserTabspaces())
 	assert.NotZero(t, cfg.browserWallpaper())
-	assert.Equal(t, component.DefaultWindowManagerConfig(), cfg.windowManagerConfig())
+	defWmConfig := handler.DefaultWindowManagerConfig()
+	defWmConfig.FocusFrameAttr = defWmConfig.FrameAttr
+	defWmConfig.FocusFrameCharSet = defWmConfig.FrameCharSet
+	assert.Equal(t, defWmConfig, cfg.windowManagerConfig())
 	assert.Equal(t, "", cfg.logOutputPath())
 	assert.Equal(t, logrus.ErrorLevel, cfg.logLevel())
 	assert.Equal(t, term.Output256, cfg.outputMode())
@@ -141,10 +144,14 @@ func TestConfigSetting(t *testing.T) {
 	assert.True(t, term.InputMouse&cfg.inputMode() != 0)
 	assert.True(t, term.InputEsc&cfg.inputMode() != 0)
 
-	expectedConfig := component.WindowManagerConfig{
-		Frame:        true,
-		FrameAttr:    term.Attributes{Fg: term.ColorRed},
-		FrameCharSet: component.FrameCharSetHighlight(),
+	expectedConfig := handler.WindowManagerConfig{
+		WindowManagerConfig: component.WindowManagerConfig{
+			Frame:        true,
+			FrameAttr:    term.Attributes{Fg: term.ColorRed},
+			FrameCharSet: component.FrameCharSetHighlight(),
+		},
+		FocusFrameAttr:    handler.DefaultWindowManagerConfig().FrameAttr,
+		FocusFrameCharSet: handler.DefaultWindowManagerConfig().FrameCharSet,
 	}
 	assert.Equal(t, expectedConfig, cfg.windowManagerConfig())
 

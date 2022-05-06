@@ -425,7 +425,8 @@ func TestComponentMultipleWindow(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Logger = log.New()
 	cfg.Logger.SetLevel(log.TraceLevel)
-	cfg.WindowManagerConfig.TopLeft = 'X'
+	cfg.WindowManagerConfig.TopLeft = 'O'
+	cfg.WindowManagerConfig.FocusFrameCharSet.TopLeft = 'X'
 	c := NewComponent(cfg)
 	c.Resize(20, 8)
 
@@ -439,8 +440,8 @@ func TestComponentMultipleWindow(t *testing.T) {
 
 	tests := []testutil.ComponentTestCase{
 		{
-			nil, `
-X──────────────────┐
+			nil /* X on top left window is overriden by union */, `
+O──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
@@ -452,7 +453,7 @@ X──────────────────┐
 			w2, ok = c.Split(OrientationBottom, h2)
 			require.True(t, ok)
 		}, `
-X──────────────────┐
+O──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
@@ -463,12 +464,12 @@ X──────────────────┐
 		}, {func() {
 			/*w3 =*/ c.Split(OrientationRight, h3)
 		}, `
-X──────────────────┐
+O──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
 └──────────────────┘
-X────────┐X────────┐
+O────────┐X────────┐
 │AAAAAAAA││CCCCCCCC│
 └────────┘└────────┘`,
 		}, {func() {
@@ -490,13 +491,13 @@ X────────┐X────────┐
 			assert.True(t, handled)
 			assert.Equal(t, 1, closeCallbacked)
 			assert.Equal(t, 1, closed)
-		}, `
-X──────────────────┐
+		}, /* same as case 1, topleft on window X is overriden */ `
+O──────────────────┐
 │                  │
 ├──────────────────┤
 │                  │
 └──────────────────┘
-X──────────────────┐
+O──────────────────┐
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		},

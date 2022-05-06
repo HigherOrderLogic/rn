@@ -619,9 +619,8 @@ func TestExCommandResponsive(t *testing.T) {
 		b := new(ex)
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
-			text.WithWindowManagerConfig(component.WindowManagerConfig{
-				Frame: false,
-			}),
+			text.WithWindowManagerConfig(handler.WindowManagerConfig{
+				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
 			text.WithCommandOverlayConfig(text.CommandOverlayConfig{
 				Width:  10,
 				Height: 5,

@@ -2,6 +2,7 @@ package browser
 
 import (
 	"github.com/ernestrc/go-tui/component"
+	"github.com/ernestrc/go-tui/handler"
 	"github.com/ernestrc/go-tui/term"
 	log "github.com/sirupsen/logrus"
 )
@@ -15,7 +16,7 @@ func DefaultConfig() Config {
 		NonFocusTabAttr:     term.Attributes{Fg: term.ColorRed},
 		WallpaperAttr:       term.Attributes{Fg: term.ColorRed | term.AttrBold},
 		FrameUnionCharSet:   component.DefaultFrameUnionCharSet(),
-		WindowManagerConfig: component.DefaultWindowManagerConfig(),
+		WindowManagerConfig: handler.DefaultWindowManagerConfig(),
 		PromptConfig: PromptConfig{
 			Width:         50,
 			Height:        14,
@@ -48,5 +49,5 @@ type Config struct {
 	PromptConfig
 
 	component.FrameUnionCharSet
-	component.WindowManagerConfig
+	handler.WindowManagerConfig
 }

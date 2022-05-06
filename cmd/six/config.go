@@ -369,21 +369,33 @@ func (c ideConfig) windowManager() (plugin.Config, bool) {
 }
 
 func (c ideConfig) windowFrameAttr() (attr term.Attributes) {
-	attr = defaultWindowManagerConfig.FrameAttr
+	return c.windowAttr("frame_attr", defaultWindowManagerConfig.FrameAttr)
+}
+
+func (c ideConfig) windowFocusFrameAttr() (attr term.Attributes) {
+	return c.windowAttr("focus_frame_attr",
+		defaultWindowManagerConfig.FrameAttr)
+}
+
+func (c ideConfig) windowAttr(key string, def term.Attributes) (
+	attr term.Attributes,
+) {
+	attr = def
 	cfg, ok := c.windowManager()
 	if !ok {
 		return
 	}
-	cfgAttr, err := plugin.GetAttributes(cfg, "frame_attr")
+	cfgAttr, err := plugin.GetAttributes(cfg, key)
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["window_manager.frame_attr"] = err
+			c.errors[fmt.Sprintf("window_manager.%s", key)] = err
 		}
 		return
 	}
 	attr = cfgAttr
 	return
 }
+
 func (c ideConfig) getConfigAttr(
 	cfgKey, key string, def term.Attributes,
 ) (attr term.Attributes) {
@@ -443,15 +455,26 @@ func (c ideConfig) dirtyTabAttr() term.Attributes {
 }
 
 func (c ideConfig) windowFrameCharset() (cs component.FrameCharSet) {
-	cs = defaultWindowManagerConfig.FrameCharSet
+	return c.windowCharset("frame_charset", defaultWindowManagerConfig.FrameCharSet)
+}
+
+func (c ideConfig) windowFocusFrameCharset() (cs component.FrameCharSet) {
+	return c.windowCharset("focus_frame_charset",
+		defaultWindowManagerConfig.FocusFrameCharSet)
+}
+
+func (c ideConfig) windowCharset(key string, def component.FrameCharSet) (
+	cs component.FrameCharSet,
+) {
+	cs = def
 	cfg, ok := c.windowManager()
 	if !ok {
 		return
 	}
-	cfgCs, err := plugin.GetFrameCharset(cfg, "frame_charset", cs)
+	cfgCs, err := plugin.GetFrameCharset(cfg, key, cs)
 	if err != nil {
 		if err != plugin.ErrNotFound {
-			c.errors["window_manager.frame_charset"] = err
+			c.errors[fmt.Sprintf("window_manager.%s", key)] = err
 		}
 		return
 	}
@@ -530,11 +553,15 @@ func (c ideConfig) frameUnionCharset() (cs component.FrameUnionCharSet) {
 	return
 }
 
-func (c ideConfig) windowManagerConfig() component.WindowManagerConfig {
-	return component.WindowManagerConfig{
-		Frame:        c.frame(),
-		FrameAttr:    c.windowFrameAttr(),
-		FrameCharSet: c.windowFrameCharset(),
+func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
+	return handler.WindowManagerConfig{
+		FocusFrameAttr:    c.windowFocusFrameAttr(),
+		FocusFrameCharSet: c.windowFocusFrameCharset(),
+		WindowManagerConfig: component.WindowManagerConfig{
+			Frame:        c.frame(),
+			FrameAttr:    c.windowFrameAttr(),
+			FrameCharSet: c.windowFrameCharset(),
+		},
 	}
 }
 

@@ -107,39 +107,15 @@ func TestComponentInterfaces(t *testing.T) {
 func TestComponentKeyMapper(t *testing.T) {
 	t.Run("KeyMapping on a non-mapped event returns false", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
-
-		ev, _, ok := c.KeyMapping(keya)
+		_, ok := c.KeyMapping(keya)
 		assert.False(t, ok)
-		assert.Equal(t, keya, ev)
-	})
-
-	t.Run("KeyMapping returns mapped event", func(t *testing.T) {
-		c := newTestComponent(t, &testEditor{})
-
-		m := map[term.KeyComb]term.KeyComb{
-			keya: keyb,
-		}
-		err := c.MergeKeyMap(m)
-		require.NoError(t, err)
-
-		ev, _, ok := c.KeyMapping(keya)
-		assert.True(t, ok)
-		assert.Equal(t, keyb, ev)
 	})
 
 	t.Run("KeyMapping returns mapped command", func(t *testing.T) {
 		c := newTestComponent(t, &testEditor{})
-		c.config.CommandKeyBindings[keyb] = "myCmd"
-
-		m := map[term.KeyComb]term.KeyComb{
-			keya: keyb,
-		}
-		err := c.MergeKeyMap(m)
-		require.NoError(t, err)
-
-		ev, cmd, ok := c.KeyMapping(keya)
+		c.config.CommandKeyBindings[keya] = "myCmd"
+		cmd, ok := c.KeyMapping(keya)
 		assert.True(t, ok)
-		assert.Equal(t, keyb, ev)
 		assert.Equal(t, "myCmd", cmd)
 	})
 }

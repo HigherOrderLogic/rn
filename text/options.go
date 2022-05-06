@@ -142,7 +142,7 @@ func WithFrameUnionCharSet(cs component.FrameUnionCharSet) Option {
 // the underlying's WindowManager initialization configuration.
 // See handler.WindowManagerConfig for more info. If this option is not passed
 // DefaultWindowManagerConfig is utilized.
-func WithWindowManagerConfig(config component.WindowManagerConfig) Option {
+func WithWindowManagerConfig(config handler.WindowManagerConfig) Option {
 	return func(cfg *Config) {
 		cfg.WindowManagerConfig = config
 	}

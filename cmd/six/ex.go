@@ -407,21 +407,14 @@ func (e *ex) handleProxy(ev term.Event) (
 
 	b := e.comp.Browser()
 
-	// first map event, and map to potential command
-	mk, cmd, ok := e.comp.KeyMapping(ev.KeyComb())
-	mev := term.Event{
-		Type: term.EventKey,
-		Ch:   mk.Ch,
-		Key:  mk.Key,
-		Mod:  mk.Mod,
-	}
-	seq, match := e.sequencer.Handle(mev)
 	// if focus handle handled event, then that takes precedence
-	_, handled = b.Handle(mev)
+	_, handled = b.Handle(ev)
 	if handled {
 		return
 	}
 
+	cmd, ok := e.comp.KeyMapping(ev.KeyComb())
+	seq, match := e.sequencer.Handle(ev)
 	if match {
 		cmd, ok = e.config.CommandSequenceBindings[seq]
 		if !ok {
@@ -444,7 +437,7 @@ func (e *ex) handleProxy(ev term.Event) (
 	// a modal editor, and so does not handle
 	// the command trigger event in its "initial" mode
 	// (in vi terms, this would be normal mode).
-	handled = e.handleCommandEvent(mev)
+	handled = e.handleCommandEvent(ev)
 	if handled {
 		return
 	}

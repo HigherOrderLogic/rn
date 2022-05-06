@@ -194,12 +194,7 @@ func (c *Component) Init(config Config) {
 		}
 	}
 
-	handlerWmConfig := handler.WindowManagerConfig{
-		FocusFrameAttr:      config.WindowManagerConfig.FrameAttr,
-		FocusFrameCharSet:   config.WindowManagerConfig.FrameCharSet,
-		WindowManagerConfig: config.WindowManagerConfig,
-	}
-	c.wm.Init(c.wallpaper(), handlerWmConfig)
+	c.wm.Init(c.wallpaper(), config.WindowManagerConfig)
 	_ = c.newWindow(c.wm.Focus()) // init handler with initial window
 	c.union.Init(&c.wm)
 	c.buffers = make([]*Tab, 0)
@@ -499,12 +494,6 @@ func (c *Component) RemoveWindowContent(win Window) bool {
 	}
 	return isNotStartHandler
 }
-
-// TODO RemoveTab removes t from this Component. It returns false
-// if this tab was active in one of the windows and the replacement
-// is the start handler, because all tabs have been removed.
-// func (c *Component) RemoveTab(t *Tab) bool {
-// }
 
 func (c *Component) splitRegular(
 	split func(*handler.WindowManager, tui.Handler) (handler.Window, bool),
