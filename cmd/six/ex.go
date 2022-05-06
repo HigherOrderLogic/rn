@@ -40,6 +40,10 @@ var (
 		"changeSplitOrientation": (*ex).splitDirectionChange,
 		"splitWindow":            (*ex).splitWindow,
 		"newWindow":              (*ex).splitWindow,
+		"focusNextWindow":        (*ex).focusNextWindow,
+		"focusPrevWindow":        (*ex).focusPrevWindow,
+		"focusAboveWindow":       (*ex).focusAboveWindow,
+		"focusBelowWindow":       (*ex).focusBelowWindow,
 	}
 	exDefaultBindings = map[term.KeyComb]string{
 		{Key: term.KeyCtrlA}: "bufferCloseAll",
@@ -47,6 +51,10 @@ var (
 		{Key: term.KeyCtrlL}: "bufferNext",
 		{Key: term.KeyCtrlH}: "bufferPrev",
 		{Key: term.KeyCtrlN}: "newWindow",
+		{Ch: 'H'}:            "focusPrevWindow",
+		{Ch: 'L'}:            "focusNextWindow",
+		{Ch: 'J'}:            "focusBelowWindow",
+		{Ch: 'K'}:            "focusAboveWindow",
 		{Key: term.KeyCtrlO}: "changeSplitOrientation",
 		{Key: term.KeyCtrlQ}: "close",
 	}
@@ -345,6 +353,26 @@ func (e *ex) newWindowHandler(h browser.Handler) {
 
 	eb.Split(o, h)
 	focusFn()
+}
+
+func (e *ex) focusNextWindow(args ...string) (bool, error) {
+	e.comp.Browser().FocusRight()
+	return false, nil
+}
+
+func (e *ex) focusPrevWindow(args ...string) (bool, error) {
+	e.comp.Browser().FocusLeft()
+	return false, nil
+}
+
+func (e *ex) focusAboveWindow(args ...string) (bool, error) {
+	e.comp.Browser().FocusUp()
+	return false, nil
+}
+
+func (e *ex) focusBelowWindow(args ...string) (bool, error) {
+	e.comp.Browser().FocusDown()
+	return false, nil
 }
 
 func (e *ex) splitWindow(args ...string) (bool, error) {
