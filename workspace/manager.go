@@ -204,6 +204,9 @@ func (m *Manager) Open(
 func (m *Manager) commandLocal(name string, arg ...string) (Pid, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.cmds == nil {
+		return 0, errors.New("workspace is closing")
+	}
 
 	cmd := exec.Command(name, arg...)
 	cmd.Dir = m.workspace.Path()
