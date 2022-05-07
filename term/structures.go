@@ -49,6 +49,7 @@ type Event struct {
 	Err    error     // error in case if input failed
 	MouseX int       // x coord of mouse
 	MouseY int       // y coord of mouse
+	Raw    []byte
 }
 
 func (e Event) KeyComb() KeyComb {

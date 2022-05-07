@@ -119,4 +119,5 @@ message Event {
   uint32 Char = 4;
   int32 mouseX = 5;
   int32 mouseY = 6;
+  string raw = 7;
 }

@@ -102,24 +102,45 @@ func Init() error {
 
 	// start polling events
 	go func() {
+		buf := make([]byte, 128)
 		for {
-			var ev Event
+			view := buf
+			var tev termbox.Event
+			var res Event
 
-			tev := termbox.PollEvent()
-			ev.Type = EventType(tev.Type)
-			ev.Mod = Modifier(tev.Mod)
-			ev.Key = Key(tev.Key)
-			ev.Ch = tev.Ch
-			ev.Width = tev.Width
-			ev.Height = tev.Height
-			ev.Err = tev.Err
-			ev.MouseX = tev.MouseX
-			ev.MouseY = tev.MouseY
+			switch rev := termbox.PollRawEvent(view); rev.Type {
+			case termbox.EventRaw:
+				view = view[:rev.N]
+				for {
+					ev := termbox.ParseEvent(view)
+					if ev.N == 0 {
+						break
+					}
+					tev = ev
+					res.Raw = make([]byte, tev.N)
+					copy(res.Raw, view[:tev.N])
+					view = view[tev.N:]
+				}
+			case termbox.EventError:
+				tev = rev
+			default:
+				tev = rev
+			}
+
+			res.Type = EventType(tev.Type)
+			res.Mod = Modifier(tev.Mod)
+			res.Key = Key(tev.Key)
+			res.Ch = tev.Ch
+			res.Width = tev.Width
+			res.Height = tev.Height
+			res.Err = tev.Err
+			res.MouseX = tev.MouseX
+			res.MouseY = tev.MouseY
 
 			select {
 			case <-quit:
 				return
-			case events <- ev:
+			case events <- res:
 			}
 		}
 	}()

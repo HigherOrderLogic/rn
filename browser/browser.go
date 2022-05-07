@@ -60,7 +60,7 @@ type WindowManager interface {
 
 	// Tab creates a new tab with h and returns a handle that can be
 	// used with the rest of methods that take a browser.Handler.
-	// ID is used to uniquely identify a tab and name is used as a label
+	// URI is used to uniquely identify a tab and name is used as a label
 	// to display it in the tab bar.
 	Tab(uri workspace.URI, name string, h Handler) (Handler, error)
 }
