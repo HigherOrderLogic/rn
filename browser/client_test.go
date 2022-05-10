@@ -282,6 +282,10 @@ func TestClientSplitHorizontalAbove(t *testing.T) {
 	testClientSplit(t, OrientationTop, proto.Orientation_Top)
 }
 
+func TestClientSplitDefault(t *testing.T) {
+	testClientSplit(t, OrientationDefault, proto.Orientation_Default)
+}
+
 func TestClientSplitVerticalLeft(t *testing.T) {
 	testClientSplit(t, OrientationLeft, proto.Orientation_Left)
 }

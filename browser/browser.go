@@ -33,7 +33,8 @@ type Window interface {
 type Orientation uint8
 
 const (
-	OrientationTop Orientation = iota
+	OrientationDefault Orientation = iota
+	OrientationTop
 	OrientationBottom
 	OrientationLeft
 	OrientationRight

@@ -272,6 +272,8 @@ func (s *Server) newRemoteResource(
 
 func protoToModelOrientation(p proto.Orientation) (o Orientation) {
 	switch p {
+	case proto.Orientation_Default:
+		o = OrientationDefault
 	case proto.Orientation_Top:
 		o = OrientationTop
 	case proto.Orientation_Bottom:

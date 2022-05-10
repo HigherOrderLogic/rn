@@ -231,6 +231,10 @@ func TestServerSplitHorizontalAbove(t *testing.T) {
 	testServerSplit(t, OrientationTop, proto.Orientation_Top)
 }
 
+func TestServerSplitDefault(t *testing.T) {
+	testServerSplit(t, OrientationDefault, proto.Orientation_Default)
+}
+
 func TestServerSplitHorizontalBelow(t *testing.T) {
 	testServerSplit(t, OrientationBottom, proto.Orientation_Bottom)
 }

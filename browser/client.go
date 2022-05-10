@@ -201,6 +201,8 @@ type clientSplit func(cc proto.WindowManagerClient,
 
 func toProtoOrientation(o Orientation) proto.Orientation {
 	switch o {
+	case OrientationDefault:
+		return proto.Orientation_Default
 	case OrientationTop:
 		return proto.Orientation_Top
 	case OrientationBottom:
@@ -373,7 +375,7 @@ func (c *Client) Floating(
 			return nil, err
 		}
 		return &proto.SplitResponse{WindowId: fres.GetWindowId()}, nil
-	}, OrientationTop, h)
+	}, OrientationDefault, h)
 }
 
 // Tab satisfies browser.WindowManager

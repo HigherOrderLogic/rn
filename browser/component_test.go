@@ -115,7 +115,7 @@ func TestComponentCloseWindow(t *testing.T) {
 func TestComponentRemoveAllTabs(t *testing.T) {
 	w1 := NewComponent(Config{})
 	w2 := NewComponent(Config{})
-	w2.Split(OrientationTop, NewTestHandler())
+	w2.Split(OrientationDefault, NewTestHandler())
 
 	tsuite := []struct {
 		description string
@@ -650,14 +650,34 @@ func TestComponentPrompt(t *testing.T) {
 	testutil.TestComponent(t, c, w, tests)
 }
 
+func TestComponentSetFocus(t *testing.T) {
+	cfg := DefaultConfig()
+	c := NewComponent(cfg)
+	c.Resize(20, 8)
+	win0 := c.Focus()
+	win1, _ := c.Split(OrientationDefault, nil)
+	assert.Equal(t, win1, c.Focus())
+
+	prev := c.SetFocus(win0)
+	assert.Equal(t, win1, prev)
+	assert.Equal(t, win0, c.Focus())
+
+	win2, _ := c.Split(OrientationDefault, nil)
+	assert.Equal(t, win2, c.Focus())
+	prev = c.SetFocus(win1)
+	assert.Equal(t, win2, prev)
+	assert.Equal(t, win1, c.Focus())
+}
+
 func TestComponentSplitNil(t *testing.T) {
 	t.Run("Split with nil sets a wallpaper", func(t *testing.T) {
 		w := term.NewStringWriter(24, 8)
 		cfg := DefaultConfig()
 		cfg.Wallpaper = "BART"
 		c := NewComponent(cfg)
+		c.SetDefaultSplit(OrientationLeft)
 		c.Resize(20, 8)
-		c.Split(OrientationLeft, nil)
+		c.Split(OrientationDefault, nil)
 		tests := []testutil.ComponentTestCase{
 			{
 				nil, `

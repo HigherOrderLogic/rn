@@ -38,6 +38,7 @@ type Component struct {
 	prompts    []tui.Handler
 	width      int
 	height     int
+	nextSplit  Orientation
 
 	config  Config
 	buffers []*Tab
@@ -184,6 +185,7 @@ func (c *Component) Init(config Config) {
 
 	c.logBuf.Init()
 	c.logVirt = newMessageSpan(&c.logBuf, config.MessageBarAttr)
+	c.nextSplit = OrientationRight
 
 	c.tabs.Init()
 	c.tabs.OnClick = func(id int) {
@@ -573,12 +575,26 @@ func (c *Component) split(
 	return ret
 }
 
+// SetDefaultSplit sets the default split to be used when Split
+// is invoked with OrientationDefault.
+func (c *Component) SetDefaultSplit(o Orientation) Orientation {
+	if o == OrientationDefault {
+		panic("cannot set OrientationDefault as default orientation")
+	}
+	ret := c.nextSplit
+	c.nextSplit = o
+	return ret
+}
+
 // Split splits the current window in two and installs h to the orientation
 // of the original content.
 //
 // Note that if h is not a handler created with NewTab
 // the handler is cleaned as soon as the window's content is swapped.
 func (c *Component) Split(o Orientation, h Handler) (Window, bool) {
+	if o == OrientationDefault {
+		o = c.nextSplit
+	}
 	switch o {
 	case OrientationRight:
 		return c.splitRegular((*handler.WindowManager).SplitVertical, h)
@@ -624,6 +640,9 @@ func (c *Component) Bar(o Orientation, h tui.Handler) {
 		h = f
 	}
 	size := c.barSize()
+	if o == OrientationDefault {
+		o = c.nextSplit
+	}
 	switch o {
 	case OrientationTop:
 		c.union.UnionTop(h, size)
@@ -743,6 +762,16 @@ func (c *Component) FocusRight() bool {
 // FocusUp calls the underlying WindowManager.FocusUp.
 func (c *Component) FocusUp() bool {
 	return c.wm.FocusUp()
+}
+
+// SetFocus sets the underlying WindowManager's focus to win.
+func (c *Component) SetFocus(win Window) Window {
+	prev := c.wm.SetFocus(win.(*browserWindow).win)
+	ret, ok := c.findWindow(prev.ID())
+	if !ok {
+		panic("could not find previously set focus")
+	}
+	return ret
 }
 
 // Close closes the resources associated with this browser.

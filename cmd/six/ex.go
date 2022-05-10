@@ -38,8 +38,8 @@ var (
 		"edit":                   (*ex).editFile,
 		"reload":                 (*ex).reloadFile,
 		"changeSplitOrientation": (*ex).splitDirectionChange,
-		"splitWindow":            (*ex).splitWindow,
-		"newWindow":              (*ex).splitWindow,
+		"splitWindow":            (*ex).newWindow,
+		"newWindow":              (*ex).newWindow,
 		"focusNextWindow":        (*ex).focusNextWindow,
 		"focusPrevWindow":        (*ex).focusPrevWindow,
 		"focusAboveWindow":       (*ex).focusAboveWindow,
@@ -331,8 +331,10 @@ func (e *ex) splitDirectionChange(args ...string) (bool, error) {
 	e.nextSplit = !e.nextSplit
 	b := e.comp.Browser()
 	if e.nextSplit {
+		b.SetDefaultSplit(browser.OrientationBottom)
 		b.SetMessage("changed split direction to horizontal")
 	} else {
+		b.SetDefaultSplit(browser.OrientationRight)
 		b.SetMessage("changed split direction to vertical")
 	}
 	return false, nil
@@ -340,19 +342,7 @@ func (e *ex) splitDirectionChange(args ...string) (bool, error) {
 
 func (e *ex) newWindowHandler(h browser.Handler) {
 	eb := e.comp.Browser()
-
-	var o browser.Orientation
-	var focusFn func() bool
-	if e.nextSplit {
-		o = browser.OrientationBottom
-		focusFn = eb.FocusDown
-	} else {
-		o = browser.OrientationRight
-		focusFn = eb.FocusRight
-	}
-
-	eb.Split(o, h)
-	focusFn()
+	eb.Split(browser.OrientationDefault, h)
 }
 
 func (e *ex) focusNextWindow(args ...string) (bool, error) {
@@ -375,7 +365,7 @@ func (e *ex) focusBelowWindow(args ...string) (bool, error) {
 	return false, nil
 }
 
-func (e *ex) splitWindow(args ...string) (bool, error) {
+func (e *ex) newWindow(args ...string) (bool, error) {
 	e.newWindowHandler(nil)
 	return false, nil
 }

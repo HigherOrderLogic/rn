@@ -439,7 +439,7 @@ IIII`},
 	}
 	testutil.TestHandlerSequence(t, bh, 20, 10, cases)
 
-	var o browser.Orientation
+	o := browser.OrientationTop
 	for i := 0; i < 4; i++ {
 		b1 := browser.NewTestHandler()
 		b1.Ch = rune(strconv.Itoa(i)[0])
