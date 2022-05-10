@@ -45,19 +45,27 @@ var (
 		"focusAboveWindow":       (*ex).focusAboveWindow,
 		"focusBelowWindow":       (*ex).focusBelowWindow,
 	}
-	// TODO refactor with <c-x><c-*>
 	exDefaultBindings = map[term.KeyComb]string{
 		{Key: term.KeyCtrlA}: "bufferCloseAll",
 		{Key: term.KeyCtrlW}: "bufferClose",
 		{Key: term.KeyCtrlL}: "bufferNext",
 		{Key: term.KeyCtrlH}: "bufferPrev",
-		{Key: term.KeyCtrlN}: "newWindow",
-		{Ch: 'H'}:            "focusPrevWindow",
-		{Ch: 'L'}:            "focusNextWindow",
-		{Ch: 'J'}:            "focusBelowWindow",
-		{Ch: 'K'}:            "focusAboveWindow",
-		{Key: term.KeyCtrlO}: "changeSplitOrientation",
-		{Key: term.KeyCtrlQ}: "close",
+	}
+	exDefaultSequences = map[handler.Sequence]string{
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Key: term.KeyCtrlN}}: "newWindow",
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Key: term.KeyCtrlH}}: "focusPrevWindow",
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Key: term.KeyCtrlL}}: "focusNextWindow",
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Key: term.KeyCtrlJ}}: "focusBelowWindow",
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Key: term.KeyCtrlK}}: "focusAboveWindow",
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Key: term.KeyCtrlO}}: "changeSplitOrientation",
+		{First: term.KeyComb{Key: term.KeyCtrlX},
+			Last: term.KeyComb{Key: term.KeyCtrlQ}}: "close",
 	}
 )
 
@@ -139,6 +147,11 @@ func (e *ex) doInit(
 	for ev, cmd := range exDefaultBindings {
 		opts = append(opts, text.WithCommandKeyBinding(ev, cmd))
 	}
+	// write default sequences
+	for seq, cmd := range exDefaultSequences {
+		e.config.CommandSequenceBindings[seq] = cmd
+	}
+
 	for _, o := range opts {
 		o(&e.config)
 	}
