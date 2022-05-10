@@ -770,6 +770,53 @@ func (*FocusRequest) Descriptor() ([]byte, []int) {
 	return file_browser_proto_rawDescGZIP(), []int{13}
 }
 
+type SetFocusRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	WindowId uint64 `protobuf:"varint,1,opt,name=window_id,json=windowId,proto3" json:"window_id,omitempty"`
+}
+
+func (x *SetFocusRequest) Reset() {
+	*x = SetFocusRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_browser_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *SetFocusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetFocusRequest) ProtoMessage() {}
+
+func (x *SetFocusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_browser_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetFocusRequest.ProtoReflect.Descriptor instead.
+func (*SetFocusRequest) Descriptor() ([]byte, []int) {
+	return file_browser_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SetFocusRequest) GetWindowId() uint64 {
+	if x != nil {
+		return x.WindowId
+	}
+	return 0
+}
+
 type FocusResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -781,7 +828,7 @@ type FocusResponse struct {
 func (x *FocusResponse) Reset() {
 	*x = FocusResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[14]
+		mi := &file_browser_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -794,7 +841,7 @@ func (x *FocusResponse) String() string {
 func (*FocusResponse) ProtoMessage() {}
 
 func (x *FocusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[14]
+	mi := &file_browser_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -807,7 +854,7 @@ func (x *FocusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FocusResponse.ProtoReflect.Descriptor instead.
 func (*FocusResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{14}
+	return file_browser_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *FocusResponse) GetWindowId() uint64 {
@@ -828,7 +875,7 @@ type PublishRequest struct {
 func (x *PublishRequest) Reset() {
 	*x = PublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[15]
+		mi := &file_browser_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -841,7 +888,7 @@ func (x *PublishRequest) String() string {
 func (*PublishRequest) ProtoMessage() {}
 
 func (x *PublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[15]
+	mi := &file_browser_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -854,7 +901,7 @@ func (x *PublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishRequest.ProtoReflect.Descriptor instead.
 func (*PublishRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{15}
+	return file_browser_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PublishRequest) GetEv() *Event {
@@ -873,7 +920,7 @@ type PublishResponse struct {
 func (x *PublishResponse) Reset() {
 	*x = PublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[16]
+		mi := &file_browser_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -886,7 +933,7 @@ func (x *PublishResponse) String() string {
 func (*PublishResponse) ProtoMessage() {}
 
 func (x *PublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[16]
+	mi := &file_browser_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +946,7 @@ func (x *PublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PublishResponse.ProtoReflect.Descriptor instead.
 func (*PublishResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{16}
+	return file_browser_proto_rawDescGZIP(), []int{17}
 }
 
 type WindowCloseRequest struct {
@@ -911,7 +958,7 @@ type WindowCloseRequest struct {
 func (x *WindowCloseRequest) Reset() {
 	*x = WindowCloseRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[17]
+		mi := &file_browser_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -924,7 +971,7 @@ func (x *WindowCloseRequest) String() string {
 func (*WindowCloseRequest) ProtoMessage() {}
 
 func (x *WindowCloseRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[17]
+	mi := &file_browser_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -937,7 +984,7 @@ func (x *WindowCloseRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowCloseRequest.ProtoReflect.Descriptor instead.
 func (*WindowCloseRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{17}
+	return file_browser_proto_rawDescGZIP(), []int{18}
 }
 
 type WindowCloseResponse struct {
@@ -949,7 +996,7 @@ type WindowCloseResponse struct {
 func (x *WindowCloseResponse) Reset() {
 	*x = WindowCloseResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[18]
+		mi := &file_browser_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -962,7 +1009,7 @@ func (x *WindowCloseResponse) String() string {
 func (*WindowCloseResponse) ProtoMessage() {}
 
 func (x *WindowCloseResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[18]
+	mi := &file_browser_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -975,7 +1022,7 @@ func (x *WindowCloseResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowCloseResponse.ProtoReflect.Descriptor instead.
 func (*WindowCloseResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{18}
+	return file_browser_proto_rawDescGZIP(), []int{19}
 }
 
 type WindowSetContentRequest struct {
@@ -989,7 +1036,7 @@ type WindowSetContentRequest struct {
 func (x *WindowSetContentRequest) Reset() {
 	*x = WindowSetContentRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[19]
+		mi := &file_browser_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1002,7 +1049,7 @@ func (x *WindowSetContentRequest) String() string {
 func (*WindowSetContentRequest) ProtoMessage() {}
 
 func (x *WindowSetContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[19]
+	mi := &file_browser_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1015,7 +1062,7 @@ func (x *WindowSetContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowSetContentRequest.ProtoReflect.Descriptor instead.
 func (*WindowSetContentRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{19}
+	return file_browser_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *WindowSetContentRequest) GetHandlerId() uint64 {
@@ -1034,7 +1081,7 @@ type WindowSetContentResponse struct {
 func (x *WindowSetContentResponse) Reset() {
 	*x = WindowSetContentResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[20]
+		mi := &file_browser_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1047,7 +1094,7 @@ func (x *WindowSetContentResponse) String() string {
 func (*WindowSetContentResponse) ProtoMessage() {}
 
 func (x *WindowSetContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[20]
+	mi := &file_browser_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1060,7 +1107,7 @@ func (x *WindowSetContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowSetContentResponse.ProtoReflect.Descriptor instead.
 func (*WindowSetContentResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{20}
+	return file_browser_proto_rawDescGZIP(), []int{21}
 }
 
 type WindowContentRequest struct {
@@ -1072,7 +1119,7 @@ type WindowContentRequest struct {
 func (x *WindowContentRequest) Reset() {
 	*x = WindowContentRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[21]
+		mi := &file_browser_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1085,7 +1132,7 @@ func (x *WindowContentRequest) String() string {
 func (*WindowContentRequest) ProtoMessage() {}
 
 func (x *WindowContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[21]
+	mi := &file_browser_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1098,7 +1145,7 @@ func (x *WindowContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowContentRequest.ProtoReflect.Descriptor instead.
 func (*WindowContentRequest) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{21}
+	return file_browser_proto_rawDescGZIP(), []int{22}
 }
 
 type WindowContentResponse struct {
@@ -1112,7 +1159,7 @@ type WindowContentResponse struct {
 func (x *WindowContentResponse) Reset() {
 	*x = WindowContentResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_browser_proto_msgTypes[22]
+		mi := &file_browser_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1125,7 +1172,7 @@ func (x *WindowContentResponse) String() string {
 func (*WindowContentResponse) ProtoMessage() {}
 
 func (x *WindowContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_browser_proto_msgTypes[22]
+	mi := &file_browser_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1138,7 +1185,7 @@ func (x *WindowContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WindowContentResponse.ProtoReflect.Descriptor instead.
 func (*WindowContentResponse) Descriptor() ([]byte, []int) {
-	return file_browser_proto_rawDescGZIP(), []int{22}
+	return file_browser_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *WindowContentResponse) GetHandlerId() uint64 {
@@ -1208,7 +1255,10 @@ var file_browser_proto_rawDesc = []byte{
 	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x24, 0x0a, 0x0e, 0x74, 0x61, 0x62, 0x5f,
 	0x68, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04,
 	0x52, 0x0c, 0x74, 0x61, 0x62, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x49, 0x64, 0x22, 0x0e,
-	0x0a, 0x0c, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x2c,
+	0x0a, 0x0c, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x2e,
+	0x0a, 0x0f, 0x53, 0x65, 0x74, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x12, 0x1b, 0x0a, 0x09, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x5f, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x04, 0x52, 0x08, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x49, 0x64, 0x22, 0x2c,
 	0x0a, 0x0d, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
 	0x1b, 0x0a, 0x09, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01,
 	0x28, 0x04, 0x52, 0x08, 0x77, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x49, 0x64, 0x22, 0x2e, 0x0a, 0x0e,
@@ -1248,42 +1298,46 @@ var file_browser_proto_rawDesc = []byte{
 	0x07, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x15, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
 	0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
 	0x16, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0x9c, 0x02, 0x0a, 0x0d, 0x57, 0x69, 0x6e, 0x64,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xd6, 0x02, 0x0a, 0x0d, 0x57, 0x69, 0x6e, 0x64,
 	0x6f, 0x77, 0x4d, 0x61, 0x6e, 0x61, 0x67, 0x65, 0x72, 0x12, 0x32, 0x0a, 0x05, 0x46, 0x6f, 0x63,
 	0x75, 0x73, 0x12, 0x13, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6f, 0x63, 0x75, 0x73,
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
-	0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x32, 0x0a,
-	0x05, 0x53, 0x70, 0x6c, 0x69, 0x74, 0x12, 0x13, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53,
-	0x70, 0x6c, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x70, 0x6c, 0x69, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x12, 0x2c, 0x0a, 0x03, 0x42, 0x61, 0x72, 0x12, 0x11, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x2e, 0x42, 0x61, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2e, 0x42, 0x61, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
-	0x47, 0x0a, 0x08, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x1c, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x57, 0x69, 0x6e, 0x64,
-	0x6f, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x2e, 0x46, 0x6c, 0x6f, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2c, 0x0a, 0x03, 0x54, 0x61, 0x62, 0x12,
-	0x11, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x54, 0x61, 0x62, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x54, 0x61, 0x62, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x32, 0xdd, 0x01, 0x0a, 0x06, 0x57, 0x69, 0x6e, 0x64, 0x6f,
-	0x77, 0x12, 0x4d, 0x0a, 0x0a, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12,
-	0x1e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65,
-	0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
-	0x1f, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65,
-	0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x44, 0x0a, 0x07, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x1b, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e,
-	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x3e, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x12,
-	0x19, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6c,
-	0x6f, 0x73, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1a, 0x2e, 0x70, 0x72, 0x6f,
-	0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x28, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62,
-	0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x65, 0x72, 0x6e, 0x65, 0x73, 0x74, 0x72, 0x63, 0x2f, 0x67, 0x6f,
-	0x2d, 0x74, 0x75, 0x69, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x3b, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x38, 0x0a,
+	0x08, 0x53, 0x65, 0x74, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x12, 0x16, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x53, 0x65, 0x74, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x1a, 0x14, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6f, 0x63, 0x75, 0x73, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x32, 0x0a, 0x05, 0x53, 0x70, 0x6c, 0x69, 0x74,
+	0x12, 0x13, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x70, 0x6c, 0x69, 0x74, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x53, 0x70,
+	0x6c, 0x69, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2c, 0x0a, 0x03, 0x42,
+	0x61, 0x72, 0x12, 0x11, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x42, 0x61, 0x72, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x42, 0x61,
+	0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x47, 0x0a, 0x08, 0x46, 0x6c, 0x6f,
+	0x61, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x1c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6c,
+	0x6f, 0x61, 0x74, 0x69, 0x6e, 0x67, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x46, 0x6c, 0x6f, 0x61,
+	0x74, 0x69, 0x6e, 0x67, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x2c, 0x0a, 0x03, 0x54, 0x61, 0x62, 0x12, 0x11, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x54, 0x61, 0x62, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x12, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x54, 0x61, 0x62, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x32, 0xdd, 0x01, 0x0a, 0x06, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x12, 0x4d, 0x0a, 0x0a, 0x53,
+	0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x1e, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65,
+	0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x53, 0x65, 0x74, 0x43, 0x6f, 0x6e, 0x74, 0x65,
+	0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x44, 0x0a, 0x07, 0x43, 0x6f,
+	0x6e, 0x74, 0x65, 0x6e, 0x74, 0x12, 0x1b, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69,
+	0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x1a, 0x1c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f,
+	0x77, 0x43, 0x6f, 0x6e, 0x74, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x12, 0x3e, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x12, 0x19, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x2e, 0x57, 0x69, 0x6e, 0x64, 0x6f, 0x77, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x1a, 0x1a, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x57, 0x69, 0x6e,
+	0x64, 0x6f, 0x77, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x42, 0x28, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x65,
+	0x72, 0x6e, 0x65, 0x73, 0x74, 0x72, 0x63, 0x2f, 0x67, 0x6f, 0x2d, 0x74, 0x75, 0x69, 0x2f, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x3b, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x33,
 }
 
 var (
@@ -1299,7 +1353,7 @@ func file_browser_proto_rawDescGZIP() []byte {
 }
 
 var file_browser_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_browser_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_browser_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_browser_proto_goTypes = []interface{}{
 	(Orientation)(0),                 // 0: proto.Orientation
 	(*OpenResourceRequest)(nil),      // 1: proto.OpenResourceRequest
@@ -1316,49 +1370,52 @@ var file_browser_proto_goTypes = []interface{}{
 	(*TabRequest)(nil),               // 12: proto.TabRequest
 	(*TabResponse)(nil),              // 13: proto.TabResponse
 	(*FocusRequest)(nil),             // 14: proto.FocusRequest
-	(*FocusResponse)(nil),            // 15: proto.FocusResponse
-	(*PublishRequest)(nil),           // 16: proto.PublishRequest
-	(*PublishResponse)(nil),          // 17: proto.PublishResponse
-	(*WindowCloseRequest)(nil),       // 18: proto.WindowCloseRequest
-	(*WindowCloseResponse)(nil),      // 19: proto.WindowCloseResponse
-	(*WindowSetContentRequest)(nil),  // 20: proto.WindowSetContentRequest
-	(*WindowSetContentResponse)(nil), // 21: proto.WindowSetContentResponse
-	(*WindowContentRequest)(nil),     // 22: proto.WindowContentRequest
-	(*WindowContentResponse)(nil),    // 23: proto.WindowContentResponse
-	(*Event)(nil),                    // 24: proto.Event
-	(*Coordinates)(nil),              // 25: proto.Coordinates
+	(*SetFocusRequest)(nil),          // 15: proto.SetFocusRequest
+	(*FocusResponse)(nil),            // 16: proto.FocusResponse
+	(*PublishRequest)(nil),           // 17: proto.PublishRequest
+	(*PublishResponse)(nil),          // 18: proto.PublishResponse
+	(*WindowCloseRequest)(nil),       // 19: proto.WindowCloseRequest
+	(*WindowCloseResponse)(nil),      // 20: proto.WindowCloseResponse
+	(*WindowSetContentRequest)(nil),  // 21: proto.WindowSetContentRequest
+	(*WindowSetContentResponse)(nil), // 22: proto.WindowSetContentResponse
+	(*WindowContentRequest)(nil),     // 23: proto.WindowContentRequest
+	(*WindowContentResponse)(nil),    // 24: proto.WindowContentResponse
+	(*Event)(nil),                    // 25: proto.Event
+	(*Coordinates)(nil),              // 26: proto.Coordinates
 }
 var file_browser_proto_depIdxs = []int32{
-	24, // 0: proto.Mapping.from:type_name -> proto.Event
-	24, // 1: proto.Mapping.to:type_name -> proto.Event
+	25, // 0: proto.Mapping.from:type_name -> proto.Event
+	25, // 1: proto.Mapping.to:type_name -> proto.Event
 	0,  // 2: proto.SplitRequest.orientation:type_name -> proto.Orientation
 	0,  // 3: proto.BarRequest.orientation:type_name -> proto.Orientation
-	25, // 4: proto.FloatingWindowRequest.at:type_name -> proto.Coordinates
-	24, // 5: proto.PublishRequest.ev:type_name -> proto.Event
+	26, // 4: proto.FloatingWindowRequest.at:type_name -> proto.Coordinates
+	25, // 5: proto.PublishRequest.ev:type_name -> proto.Event
 	1,  // 6: proto.ResourceOpener.Open:input_type -> proto.OpenResourceRequest
 	3,  // 7: proto.Messenger.SetMessage:input_type -> proto.SetMessageRequest
-	16, // 8: proto.EventPublisher.Publish:input_type -> proto.PublishRequest
+	17, // 8: proto.EventPublisher.Publish:input_type -> proto.PublishRequest
 	14, // 9: proto.WindowManager.Focus:input_type -> proto.FocusRequest
-	6,  // 10: proto.WindowManager.Split:input_type -> proto.SplitRequest
-	8,  // 11: proto.WindowManager.Bar:input_type -> proto.BarRequest
-	10, // 12: proto.WindowManager.Floating:input_type -> proto.FloatingWindowRequest
-	12, // 13: proto.WindowManager.Tab:input_type -> proto.TabRequest
-	20, // 14: proto.Window.SetContent:input_type -> proto.WindowSetContentRequest
-	22, // 15: proto.Window.Content:input_type -> proto.WindowContentRequest
-	18, // 16: proto.Window.Close:input_type -> proto.WindowCloseRequest
-	2,  // 17: proto.ResourceOpener.Open:output_type -> proto.OpenResourceResponse
-	4,  // 18: proto.Messenger.SetMessage:output_type -> proto.SetMessageResponse
-	17, // 19: proto.EventPublisher.Publish:output_type -> proto.PublishResponse
-	15, // 20: proto.WindowManager.Focus:output_type -> proto.FocusResponse
-	7,  // 21: proto.WindowManager.Split:output_type -> proto.SplitResponse
-	9,  // 22: proto.WindowManager.Bar:output_type -> proto.BarResponse
-	11, // 23: proto.WindowManager.Floating:output_type -> proto.FloatingWindowResponse
-	13, // 24: proto.WindowManager.Tab:output_type -> proto.TabResponse
-	21, // 25: proto.Window.SetContent:output_type -> proto.WindowSetContentResponse
-	23, // 26: proto.Window.Content:output_type -> proto.WindowContentResponse
-	19, // 27: proto.Window.Close:output_type -> proto.WindowCloseResponse
-	17, // [17:28] is the sub-list for method output_type
-	6,  // [6:17] is the sub-list for method input_type
+	15, // 10: proto.WindowManager.SetFocus:input_type -> proto.SetFocusRequest
+	6,  // 11: proto.WindowManager.Split:input_type -> proto.SplitRequest
+	8,  // 12: proto.WindowManager.Bar:input_type -> proto.BarRequest
+	10, // 13: proto.WindowManager.Floating:input_type -> proto.FloatingWindowRequest
+	12, // 14: proto.WindowManager.Tab:input_type -> proto.TabRequest
+	21, // 15: proto.Window.SetContent:input_type -> proto.WindowSetContentRequest
+	23, // 16: proto.Window.Content:input_type -> proto.WindowContentRequest
+	19, // 17: proto.Window.Close:input_type -> proto.WindowCloseRequest
+	2,  // 18: proto.ResourceOpener.Open:output_type -> proto.OpenResourceResponse
+	4,  // 19: proto.Messenger.SetMessage:output_type -> proto.SetMessageResponse
+	18, // 20: proto.EventPublisher.Publish:output_type -> proto.PublishResponse
+	16, // 21: proto.WindowManager.Focus:output_type -> proto.FocusResponse
+	16, // 22: proto.WindowManager.SetFocus:output_type -> proto.FocusResponse
+	7,  // 23: proto.WindowManager.Split:output_type -> proto.SplitResponse
+	9,  // 24: proto.WindowManager.Bar:output_type -> proto.BarResponse
+	11, // 25: proto.WindowManager.Floating:output_type -> proto.FloatingWindowResponse
+	13, // 26: proto.WindowManager.Tab:output_type -> proto.TabResponse
+	22, // 27: proto.Window.SetContent:output_type -> proto.WindowSetContentResponse
+	24, // 28: proto.Window.Content:output_type -> proto.WindowContentResponse
+	20, // 29: proto.Window.Close:output_type -> proto.WindowCloseResponse
+	18, // [18:30] is the sub-list for method output_type
+	6,  // [6:18] is the sub-list for method input_type
 	6,  // [6:6] is the sub-list for extension type_name
 	6,  // [6:6] is the sub-list for extension extendee
 	0,  // [0:6] is the sub-list for field type_name
@@ -1541,7 +1598,7 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FocusResponse); i {
+			switch v := v.(*SetFocusRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1553,7 +1610,7 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PublishRequest); i {
+			switch v := v.(*FocusResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1565,7 +1622,7 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PublishResponse); i {
+			switch v := v.(*PublishRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1577,7 +1634,7 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WindowCloseRequest); i {
+			switch v := v.(*PublishResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1589,7 +1646,7 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WindowCloseResponse); i {
+			switch v := v.(*WindowCloseRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1601,7 +1658,7 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WindowSetContentRequest); i {
+			switch v := v.(*WindowCloseResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1613,7 +1670,7 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WindowSetContentResponse); i {
+			switch v := v.(*WindowSetContentRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1625,7 +1682,7 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*WindowContentRequest); i {
+			switch v := v.(*WindowSetContentResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1637,6 +1694,18 @@ func file_browser_proto_init() {
 			}
 		}
 		file_browser_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WindowContentRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_browser_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*WindowContentResponse); i {
 			case 0:
 				return &v.state
@@ -1655,7 +1724,7 @@ func file_browser_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_browser_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   23,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   5,
 		},

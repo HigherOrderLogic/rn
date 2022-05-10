@@ -298,6 +298,18 @@ func (c *Client) PublishInterrupt() error {
 	return err
 }
 
+// SetFocus satisfies Browser.
+func (c *Client) SetFocus(win Window) (Window, error) {
+	ctx := context.Background()
+	client := win.(*windowClient)
+	req := proto.SetFocusRequest{WindowId: client.brokerID}
+	res, err := c.wm.SetFocus(ctx, &req)
+	if err != nil {
+		return nil, err
+	}
+	return c.dialWindow(res.GetWindowId())
+}
+
 // Focus satisfies Browser.
 func (c *Client) Focus() (Window, error) {
 	ctx := context.Background()

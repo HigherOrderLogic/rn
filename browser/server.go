@@ -39,7 +39,8 @@ type Server struct {
 
 	// window servers are created on calls to Split* and Focus. They are destroyed
 	// when window is closed, either remotely, or locally (via onWindowClosed hook).
-	servers map[uint64]io.Closer
+	servers         map[uint64]io.Closer
+	brokerIDToWinID map[uint64]uint64
 
 	// Handlers opened by Open
 	// NOTE this map is never cleaned up: this implementation is decoupled from the
@@ -94,6 +95,7 @@ func (s *Server) Init(
 	s.browser.Locker = lock
 	s.clients = make(map[uint64]io.Closer)
 	s.servers = make(map[uint64]io.Closer)
+	s.brokerIDToWinID = make(map[uint64]uint64)
 	s.opened = make(map[uint32]Handler)
 	s.failureTimeout = defaultFailureTimeout
 	s.windowServer = windowServer
@@ -169,10 +171,12 @@ func (s *Server) serveWindow(win Window) uint64 {
 		win:      win,
 		brokerID: uint64(brokerID),
 	}
+	s.brokerIDToWinID[uint64(brokerID)] = win.id()
 
 	win.onWindowClosed(func() {
 		s.forceCloseWindow(win.id(),
 			"underlying window called onWindowClosed callback")
+		delete(s.brokerIDToWinID, uint64(brokerID))
 	})
 	return uint64(brokerID)
 }
@@ -420,6 +424,34 @@ func (s *Server) Focus(
 	}
 
 	windowID := s.serveWindow(win)
+	res := &proto.FocusResponse{
+		WindowId: windowID,
+	}
+
+	return res, nil
+}
+
+// SetFocus satisfies proto.BrowserServer
+func (s *Server) SetFocus(
+	ctx context.Context, req *proto.SetFocusRequest,
+) (*proto.FocusResponse, error) {
+	s.browser.Lock()
+	defer s.browser.Unlock()
+
+	winID, ok0 := s.brokerIDToWinID[req.GetWindowId()]
+	winIfc, ok1 := s.servers[winID]
+	win, ok2 := winIfc.(*windowServerResource)
+	if !ok0 || !ok1 || !ok2 {
+		return nil, fmt.Errorf("cannot find window with windowID: %d: FIXME remove: %#v",
+			req.GetWindowId(), s.servers)
+	}
+
+	prev, err := s.browser.SetFocus(win.win)
+	if err != nil {
+		return nil, err
+	}
+
+	windowID := s.serveWindow(prev)
 	res := &proto.FocusResponse{
 		WindowId: windowID,
 	}

@@ -281,6 +281,7 @@ var EventPublisher_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type WindowManagerClient interface {
 	Focus(ctx context.Context, in *FocusRequest, opts ...grpc.CallOption) (*FocusResponse, error)
+	SetFocus(ctx context.Context, in *SetFocusRequest, opts ...grpc.CallOption) (*FocusResponse, error)
 	Split(ctx context.Context, in *SplitRequest, opts ...grpc.CallOption) (*SplitResponse, error)
 	Bar(ctx context.Context, in *BarRequest, opts ...grpc.CallOption) (*BarResponse, error)
 	Floating(ctx context.Context, in *FloatingWindowRequest, opts ...grpc.CallOption) (*FloatingWindowResponse, error)
@@ -298,6 +299,15 @@ func NewWindowManagerClient(cc grpc.ClientConnInterface) WindowManagerClient {
 func (c *windowManagerClient) Focus(ctx context.Context, in *FocusRequest, opts ...grpc.CallOption) (*FocusResponse, error) {
 	out := new(FocusResponse)
 	err := c.cc.Invoke(ctx, "/proto.WindowManager/Focus", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *windowManagerClient) SetFocus(ctx context.Context, in *SetFocusRequest, opts ...grpc.CallOption) (*FocusResponse, error) {
+	out := new(FocusResponse)
+	err := c.cc.Invoke(ctx, "/proto.WindowManager/SetFocus", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -345,6 +355,7 @@ func (c *windowManagerClient) Tab(ctx context.Context, in *TabRequest, opts ...g
 // for forward compatibility
 type WindowManagerServer interface {
 	Focus(context.Context, *FocusRequest) (*FocusResponse, error)
+	SetFocus(context.Context, *SetFocusRequest) (*FocusResponse, error)
 	Split(context.Context, *SplitRequest) (*SplitResponse, error)
 	Bar(context.Context, *BarRequest) (*BarResponse, error)
 	Floating(context.Context, *FloatingWindowRequest) (*FloatingWindowResponse, error)
@@ -358,6 +369,9 @@ type UnimplementedWindowManagerServer struct {
 
 func (UnimplementedWindowManagerServer) Focus(context.Context, *FocusRequest) (*FocusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Focus not implemented")
+}
+func (UnimplementedWindowManagerServer) SetFocus(context.Context, *SetFocusRequest) (*FocusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetFocus not implemented")
 }
 func (UnimplementedWindowManagerServer) Split(context.Context, *SplitRequest) (*SplitResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Split not implemented")
@@ -398,6 +412,24 @@ func _WindowManager_Focus_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(WindowManagerServer).Focus(ctx, req.(*FocusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _WindowManager_SetFocus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetFocusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(WindowManagerServer).SetFocus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.WindowManager/SetFocus",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(WindowManagerServer).SetFocus(ctx, req.(*SetFocusRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -484,6 +516,10 @@ var WindowManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Focus",
 			Handler:    _WindowManager_Focus_Handler,
+		},
+		{
+			MethodName: "SetFocus",
+			Handler:    _WindowManager_SetFocus_Handler,
 		},
 		{
 			MethodName: "Split",

@@ -279,6 +279,21 @@ func (mr *MockWindowManagerMockRecorder) Focus() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Focus", reflect.TypeOf((*MockWindowManager)(nil).Focus))
 }
 
+// SetFocus mocks base method.
+func (m *MockWindowManager) SetFocus(win Window) (Window, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetFocus", win)
+	ret0, _ := ret[0].(Window)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetFocus indicates an expected call of SetFocus.
+func (mr *MockWindowManagerMockRecorder) SetFocus(win interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockWindowManager)(nil).SetFocus), win)
+}
+
 // Split mocks base method.
 func (m *MockWindowManager) Split(arg0 Orientation, arg1 Handler) (Window, error) {
 	m.ctrl.T.Helper()
@@ -727,6 +742,21 @@ func (m *MockBrowser) Set(ctx context.Context, ID string, doc interface{}) error
 func (mr *MockBrowserMockRecorder) Set(ctx, ID, doc interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockBrowser)(nil).Set), ctx, ID, doc)
+}
+
+// SetFocus mocks base method.
+func (m *MockBrowser) SetFocus(win Window) (Window, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetFocus", win)
+	ret0, _ := ret[0].(Window)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetFocus indicates an expected call of SetFocus.
+func (mr *MockBrowserMockRecorder) SetFocus(win interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetFocus", reflect.TypeOf((*MockBrowser)(nil).SetFocus), win)
 }
 
 // SetMessage mocks base method.

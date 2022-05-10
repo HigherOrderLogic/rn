@@ -46,6 +46,10 @@ type WindowManager interface {
 	// Focus returns the current Window in focus.
 	Focus() (Window, error)
 
+	// SetFocus sets win to be the Window in focus and returns the
+	// previous window in focus.
+	SetFocus(win Window) (Window, error)
+
 	// Split splits the current window in focus in two, and installs
 	// Handler in the new window.
 	Split(Orientation, Handler) (Window, error)

@@ -694,6 +694,59 @@ func TestExKeySequence(t *testing.T) {
 	}
 }
 
+func TestExTabIntegration(t *testing.T) {
+	cases := []testutil.HandlerSequenceTestCase{
+		{"",
+			`┌──────────────────┐
+│Fieshta  Pahty    │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+		{":bufferCloseAll>",
+			`┌──────────────────┐
+│                  │
+├──────────────────┤
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+│                  │
+└──────────────────┘`},
+	}
+
+	var closeFns []func() error
+	fn := func(t *testing.T) tui.Handler {
+		b := new(ex)
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+		}
+		initExForTesting(t, b, text.Mock(), opts...)
+		uri1, err := workspace.ParseURI("file:///Fieshta")
+		require.NoError(t, err)
+		uri2, err := workspace.ParseURI("file:///Pahty")
+		require.NoError(t, err)
+		tab, err := b.comp.Tab(uri1, "Fieshta", browser.NewTestHandler())
+		require.NoError(t, err)
+		_, err = b.comp.Tab(uri2, "Pahty", browser.NewTestHandler())
+		require.NoError(t, err)
+		focus, err := b.comp.Focus()
+		require.NoError(t, err)
+		require.NoError(t, focus.SetContent(tab))
+		closeFns = append(closeFns, b.Close)
+		return b
+	}
+	testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
+	for _, close := range closeFns {
+		close()
+	}
+}
+
 func TestExExit(t *testing.T) {
 	commands := []string{
 		"writeQuit",

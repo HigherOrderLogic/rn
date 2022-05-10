@@ -45,6 +45,7 @@ var (
 		"focusAboveWindow":       (*ex).focusAboveWindow,
 		"focusBelowWindow":       (*ex).focusBelowWindow,
 	}
+	// TODO refactor with <c-x><c-*>
 	exDefaultBindings = map[term.KeyComb]string{
 		{Key: term.KeyCtrlA}: "bufferCloseAll",
 		{Key: term.KeyCtrlW}: "bufferClose",

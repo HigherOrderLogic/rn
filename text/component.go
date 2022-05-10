@@ -460,6 +460,12 @@ func (c *Component) Focus() (browser.Window, error) {
 	return c.comp.Focus(), nil
 }
 
+// SetFocus sets the window in focus and returns the previous window in focus.
+// It satisfies browser.Browser.
+func (c *Component) SetFocus(win browser.Window) (browser.Window, error) {
+	return c.comp.SetFocus(win), nil
+}
+
 // Edit edits the resource with name and buffer with the underlying Editor
 // in a new browser buffer.
 func (c *Component) Edit(file workspace.URI, buf *cell.Buffer) (Handler, error) {
