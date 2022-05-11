@@ -74,7 +74,10 @@ func (u *FrameUnion) Handle(ev term.Event) (exit, handled bool) {
 	if !ok {
 		return
 	}
-	return c.(tui.Handler).Handle(ev)
+	handler := c.C.(tui.Handler)
+	ev.MouseX -= c.Position().X
+	ev.MouseY -= c.Position().Y
+	return handler.Handle(ev)
 }
 
 // Cursor returns the main component's cursor position.

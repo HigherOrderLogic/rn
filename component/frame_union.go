@@ -112,20 +112,20 @@ func (u *FrameUnion) UnionRight(right tui.Component, width int) {
 
 func (u *FrameUnion) componentAt(
 	components []*frameVirtual, pos term.Coordinates,
-) (tui.Component, bool) {
+) (Virtual, bool) {
 	for _, t := range components {
 		tpos := t.Position()
 		twidth := t.Width()
 		theight := t.Height()
 		if pos.X >= tpos.X && pos.Y >= tpos.Y && pos.X < tpos.X+twidth && pos.Y < tpos.Y+theight {
-			return t.C, true
+			return t.Virtual, true
 		}
 	}
-	return nil, false
+	return Virtual{}, false
 }
 
 // ComponentAt returns the component at pos or false if there's no component at pos.
-func (u *FrameUnion) ComponentAt(pos term.Coordinates) (tui.Component, bool) {
+func (u *FrameUnion) ComponentAt(pos term.Coordinates) (Virtual, bool) {
 	frameVirtualMain := frameVirtual{Virtual: u.main}
 	main := [1]*frameVirtual{&frameVirtualMain}
 	c, ok := u.componentAt(main[:], pos)

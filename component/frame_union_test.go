@@ -425,43 +425,57 @@ AA
 	t.Run("ComponentAt returns the component at position offset", func(t *testing.T) {
 		c, ok := f.ComponentAt(term.Coordinates{})
 		require.True(t, ok)
-		assert.Equal(t, one, c)
+		assert.Equal(t, one, c.C)
+		assert.Equal(t, term.Coordinates{}, c.Position())
 
 		c, ok = f.ComponentAt(term.Coordinates{X: 19})
 		require.True(t, ok)
-		assert.Equal(t, one, c)
+		assert.Equal(t, one, c.C)
+		assert.Equal(t, term.Coordinates{}, c.Position())
 
 		c, ok = f.ComponentAt(term.Coordinates{Y: 2, X: 19})
 		require.True(t, ok)
-		assert.Equal(t, one, c)
+		assert.Equal(t, one, c.C)
+		assert.Equal(t, term.Coordinates{}, c.Position())
 
 		c, ok = f.ComponentAt(term.Coordinates{Y: 3, X: 19})
 		require.True(t, ok)
-		assert.Equal(t, four, c)
+		assert.Equal(t, four, c.C)
+		assert.Equal(t, term.Coordinates{Y: 2}, c.Position())
 
 		c, ok = f.ComponentAt(term.Coordinates{Y: 5, X: 19})
 		require.True(t, ok)
-		assert.Equal(t, eight, c)
+		assert.Equal(t, eight, c.C)
+		assert.Equal(t, term.Coordinates{Y: 4, X: 17}, c.Position())
 
 		c, ok = f.ComponentAt(term.Coordinates{Y: 5, X: 17})
 		require.True(t, ok)
-		assert.Equal(t, nine, c)
+		assert.Equal(t, nine, c.C)
 
 		c, ok = f.ComponentAt(term.Coordinates{Y: 5, X: 13})
 		require.True(t, ok)
-		assert.Equal(t, main, c)
+		assert.Equal(t, main, c.C)
 
 		c, ok = f.ComponentAt(term.Coordinates{Y: 12, X: 3})
 		require.True(t, ok)
-		assert.Equal(t, seven, c)
+		assert.Equal(t, seven, c.C)
 
 		c, ok = f.ComponentAt(term.Coordinates{Y: 15, X: 3})
 		require.True(t, ok)
-		assert.Equal(t, five, c)
+		assert.Equal(t, five, c.C)
 
 		c, ok = f.ComponentAt(term.Coordinates{Y: 19, X: 3})
 		require.True(t, ok)
-		assert.Equal(t, two, c)
+		assert.Equal(t, two, c.C)
+		assert.Equal(t, term.Coordinates{Y: 17}, c.Position())
+
+		c, ok = f.ComponentAt(term.Coordinates{Y: 16, X: 3})
+		require.True(t, ok)
+		assert.Equal(t, three, c.C)
+		assert.Equal(t, term.Coordinates{Y: 15}, c.Position())
+
+		pos := f.MainPosition()
+		assert.Equal(t, term.Coordinates{X: 4, Y: 4}, pos)
 	})
 }
 
