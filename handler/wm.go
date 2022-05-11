@@ -107,8 +107,20 @@ func (wm *WindowManager) Handle(ev term.Event) (exit bool, handled bool) {
 			panic("corrupted WindowManager: window at" +
 				" mouse is a zero-valued Window")
 		}
+		if wm.config.Frame {
+			offset.Y++
+			offset.X++
+		}
 		ev.MouseX -= offset.X
 		ev.MouseY -= offset.Y
+
+		// mouse on frame
+		if ev.MouseX < 0 {
+			ev.MouseX = 0
+		}
+		if ev.MouseY < 0 {
+			ev.MouseY = 0
+		}
 	}
 
 	var hexit bool
@@ -241,9 +253,8 @@ func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
 	}
 	content := wm.focus.Content()
 	if wm.config.Frame {
-		// force frame cursor offset
-		content = NewFrame(content)
-		content.Resize(wm.focus.Width(), wm.focus.Height())
+		offset.Y++
+		offset.X++
 	}
 	cursor, show := content.Cursor()
 	return term.Coordinates{X: offset.X + cursor.X, Y: offset.Y + cursor.Y}, show

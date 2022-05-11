@@ -55,249 +55,283 @@ func testWindowManagerSetFocus(t *testing.T, frame bool) {
 
 // TestHandler signals that it's handling event by incrementing it's fill rune
 func TestWindowManagerHandle(t *testing.T) {
-	topLeftHandler := NewTestHandler()
-	width, height := 8, 4
-	writer, handler := prepareTest(width, height, false, topLeftHandler)
+	t.Run("passes correct mouse position", func(t *testing.T) {
+		handler := NewTestHandler()
 
-	bottomLeftHandler := NewTestHandler()
-	bottomleft, ok := handler.SplitHorizontal(bottomLeftHandler)
-	require.True(t, ok)
+		var actualEv term.Event
+		handler.HandleOverride = func(ev term.Event) (bool, bool) {
+			actualEv = ev
+			return false, false
+		}
+		width, height := 8, 4
+		cfg := DefaultWindowManagerConfig()
+		cfg.Frame = true
+		wm := NewWindowManager(handler, cfg)
+		wm.Resize(width, height)
 
-	topRightHandler := NewTestHandler()
-	_, ok = handler.SplitVertical(topRightHandler)
-	require.True(t, ok)
+		wm.Handle(term.Event{Type: term.EventMouse})
+		require.Equal(t, term.EventMouse, actualEv.Type)
+		assert.Equal(t, 0, actualEv.MouseX)
+		assert.Equal(t, 0, actualEv.MouseY)
 
-	topLeft := handler.SetFocus(bottomleft)
-	bottomRightHandler := NewTestHandler()
-	_, ok = handler.SplitVertical(bottomRightHandler)
-	require.True(t, ok)
+		actualEv = term.Event{}
+		wm.Handle(term.Event{Type: term.EventMouse, MouseX: 1, MouseY: 1})
+		require.Equal(t, term.EventMouse, actualEv.Type)
+		assert.Equal(t, 0, actualEv.MouseX)
+		assert.Equal(t, 0, actualEv.MouseY)
 
-	handler.SetFocus(topLeft)
+		actualEv = term.Event{}
+		wm.Handle(term.Event{Type: term.EventMouse, MouseX: 2, MouseY: 2})
+		require.Equal(t, term.EventMouse, actualEv.Type)
+		assert.Equal(t, 1, actualEv.MouseX)
+		assert.Equal(t, 1, actualEv.MouseY)
+	})
 
-	cases := []testutil.HandlerTestCase{
-		{
-			term.Event{}, `
+	t.Run("delegates to correct children", func(t *testing.T) {
+		topLeftHandler := NewTestHandler()
+		width, height := 8, 4
+		writer, handler := prepareTest(width, height, false, topLeftHandler)
+
+		bottomLeftHandler := NewTestHandler()
+		bottomleft, ok := handler.SplitHorizontal(bottomLeftHandler)
+		require.True(t, ok)
+
+		topRightHandler := NewTestHandler()
+		_, ok = handler.SplitVertical(topRightHandler)
+		require.True(t, ok)
+
+		topLeft := handler.SetFocus(bottomleft)
+		bottomRightHandler := NewTestHandler()
+		_, ok = handler.SplitVertical(bottomRightHandler)
+		require.True(t, ok)
+
+		handler.SetFocus(topLeft)
+
+		cases := []testutil.HandlerTestCase{
+			{
+				term.Event{}, `
 BBBBAAAA
 BBBBAAAA
 AAAAAAAA
 AAAAAAAA`,
-		},
-		{
-			altEvent('l'), `
+			},
+			{
+				altEvent('l'), `
 BBBBAAAA
 BBBBAAAA
 AAAAAAAA
 AAAAAAAA`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 BBBBBBBB
 BBBBBBBB
 AAAAAAAA
 AAAAAAAA`,
-		},
-		{
-			altEvent('l'), `
+			},
+			{
+				altEvent('l'), `
 BBBBBBBB
 BBBBBBBB
 AAAAAAAA
 AAAAAAAA`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 BBBBCCCC
 BBBBCCCC
 AAAAAAAA
 AAAAAAAA`,
-		},
-		{
-			altEvent('h'), `
+			},
+			{
+				altEvent('h'), `
 BBBBCCCC
 BBBBCCCC
 AAAAAAAA
 AAAAAAAA`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 AAAAAAAA
 AAAAAAAA`,
-		},
-		{
-			altEvent('j'), `
+			},
+			{
+				altEvent('j'), `
 CCCCCCCC
 CCCCCCCC
 AAAAAAAA
 AAAAAAAA`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 BBBBAAAA
 BBBBAAAA`,
-		},
-		{
-			altEvent('l'), `
+			},
+			{
+				altEvent('l'), `
 CCCCCCCC
 CCCCCCCC
 BBBBAAAA
 BBBBAAAA`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 BBBBBBBB
 BBBBBBBB`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 BBBBCCCC
 BBBBCCCC`,
-		},
-		{
-			altEvent('k'), `
+			},
+			{
+				altEvent('k'), `
 CCCCCCCC
 CCCCCCCC
 BBBBCCCC
 BBBBCCCC`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 CCCCDDDD
 CCCCDDDD
 BBBBCCCC
 BBBBCCCC`,
-		},
-	}
+			},
+		}
 
-	testutil.TestHandler(t, handler, cases, writer)
+		testutil.TestHandler(t, handler, cases, writer)
 
-	topRightHandler.Exit = true
+		topRightHandler.Exit = true
 
-	cases = []testutil.HandlerTestCase{
-		{
-			// testhandler will return after this event active = false
-			term.Event{}, `
+		cases = []testutil.HandlerTestCase{
+			{
+				// testhandler will return after this event active = false
+				term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 BBBBCCCC
 BBBBCCCC`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 BBBBCCCC
 BBBBCCCC`,
-		},
-		{
-			altEvent('j'), `
+			},
+			{
+				altEvent('j'), `
 DDDDDDDD
 DDDDDDDD
 BBBBCCCC
 BBBBCCCC`,
-		},
-		{
-			altEvent('h'), `
+			},
+			{
+				altEvent('h'), `
 DDDDDDDD
 DDDDDDDD
 BBBBCCCC
 BBBBCCCC`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 CCCCCCCC
 CCCCCCCC`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 DDDDCCCC
 DDDDCCCC`,
-		},
-	}
+			},
+		}
 
-	testutil.TestHandler(t, handler, cases, writer)
+		testutil.TestHandler(t, handler, cases, writer)
 
-	bottomLeftHandler.Exit = true
+		bottomLeftHandler.Exit = true
 
-	cases = []testutil.HandlerTestCase{
-		{
-			// testhandler will return after this event active = false
-			term.Event{}, `
+		cases = []testutil.HandlerTestCase{
+			{
+				// testhandler will return after this event active = false
+				term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 CCCCCCCC
 CCCCCCCC`,
-		},
-		{
-			altEvent('k'), `
+			},
+			{
+				altEvent('k'), `
 DDDDDDDD
 DDDDDDDD
 CCCCCCCC
 CCCCCCCC`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 EEEEEEEE
 EEEEEEEE
 CCCCCCCC
 CCCCCCCC`,
-		},
-	}
+			},
+		}
 
-	testutil.TestHandler(t, handler, cases, writer)
+		testutil.TestHandler(t, handler, cases, writer)
 
-	topLeftHandler.Exit = true
+		topLeftHandler.Exit = true
 
-	cases = []testutil.HandlerTestCase{
-		{
-			// testhandler will return after this event active = false
-			term.Event{}, `
+		cases = []testutil.HandlerTestCase{
+			{
+				// testhandler will return after this event active = false
+				term.Event{}, `
 CCCCCCCC
 CCCCCCCC
 CCCCCCCC
 CCCCCCCC`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 DDDDDDDD
 DDDDDDDD
 DDDDDDDD
 DDDDDDDD`,
-		},
-		{
-			altEvent('k'), `
+			},
+			{
+				altEvent('k'), `
 DDDDDDDD
 DDDDDDDD
 DDDDDDDD
 DDDDDDDD`,
-		},
-		{
-			altEvent('l'), `
+			},
+			{
+				altEvent('l'), `
 DDDDDDDD
 DDDDDDDD
 DDDDDDDD
 DDDDDDDD`,
-		},
-		{
-			term.Event{}, `
+			},
+			{
+				term.Event{}, `
 EEEEEEEE
 EEEEEEEE
 EEEEEEEE
 EEEEEEEE`,
-		},
-	}
+			},
+		}
 
-	testutil.TestHandler(t, handler, cases, writer)
+		testutil.TestHandler(t, handler, cases, writer)
+	})
 }
 
 func TestWindowManagerHandleFrame(t *testing.T) {

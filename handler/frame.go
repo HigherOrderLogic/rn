@@ -29,6 +29,17 @@ func (f *Frame) Init(handler tui.Handler) {
 
 // Handle delegates the event to the underlying handler.
 func (f *Frame) Handle(ev term.Event) (bool, bool) {
+	if ev.Type == term.EventMouse {
+		content := f.Frame.ContentPosition()
+		ev.MouseX -= content.X
+		ev.MouseY -= content.Y
+		if ev.MouseX < 0 {
+			ev.MouseX = 0
+		}
+		if ev.MouseY < 0 {
+			ev.MouseY = 0
+		}
+	}
 	return f.handler.Handle(ev)
 }
 
