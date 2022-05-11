@@ -135,6 +135,13 @@ func TestIntegrationRace(t *testing.T) {
 		}, func(ifc interface{}) error {
 			return ifc.(browser.EventPublisher).PublishInterrupt()
 		}},
+		{PermissionBrowserEventPublisher, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
+			return EventPublisher(token, broker)
+		}, func(_ *workspace.MockWorkspaceMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {
+			return mock.PublishEventNone().Return(nil)
+		}, func(ifc interface{}) error {
+			return ifc.(browser.EventPublisher).PublishEventNone()
+		}},
 		{PermissionEditor, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
 			return Editor(token, broker)
 		}, func(_ *workspace.MockWorkspaceMockRecorder, ed *text.MockEditorMockRecorder, mock *browser.MockBrowserMockRecorder) *gomock.Call {

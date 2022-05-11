@@ -86,6 +86,13 @@ type EventPublisher interface {
 	// PublishInterrupt will publish an interrupt event, which will force
 	// redrawing all components in the terminal.
 	PublishInterrupt() error
+
+	// PublishEventNone will publish an EventNone event, which will force
+	// calling Handle on the component currently in focus.
+	//
+	// There's no guarantee that caller will be the tui.Handler that will
+	// receive this event.
+	PublishEventNone() error
 }
 
 // Storage is the interface that wraps persistence CRUD methods.

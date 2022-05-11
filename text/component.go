@@ -451,7 +451,14 @@ func (c *Component) Bar(o browser.Orientation, h tui.Handler) error {
 
 // PublishInterrupt interrupts the main event loop to redraw the terminal.
 func (c *Component) PublishInterrupt() error {
-	c.config.InterruptDraw()
+	c.config.SendInterrupt()
+	return nil
+}
+
+// PublishEventNone sends an EventNone to the main event loop which
+// forces Handle to be called on the tui.Handler in focus.
+func (c *Component) PublishEventNone() error {
+	c.config.SendEventNone()
 	return nil
 }
 

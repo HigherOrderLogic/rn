@@ -396,14 +396,19 @@ func (s *Server) Publish(
 		return nil, err
 	}
 
-	// NOTE: for now it's the only event allowed
-	if ev.Type != term.EventInterrupt {
+	var fn func() error
+	switch ev.Type {
+	case term.EventInterrupt:
+		fn = s.browser.PublishInterrupt
+	case term.EventNone:
+		fn = s.browser.PublishEventNone
+	default:
 		return nil, fmt.Errorf("invalid event type: %v", ev.Type)
 	}
 
 	s.browser.Lock()
 	defer s.browser.Unlock()
-	err = s.browser.PublishInterrupt()
+	err = fn()
 	if err != nil {
 		return nil, err
 	}

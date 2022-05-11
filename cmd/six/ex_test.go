@@ -494,8 +494,8 @@ func assertHandled(
 	assert.NotEqual(t, startingRune, h.Ch)
 }
 
-func TestBrowserHandlerPublishInterrupt(t *testing.T) {
-	t.Run("calls interrupt handle asynchronously", func(t *testing.T) {
+func TestBrowserHandlerInterrupts(t *testing.T) {
+	t.Run("Interrupt calls interrupt handle", func(t *testing.T) {
 		var wg sync.WaitGroup
 		browser := new(ex)
 		opts := []text.Option{text.WithInterrupt(wg.Done)}
@@ -504,6 +504,18 @@ func TestBrowserHandlerPublishInterrupt(t *testing.T) {
 
 		wg.Add(1)
 		browser.Browser().PublishInterrupt()
+
+		wg.Wait()
+	})
+	t.Run("SendEventNone calls interrupt handle", func(t *testing.T) {
+		var wg sync.WaitGroup
+		browser := new(ex)
+		opts := []text.Option{text.WithSendNone(wg.Done)}
+		initExForTesting(t, browser, text.Mock(), opts...)
+		defer browser.Close()
+
+		wg.Add(1)
+		browser.Browser().PublishEventNone()
 
 		wg.Wait()
 	})

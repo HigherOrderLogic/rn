@@ -284,6 +284,20 @@ func (c *Client) Open(resource workspace.URI) (Handler, error) {
 	return Token{ID: uint64(res.GetHandlerId())}, err
 }
 
+// PublishEventNone satisfies Browser.
+func (c *Client) PublishEventNone() error {
+	ctx := context.Background()
+	protoEv := new(proto.Event)
+	err := protoEv.FromModel(term.Event{Type: term.EventNone})
+	if err != nil {
+		return err
+	}
+	req := proto.PublishRequest{Ev: protoEv}
+
+	_, err = c.p.Publish(ctx, &req)
+	return err
+}
+
 // PublishInterrupt satisfies Browser.
 func (c *Client) PublishInterrupt() error {
 	ctx := context.Background()

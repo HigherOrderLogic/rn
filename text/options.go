@@ -36,7 +36,8 @@ type Config struct {
 	Storage                 document.Service
 	DirtyTabAttr            term.Attributes
 
-	InterruptDraw func()
+	SendInterrupt func()
+	SendEventNone func()
 
 	CommandOverlay CommandOverlayConfig
 	browser.Config
@@ -69,7 +70,8 @@ func DefaultConfig() Config {
 		CommandSequenceBindings: make(map[handler.Sequence]string),
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
-		InterruptDraw:           term.Interrupt,
+		SendInterrupt:           term.Interrupt,
+		SendEventNone:           term.SendNoneEvent,
 	}
 	return cfg
 }
@@ -257,6 +259,14 @@ func WithPromptConfig(c browser.PromptConfig) Option {
 // By default this is set to term.Interrupt.
 func WithInterrupt(fn func()) Option {
 	return func(cfg *Config) {
-		cfg.InterruptDraw = fn
+		cfg.SendInterrupt = fn
+	}
+}
+
+// WithSendNone sets the Component's send EventNone function.
+// By default this is set to term.SendNoneEvent.
+func WithSendNone(fn func()) Option {
+	return func(cfg *Config) {
+		cfg.SendEventNone = fn
 	}
 }

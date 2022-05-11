@@ -234,40 +234,52 @@ func TestClientOpen(t *testing.T) {
 }
 
 func TestClientPublish(t *testing.T) {
-	t.Run("bubbles up rpc error and so stops event handler resources", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
+	tsuite := []struct {
+		rpc string
+		fn  func(*Client) error
+		ev  *proto.Event
+	}{
+		{"PublishInterrupt", (*Client).PublishInterrupt, &proto.Event{Type: proto.Event_TypeInterrupt}},
+		{"PublishEventNone", (*Client).PublishEventNone, &proto.Event{Type: proto.Event_TypeNone}},
+	}
+	for _, tcase := range tsuite {
+		t.Run(fmt.Sprintf("%s bubbles up rpc error and so stops event handler resources", tcase.rpc),
+			func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
 
-		client, mockCC, _ := newMockedClient(ctrl)
-		mockCC.EXPECT().
-			Invoke(gomock.Any(),
-				gomock.Eq("/proto.EventPublisher/Publish"),
-				gomock.Any(), gomock.Any()).
-			Times(1).
-			Return(errors.New("uRich"))
+				client, mockCC, _ := newMockedClient(ctrl)
+				mockCC.EXPECT().
+					Invoke(gomock.Any(),
+						gomock.Eq("/proto.EventPublisher/Publish"),
+						gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(errors.New("uRich"))
 
-		err := client.PublishInterrupt()
-		require.Error(t, err)
-	})
+				err := tcase.fn(client)
+				require.Error(t, err)
+			})
 
-	t.Run("sends interrupt event publish request to server", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
+		t.Run(fmt.Sprintf("%s sends interrupt event publish request to server", tcase.rpc),
+			func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				defer ctrl.Finish()
 
-		client, mockCC, _ := newMockedClient(ctrl)
-		ev := proto.Event{Type: proto.Event_TypeInterrupt}
-		in := &proto.PublishRequest{Ev: &ev}
-		out := new(proto.PublishResponse)
+				client, mockCC, _ := newMockedClient(ctrl)
+				ev := tcase.ev
+				in := &proto.PublishRequest{Ev: ev}
+				out := new(proto.PublishResponse)
 
-		mockCC.EXPECT().
-			Invoke(gomock.Any(),
-				gomock.Eq("/proto.EventPublisher/Publish"),
-				gomock.Eq(in), gomock.Eq(out)).
-			Times(1)
+				mockCC.EXPECT().
+					Invoke(gomock.Any(),
+						gomock.Eq("/proto.EventPublisher/Publish"),
+						gomock.Eq(in), gomock.Eq(out)).
+					Times(1)
 
-		err := client.PublishInterrupt()
-		require.NoError(t, err)
-	})
+				err := tcase.fn(client)
+				require.NoError(t, err)
+			})
+	}
 }
 
 func TestClientSplitHorizontalBelow(t *testing.T) {

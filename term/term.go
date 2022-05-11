@@ -10,10 +10,11 @@ import (
 )
 
 var (
-	quit      chan struct{}
-	events    chan Event
-	interrupt int32
-	mu        sync.Mutex
+	quit          chan struct{}
+	events        chan Event
+	interrupt     int32
+	interruptNone int32
+	mu            sync.Mutex
 
 	defaultAttr = Attributes{Fg: ColorDefault, Bg: ColorDefault}
 
@@ -163,6 +164,12 @@ func PollEvent() (ev Event) {
 		mu.Unlock()
 		return
 	}
+	if interruptNone != 0 {
+		interruptNone = 0
+		ev = Event{Type: EventNone}
+		mu.Unlock()
+		return
+	}
 	mu.Unlock()
 	ev = <-events
 	return
@@ -191,5 +198,11 @@ func Interrupt() {
 // SendNoneEvent sends a term.EventNone to the event poller and
 // forces event handling which in turn forces redraw.
 func SendNoneEvent() {
-	events <- Event{Type: EventNone}
+	mu.Lock()
+	select {
+	case events <- Event{Type: EventNone}:
+	default:
+		interruptNone++
+	}
+	mu.Unlock()
 }
