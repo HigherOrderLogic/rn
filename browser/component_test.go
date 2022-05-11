@@ -543,17 +543,24 @@ func TestComponentPrompt(t *testing.T) {
 	cfg.PromptConfig.Height = 7
 	c := NewComponent(cfg)
 	c.Resize(20, 8)
+	uri, err := workspace.ParseURI("file:///Music")
+	require.NoError(t, err)
+
+	h := NewTestHandler()
+	h.Ch = '8'
+	tab := c.NewTab(uri, "music", h, nil)
+	c.Focus().SetContent(tab)
 
 	tests := []testutil.ComponentTestCase{
 		{
 			nil, `
 ┌──────────────────┐    
-│                  │    
+│music             │    
 ├──────────────────┤    
-│                  │    
-│                  │    
-│                  │    
-│                  │    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
 └──────────────────┘    `,
 		}, {func() {
 			c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, func(int, string) {})
@@ -570,12 +577,12 @@ func TestComponentPrompt(t *testing.T) {
 			c.Handle(term.Event{Key: term.KeyEnter})
 		}, `
 ┌──────────────────┐    
-│                  │    
+│music             │    
 ├──────────────────┤    
-│                  │    
-│                  │    
-│                  │    
-│                  │    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
 └──────────────────┘    `,
 		}, {func() {
 			c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil, func(int, string) {})
@@ -604,12 +611,12 @@ func TestComponentPrompt(t *testing.T) {
 			c.Resize(24, 8)
 		}, `
 ┌──┌────────────────┐──┐
-│  │    Rosalia?    │  │
+│mu│    Rosalia?    │  │
 ├──│                │──┤
-│  │┌─────┐ ┌─────┐ │  │
-│  ││ Yay │ │ Nay │ │  │
-│  │└─────┘ └─────┘ │  │
-│  └────────────────┘  │
+│88│┌─────┐ ┌─────┐ │88│
+│88││ Yay │ │ Nay │ │88│
+│88│└─────┘ └─────┘ │88│
+│88└────────────────┘88│
 └──────────────────────┘`,
 		}, {func() {
 			c.Resize(20, 8)
@@ -637,12 +644,12 @@ func TestComponentPrompt(t *testing.T) {
 			c.Handle(term.Event{Key: term.KeyEnter})
 		}, `
 ┌──────────────────┐    
-│                  │    
+│music             │    
 ├──────────────────┤    
-│                  │    
-│                  │    
-│                  │    
-│                  │    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
+│888888888888888888│    
 └──────────────────┘    `,
 		},
 	}

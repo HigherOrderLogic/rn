@@ -794,6 +794,9 @@ func (c *Component) Handle(ev term.Event) (exit, handled bool) {
 			exit = false
 			c.prompts = c.prompts[1:]
 		}
+		if handled {
+			return
+		}
 	}
 	return c.union.Handle(ev)
 }

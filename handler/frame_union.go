@@ -77,6 +77,12 @@ func (u *FrameUnion) Handle(ev term.Event) (exit, handled bool) {
 	handler := c.C.(tui.Handler)
 	ev.MouseX -= c.Position().X
 	ev.MouseY -= c.Position().Y
+	if ev.MouseX < 0 {
+		ev.MouseX = 0
+	}
+	if ev.MouseY < 0 {
+		ev.MouseY = 0
+	}
 	return handler.Handle(ev)
 }
 
