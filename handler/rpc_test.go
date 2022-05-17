@@ -44,23 +44,6 @@ func newStubClient(t *testing.T) *Client {
 	}
 }
 
-func testRPCHandlerHandleDraw(t *testing.T, rpcHandler *Client) {
-
-	cases := []testutil.HandlerSequenceTestCase{
-		{"",
-			`AAAA
-AAAA
-AAAA
-AAAA`}, {"j",
-			`BBBB
-BBBB
-BBBB
-BBBB`},
-	}
-
-	testutil.TestHandlerSequence(t, rpcHandler, 4, 4, cases)
-}
-
 func assertTestManual(t *testing.T, man tui.Manual, msg ...interface{}) {
 	expected := tui.Manual{
 		Summary: testHandlerManualDesc,
@@ -89,10 +72,52 @@ func testRPCHandlerCursor(t *testing.T, rpcHandler *Client) {
 	assert.Equal(t, term.Coordinates{X: -1, Y: -1}, pos)
 }
 
-func TestUnitClientHandlerDraw(t *testing.T) {
+type testResizeHandler struct {
+	TestHandler
+	width, height int
+}
+
+func (h *testResizeHandler) Resize(width, height int) {
+	if h.width == width && h.height == height {
+		panic("called redundant Resized")
+	}
+	h.width = width
+	h.height = height
+}
+
+func TestClientHandlerDraw(t *testing.T) {
 	stubClient := newStubClient(t)
 	defer stubClient.Close()
-	testRPCHandlerHandleDraw(t, stubClient)
+
+	t.Run("draw", func(t *testing.T) {
+		cases := []testutil.HandlerSequenceTestCase{
+			{"",
+				`AAAA
+AAAA
+AAAA
+AAAA`}, {"j",
+				`BBBB
+BBBB
+BBBB
+BBBB`},
+		}
+
+		testutil.TestHandlerSequence(t, stubClient, 4, 4, cases)
+	})
+
+	t.Run("calls resize only when dimensions have changed", func(t *testing.T) {
+		h := new(testResizeHandler)
+		client, cleanup := newServerClient(t, h)
+		defer client.Close()
+		defer cleanup()
+
+		client.Resize(10, 6)
+		client.Handle(term.Event{Ch: 'h'})
+		client.Handle(term.Event{Ch: 'j'})
+
+		client.Resize(10, 6)
+		client.Handle(term.Event{Ch: 'k'})
+	})
 }
 
 func TestUnitClientHandlerManual(t *testing.T) {
@@ -123,12 +148,12 @@ func TestClientHandleErrors(t *testing.T) {
 	assert.Equal(t, myErr, <-errChan)
 }
 
-func newServerClient(t *testing.T) (*Client, func()) {
+func newServerClient(t *testing.T, testHandler tui.Handler) (*Client, func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
 
 	grpcServer := grpc.NewServer()
-	proto.RegisterHandlerServer(grpcServer, NewServer(testHandler()))
+	proto.RegisterHandlerServer(grpcServer, NewServer(testHandler))
 
 	go grpcServer.Serve(lis)
 
@@ -142,7 +167,7 @@ func newServerClient(t *testing.T) (*Client, func()) {
 }
 
 func TestIntegrationClientHandlerDraw(t *testing.T) {
-	serverClient, closeFn := newServerClient(t)
+	serverClient, closeFn := newServerClient(t, testHandler())
 	defer closeFn()
 	defer serverClient.Close()
 
@@ -189,14 +214,14 @@ BBBB`},
 }
 
 func TestIntegrationClientHandlerManual(t *testing.T) {
-	serverClient, closeFn := newServerClient(t)
+	serverClient, closeFn := newServerClient(t, testHandler())
 	defer closeFn()
 	defer serverClient.Close()
 	testRPCHandlerManual(t, serverClient)
 }
 
 func TestIntegrationClientHandlerCursor(t *testing.T) {
-	serverClient, closeFn := newServerClient(t)
+	serverClient, closeFn := newServerClient(t, testHandler())
 	defer closeFn()
 	defer serverClient.Close()
 	testRPCHandlerCursor(t, serverClient)

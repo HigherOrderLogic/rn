@@ -242,6 +242,8 @@ type Server struct {
 	proto.UnimplementedHandlerServer
 	handler tui.Handler
 	Logger  *log.Logger
+	width   int
+	height  int
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -259,7 +261,11 @@ func (s *Server) Init(handler tui.Handler) {
 func (s *Server) draw(ctx context.Context, in *proto.DrawRequest) (
 	*proto.DrawResponse, error,
 ) {
-	s.handler.Resize(int(in.Width), int(in.Height))
+	if int(in.Width) != s.width || int(in.Height) != s.height {
+		s.handler.Resize(int(in.Width), int(in.Height))
+	}
+	s.width = int(in.Width)
+	s.height = int(in.Height)
 	cursor, show := s.handler.Cursor()
 	res := proto.NewDrawResponse(s.handler, int(in.Width), int(in.Height))
 	res.Cursor.Position.X = int32(cursor.X)
