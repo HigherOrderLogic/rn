@@ -68,7 +68,7 @@ func (c *systemClipboard) PermissionGranted(grants []plugin.Grant) {
 
 	switch grant.Permission {
 	case plugin.PermissionClipboard:
-		clipboard, err := plugin.Clipboard(grant.Token, c.broker)
+		clipboard, err := plugin.GetClipboard(grant.Token, c.broker)
 		if err == nil {
 			err = clipboard.SetRegister(c.registerID, c)
 		}

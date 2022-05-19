@@ -22,15 +22,15 @@ type ClipboardRegisterCloser interface {
 }
 
 func setupClipboardIntTest(
-	t *testing.T, root ClipboardSetter,
-) (client ClipboardSetter, closeFn func()) {
+	t *testing.T, root Clipboard,
+) (client Clipboard, closeFn func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
 
 	broker := proto.NewDialBroker()
 
 	grpcServer := grpc.NewServer()
-	srv := newClipboardSetterServer(log.New(), broker, root)
+	srv := newClipboardServer(log.New(), broker, root)
 	proto.RegisterClipboardServer(grpcServer, srv)
 
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
@@ -38,9 +38,9 @@ func setupClipboardIntTest(
 
 	go grpcServer.Serve(lis)
 
-	client = newClipboardSetterClient(log.New(), broker, conn)
+	client = newClipboardClient(log.New(), broker, conn)
 	closeFn = func() {
-		client.(*clipboardSetterClient).Close()
+		client.(*clipboardClient).Close()
 		grpcServer.Stop()
 		srv.Close()
 		lis.Close()
@@ -55,7 +55,7 @@ func TestClipboardIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mock := NewMockClipboardSetter(ctrl)
+		mock := NewMockClipboard(ctrl)
 		client, closeFn := setupClipboardIntTest(t, mock)
 		defer closeFn()
 
@@ -69,7 +69,7 @@ func TestClipboardIntegration(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mock := NewMockClipboardSetter(ctrl)
+		mock := NewMockClipboard(ctrl)
 		client, closeFn := setupClipboardIntTest(t, mock)
 
 		mock.EXPECT().SetRegister(gomock.Any(), gomock.Any()).Return(nil)

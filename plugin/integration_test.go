@@ -216,7 +216,7 @@ func TestIntegrationRace(t *testing.T) {
 			return ifc.(browser.Storage).Delete(context.Background(), "")
 		}},
 		{PermissionClipboard, func(token uint32, broker proto.MuxBroker) (interface{}, error) {
-			return Clipboard(token, broker)
+			return GetClipboard(token, broker)
 			// we test ClipboardManager directly
 		}, nil, func(ifc interface{}) error {
 			return ifc.(ClipboardSetter).SetRegister(text.DefaultRegisterID, nil)

@@ -98,3 +98,69 @@ func (mr *MockClipboardSetterMockRecorder) SetRegister(registerID, r interface{}
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRegister", reflect.TypeOf((*MockClipboardSetter)(nil).SetRegister), registerID, r)
 }
+
+// MockClipboard is a mock of Clipboard interface.
+type MockClipboard struct {
+	ctrl     *gomock.Controller
+	recorder *MockClipboardMockRecorder
+}
+
+// MockClipboardMockRecorder is the mock recorder for MockClipboard.
+type MockClipboardMockRecorder struct {
+	mock *MockClipboard
+}
+
+// NewMockClipboard creates a new mock instance.
+func NewMockClipboard(ctrl *gomock.Controller) *MockClipboard {
+	mock := &MockClipboard{ctrl: ctrl}
+	mock.recorder = &MockClipboardMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockClipboard) EXPECT() *MockClipboardMockRecorder {
+	return m.recorder
+}
+
+// Copy mocks base method.
+func (m *MockClipboard) Copy(arg0 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Copy", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Copy indicates an expected call of Copy.
+func (mr *MockClipboardMockRecorder) Copy(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Copy", reflect.TypeOf((*MockClipboard)(nil).Copy), arg0)
+}
+
+// Paste mocks base method.
+func (m *MockClipboard) Paste() (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Paste")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Paste indicates an expected call of Paste.
+func (mr *MockClipboardMockRecorder) Paste() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Paste", reflect.TypeOf((*MockClipboard)(nil).Paste))
+}
+
+// SetRegister mocks base method.
+func (m *MockClipboard) SetRegister(registerID string, r ClipboardRegister) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetRegister", registerID, r)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetRegister indicates an expected call of SetRegister.
+func (mr *MockClipboardMockRecorder) SetRegister(registerID, r interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRegister", reflect.TypeOf((*MockClipboard)(nil).SetRegister), registerID, r)
+}

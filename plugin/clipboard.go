@@ -31,12 +31,20 @@ type ClipboardSetter interface {
 	SetRegister(registerID string, r ClipboardRegister) error
 }
 
-// ClipboardManager satisfies editor.Clipboard by means of a plugin.ClipboardSetter
+// Clipboard combines a ClipboardSetter with a ClipboardRegister.
+type Clipboard interface {
+	ClipboardSetter
+
+	// ClipboardRegister for the default registerID
+	ClipboardRegister
+}
+
+// ClipboardManager satisfies text.Clipboard by means of a plugin.ClipboardSetter
 // which can be used to install arbitrary plugin.ClipboardRegister implementations.
 type ClipboardManager struct {
 	mu sync.Mutex
-	s  *clipboardSetterServer
-	// editor.Clipboard is re-used but each implementation is only
+	s  *clipboardServer
+	// text.Clipboard is re-used but each implementation is only
 	// used for its registered registerID.
 	registers map[string]*pluginRegister
 }
@@ -47,6 +55,9 @@ func NewClipboardManager() *ClipboardManager {
 	ret.Init()
 	return ret
 }
+
+// avoid conflict of Copy/Paste methods
+type clipboardManagerServer ClipboardManager
 
 // Init initializes this ClipboardManager.
 func (s *ClipboardManager) Init() {
@@ -74,11 +85,31 @@ func (s *ClipboardManager) Serve(
 
 		// uses this ClipboardManager as the clipboard implementation
 		// for all resource requests.
-		s.s = newClipboardSetterServer(l, broker, s)
+		s.s = newClipboardServer(l, broker, (*clipboardManagerServer)(s))
 		proto.RegisterClipboardServer(grpc, s.s)
+		proto.RegisterClipboardRegisterServer(grpc, s.s.defaultRegisterServer)
 
 		return srv
 	})
+}
+
+func (s *clipboardManagerServer) SetRegister(
+	registerID string, r ClipboardRegister,
+) error {
+	return (*ClipboardManager)(s).SetRegister(registerID, r)
+}
+
+func (s *clipboardManagerServer) Paste() (d string, err error) {
+	data, err := (*ClipboardManager)(s).Paste(text.DefaultRegisterID)
+	if err != nil {
+		return "", err
+	}
+	return data.Text, nil
+}
+
+func (s *clipboardManagerServer) Copy(data string) error {
+	d := text.ClipboardData{Text: data}
+	return (*ClipboardManager)(s).Copy(text.DefaultRegisterID, d)
 }
 
 // Paste satisfies ClipboardRegister.
@@ -90,7 +121,7 @@ func (s *ClipboardManager) Paste(registerID string) (d text.ClipboardData, err e
 		return
 	}
 
-	return reg.Paste("")
+	return reg.Paste(registerID)
 }
 
 func newMultiRegister(initial ClipboardRegister) (*pluginRegister, string) {
@@ -111,7 +142,7 @@ func (s *ClipboardManager) Copy(registerID string, data text.ClipboardData) erro
 	}
 	s.mu.Unlock()
 
-	return reg.Copy("", data)
+	return reg.Copy(registerID, data)
 }
 
 func (s *ClipboardManager) tryAddCloseHook(
@@ -206,7 +237,7 @@ func (r *textRegister) Close() error {
 
 // adapts a ClipboardRegister into text.Clipboard
 type pluginRegister struct {
-	// plugins cannot provide storage for editor.ClipboardData's empty interface field
+	// plugins cannot provide storage for text.ClipboardData's empty interface field
 	metadata interface{}
 	r        ClipboardRegister
 }
@@ -242,21 +273,21 @@ func (r *pluginRegister) Close() error {
 	return nil
 }
 
-func dialClipboardSetter(token uint32, broker proto.MuxBroker) (
-	ClipboardSetter, error,
+func dialClipboard(token uint32, broker proto.MuxBroker) (
+	Clipboard, error,
 ) {
 	conn, err := broker.Dial(token)
 	if err != nil {
 		return nil, err
 	}
-	c := newClipboardSetterClient(&pluginLogger, broker, conn)
+	c := newClipboardClient(&pluginLogger, broker, conn)
 	return c, nil
 }
 
-// Clipboard acquires the remote plugin.ClipboardSetter
+// GetClipboard acquires the remote plugin.ClipboardSetter
 // with the given permission token and broker.
-func Clipboard(token uint32, broker proto.MuxBroker) (
-	ClipboardSetter, error,
+func GetClipboard(token uint32, broker proto.MuxBroker) (
+	Clipboard, error,
 ) {
-	return dialClipboardSetter(token, broker)
+	return dialClipboard(token, broker)
 }
