@@ -20,7 +20,7 @@ const (
 type clipboardServer struct {
 	proto.UnimplementedClipboardServer
 	broker                proto.MuxBroker
-	mu                    sync.Mutex
+	locker                sync.Locker
 	clients               map[uint64]io.Closer
 	c                     ClipboardSetter
 	failureTimeout        time.Duration
@@ -74,8 +74,10 @@ func (c *clipboardRegisterClient) Close() (ret error) {
 	return
 }
 
+// newClipboardServer expects c, Clipboard to be safe to use concurrently
 func newClipboardServer(
 	logger *log.Logger, broker proto.MuxBroker, c Clipboard,
+	locker sync.Locker,
 ) *clipboardServer {
 	ret := new(clipboardServer)
 	ret.broker = broker
@@ -83,8 +85,10 @@ func newClipboardServer(
 	ret.logger = logger
 	ret.failureTimeout = defaultFailureTimeout
 	ret.clients = make(map[uint64]io.Closer)
-	// to satisfy ClipboardRegister
-	ret.defaultRegisterServer = &clipboardRegisterServer{}
+	ret.locker = locker
+	// to satisfy ClipboardRegister. It doesn't need to be a property
+	// of clipboardServer other than to tie together their lifecycles.
+	ret.defaultRegisterServer = &clipboardRegisterServer{r: c, locker: locker}
 	return ret
 }
 
@@ -103,18 +107,18 @@ func (s *clipboardServer) dialRegister(handlerID uint32) (ClipboardRegister, err
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
-		_, _ = proto.ForceCloseResource(uint64(handlerID), s.getClients, s.logger, &s.mu)
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		_, _ = proto.ForceCloseResource(uint64(handlerID), s.getClients, s.logger, s.locker)
+		s.locker.Lock()
+		defer s.locker.Unlock()
 		if client.hook != nil {
 			client.hook()
 		}
 	})
 
-	client.cancelMonitor = cancelFn
+	s.locker.Lock()
+	defer s.locker.Unlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	client.cancelMonitor = cancelFn
 	s.clients[uint64(handlerID)] = client
 
 	return client, nil
@@ -129,6 +133,9 @@ func (s *clipboardServer) SetRegister(ctx context.Context, req *proto.SetRegiste
 		return nil, err
 	}
 
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
 	registerID := req.GetRegisterId()
 	err = s.c.SetRegister(registerID, register)
 	if err != nil {
@@ -139,15 +146,26 @@ func (s *clipboardServer) SetRegister(ctx context.Context, req *proto.SetRegiste
 }
 
 func (s *clipboardServer) Close() (ret error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.locker.Lock()
+	defer s.locker.Unlock()
+
+	if s.c == nil {
+		return
+	}
 
 	for _, c := range s.clients {
-		err := c.Close()
-		if err != nil {
-			ret = err
+		if err := c.Close(); err != nil {
+			ret = multierr.Append(ret, err)
 		}
 	}
+
+	err := s.defaultRegisterServer.Close()
+	if err != nil {
+		ret = multierr.Append(ret, err)
+	}
+
+	// reference cycle
+	s.c = nil
 
 	return
 }
@@ -165,13 +183,17 @@ type clipboardClient struct {
 
 type clipboardRegisterServer struct {
 	proto.UnimplementedClipboardRegisterServer
-	srv proto.MuxServer
-	r   ClipboardRegister
+	srv    proto.MuxServer
+	r      ClipboardRegister
+	locker sync.Locker
 }
 
 func (c *clipboardRegisterServer) Copy(
 	ctx context.Context, req *proto.ClipboardCopyRequest,
 ) (res *proto.ClipboardCopyResponse, err error) {
+	c.locker.Lock()
+	defer c.locker.Unlock()
+
 	data := req.GetData()
 	err = c.r.Copy(data)
 	if err != nil {
@@ -184,6 +206,9 @@ func (c *clipboardRegisterServer) Copy(
 func (c *clipboardRegisterServer) Paste(
 	ctx context.Context, req *proto.ClipboardPasteRequest,
 ) (res *proto.ClipboardPasteResponse, err error) {
+	c.locker.Lock()
+	defer c.locker.Unlock()
+
 	res = new(proto.ClipboardPasteResponse)
 	res.Data, err = c.r.Paste()
 	if err != nil {
@@ -219,7 +244,7 @@ func newClipboardClient(
 func (c *clipboardClient) serveClipboardRegister(
 	r ClipboardRegister,
 ) (*clipboardRegisterServer, uint32) {
-	rs := &clipboardRegisterServer{r: r}
+	rs := &clipboardRegisterServer{r: r, locker: &c.mu}
 	brokerID, srv := proto.AcceptAndServe(c.broker, c.logger,
 		func(handlerID uint32, srv proto.MuxServer) {
 			proto.RegisterClipboardRegisterServer(srv.GRPC(), rs)

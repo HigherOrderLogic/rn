@@ -42,8 +42,7 @@ type Clipboard interface {
 // ClipboardManager satisfies text.Clipboard by means of a plugin.ClipboardSetter
 // which can be used to install arbitrary plugin.ClipboardRegister implementations.
 type ClipboardManager struct {
-	mu sync.Mutex
-	s  *clipboardServer
+	s *clipboardServer
 	// text.Clipboard is re-used but each implementation is only
 	// used for its registered registerID.
 	registers map[string]*pluginRegister
@@ -70,8 +69,8 @@ func (s *ClipboardManager) Serve(
 	l *log.Logger, lock sync.Locker,
 ) {
 	broker.AcceptAndServe(grantID, func(opts []grpc.ServerOption) proto.MuxServer {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+		lock.Lock()
+		defer lock.Unlock()
 
 		// create a new server every time Serve is called
 		// so ClipboardManager can be shared across workspaces
@@ -85,7 +84,7 @@ func (s *ClipboardManager) Serve(
 
 		// uses this ClipboardManager as the clipboard implementation
 		// for all resource requests.
-		s.s = newClipboardServer(l, broker, (*clipboardManagerServer)(s))
+		s.s = newClipboardServer(l, broker, (*clipboardManagerServer)(s), lock)
 		proto.RegisterClipboardServer(grpc, s.s)
 		proto.RegisterClipboardRegisterServer(grpc, s.s.defaultRegisterServer)
 
@@ -114,9 +113,7 @@ func (s *clipboardManagerServer) Copy(data string) error {
 
 // Paste satisfies ClipboardRegister.
 func (s *ClipboardManager) Paste(registerID string) (d text.ClipboardData, err error) {
-	s.mu.Lock()
 	reg, ok := s.registers[registerID]
-	s.mu.Unlock()
 	if !ok {
 		return
 	}
@@ -133,14 +130,12 @@ func newMultiRegister(initial ClipboardRegister) (*pluginRegister, string) {
 
 // Copy satisfies ClipboardRegister.
 func (s *ClipboardManager) Copy(registerID string, data text.ClipboardData) error {
-	s.mu.Lock()
 	reg, ok := s.registers[registerID]
 	if !ok {
 		adapter := newTextRegister(registerID, text.NewInMemoryClipboard())
 		reg, _ = newMultiRegister(adapter)
 		s.registers[registerID] = reg
 	}
-	s.mu.Unlock()
 
 	return reg.Copy(registerID, data)
 }
@@ -149,9 +144,10 @@ func (s *ClipboardManager) tryAddCloseHook(
 	r ClipboardRegister, rm *pluginRegister, token string,
 ) {
 	if client, ok := r.(*clipboardRegisterClient); ok {
+		// hook should only be called via calls to ClipboardManager.Close(),
+		// or via connection monitoring, in which case both
+		// should already be synchronizing over state
 		client.hook = func() error {
-			s.mu.Lock()
-			defer s.mu.Unlock()
 			rm.r.(*multiClipboard).remove(token)
 			return nil
 		}
@@ -163,8 +159,6 @@ func (s *ClipboardManager) SetRegister(registerID string, r ClipboardRegister) e
 	if registerID == "" {
 		return errors.New("Invalid registerID")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	pr, ok := s.registers[registerID]
 	if !ok {
 		rm, token := newMultiRegister(r)
@@ -186,21 +180,19 @@ func (s *ClipboardManager) SetRegister(registerID string, r ClipboardRegister) e
 	return nil
 }
 
+// Close releases all resources associated with this ClipboardManager.
 func (s *ClipboardManager) Close() (ret error) {
-	s.mu.Lock()
-	closers := []io.Closer{}
 	for _, r := range s.registers {
-		closers = append(closers, r)
-	}
-	if s.s != nil {
-		closers = append(closers, s.s)
-	}
-	s.mu.Unlock()
-
-	for _, r := range closers {
 		if err := r.Close(); err != nil {
 			ret = multierr.Append(ret, err)
 		}
+	}
+
+	if s.s != nil {
+		// avoid deadlock in case this goroutine
+		// is holding the resource mutex passed to the
+		// server
+		go s.s.Close()
 	}
 
 	return

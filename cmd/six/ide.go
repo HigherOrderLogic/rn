@@ -110,6 +110,9 @@ func (i *ide) run() error {
 }
 
 func (i *ide) closeResources() (ret error) {
+	i.root.mu.Lock()
+	defer i.root.mu.Unlock()
+
 	if err := i.root.Close(); err != nil {
 		ret = multierr.Append(ret, err)
 	}

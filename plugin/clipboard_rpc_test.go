@@ -2,24 +2,17 @@ package plugin
 
 import (
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/ernestrc/go-tui/proto"
 	gomock "github.com/golang/mock/gomock"
 	log "github.com/sirupsen/logrus"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/goleak"
 	"google.golang.org/grpc"
 )
-
-type ClipboardRegisterCloser interface {
-	// ClipboardRegister
-	Paste() (string, error)
-	Copy(string) error
-
-	// io.Closer
-	Close() error
-}
 
 func setupClipboardIntTest(
 	t *testing.T, root Clipboard,
@@ -30,8 +23,9 @@ func setupClipboardIntTest(
 	broker := proto.NewDialBroker()
 
 	grpcServer := grpc.NewServer()
-	srv := newClipboardServer(log.New(), broker, root)
+	srv := newClipboardServer(log.New(), broker, root, new(sync.Mutex))
 	proto.RegisterClipboardServer(grpcServer, srv)
+	proto.RegisterClipboardRegisterServer(grpcServer, srv.defaultRegisterServer)
 
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
@@ -63,6 +57,25 @@ func TestClipboardIntegration(t *testing.T) {
 
 		err := client.SetRegister(registerID, nil)
 		require.NoError(t, err)
+	})
+
+	t.Run("client/server call underlying ClipboardRegister", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		mock := NewMockClipboard(ctrl)
+		client, closeFn := setupClipboardIntTest(t, mock)
+		defer closeFn()
+
+		mock.EXPECT().Copy(gomock.Eq("Montessori")).Return(nil)
+
+		err := client.Copy("Montessori")
+		require.NoError(t, err)
+
+		mock.EXPECT().Paste().Return("Montessori", nil)
+		paste, err := client.Paste()
+		require.NoError(t, err)
+		assert.Equal(t, "Montessori", paste)
 	})
 
 	t.Run("server closes does not leak overwritten client register", func(t *testing.T) {

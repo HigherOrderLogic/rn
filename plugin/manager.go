@@ -202,6 +202,7 @@ func (m *Manager) doCloseClient(reason string, client *granteeClientWrap) (
 ) {
 	m.mu.Lock()
 	if client.doneCh == nil {
+		m.mu.Unlock()
 		return nil
 	}
 	ret = client.doneCh
@@ -440,10 +441,4 @@ func (m *Manager) Close() error {
 		return err1
 	}
 	return err2
-}
-
-// ResourceLocker returns a Locker that synchronizes access to
-// resources that have been shared with this manager.
-func (m *Manager) ResourceLocker() sync.Locker {
-	return m.rmu
 }
