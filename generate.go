@@ -9,3 +9,4 @@ package tui
 //go:generate mockgen -destination=./text/editor_gomock.go -package text -self_package github.com/ernestrc/go-tui/text -source ./text/editor.go
 //go:generate mockgen -destination=./text/event_handler_gomock.go -package text -self_package github.com/ernestrc/go-tui/text -source ./text/event_handler.go
 //go:generate mockgen -destination=./workspace/workspace_gomock.go -package workspace -self_package github.com/ernestrc/go-tui/workspace -source ./workspace/workspace.go
+//go:generate mockgen -destination=./text/mouse_gomock.go -package text -self_package github.com/ernestrc/go-tui/text -source ./text/mouse.go
