@@ -1497,7 +1497,8 @@ func (c *Cursor) MoveToPrevLocation(ID string) bool {
 // Word returns the word under the cursor or an empty string if
 // the token under cursor is not a word.
 func (c *Cursor) Word() string {
-	return c.scroll.WordAt(c.cursorAtScroll())
+	_, _, word := c.scroll.WordAt(c.cursorAtScroll())
+	return word
 }
 
 // SubscribeScroll subscribes subs to scroll events. This should be

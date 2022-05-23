@@ -510,7 +510,9 @@ func (s *Scroll) Draw(writer term.Writer) {
 
 // WordAt returns the word at the given position or an empty string if token
 // at the given position is not a word. See TokenAt for more details.
-func (s *Scroll) WordAt(pos term.Coordinates) string {
+func (s *Scroll) WordAt(pos term.Coordinates) (
+	term.Coordinates, term.Coordinates, string,
+) {
 	return s.TokenAt(pos, func(c rune) bool {
 		return (c >= 'A' && c <= 'Z') ||
 			(c >= 'a' && c <= 'z') || c == '_' ||
@@ -518,10 +520,14 @@ func (s *Scroll) WordAt(pos term.Coordinates) string {
 	})
 }
 
-// TokenAt returns the token that satisfies the isAllowed function, and starts,
-// ends or simply is position at the given position. It returns an empty string
-// if the token at the given position does not satisfy isAllowed.
-func (s *Scroll) TokenAt(pos term.Coordinates, isAllowed func(rune) bool) string {
+// TokenAt returns the token that satisfies the isAllowed function
+// and its start and end positions.
+//
+// It returns an empty string if the token at the given position does
+// not satisfy isAllowed.
+func (s *Scroll) TokenAt(pos term.Coordinates, isAllowed func(rune) bool) (
+	term.Coordinates, term.Coordinates, string,
+) {
 	var b strings.Builder
 	cells := s.buf.RawCells()
 	rows := s.buf.Rows()
@@ -537,7 +543,7 @@ func (s *Scroll) TokenAt(pos term.Coordinates, isAllowed func(rune) bool) string
 	}
 
 	if start == pos {
-		return b.String()
+		return start, start, b.String()
 	}
 
 	start.X++
@@ -552,7 +558,7 @@ func (s *Scroll) TokenAt(pos term.Coordinates, isAllowed func(rune) bool) string
 		break
 	}
 
-	return b.String()
+	return start, end, b.String()
 }
 
 // Search performs a text search of text in the internal cell buffer. It populates

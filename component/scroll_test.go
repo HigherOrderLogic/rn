@@ -73,8 +73,8 @@ Love isn't love 'til you give it_away.
 	require.NoError(t, err)
 
 	tsuite := []struct {
-		in  term.Coordinates
-		out string
+		in      term.Coordinates
+		wantOut string
 	}{
 		{term.Coordinates{}, "Love"},
 		{term.Coordinates{X: 4}, ""},
@@ -93,7 +93,15 @@ Love isn't love 'til you give it_away.
 	}
 
 	for _, tcase := range tsuite {
-		assert.Equal(t, tcase.out, scroll.WordAt(tcase.in))
+		start, end, out := scroll.WordAt(tcase.in)
+		assert.Equal(t, tcase.wantOut, out)
+		// start, end used in a select statement should return
+		// return string
+		if out != "" {
+			cells, ok := scroll.Buffer().Select(start, end)
+			require.True(t, ok)
+			assert.Equal(t, tcase.wantOut, cell.CellsToString(cells))
+		}
 	}
 }
 

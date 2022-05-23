@@ -88,12 +88,13 @@ func newGFHandler(
 }
 
 func (f *file) uriAtCursor() string {
-	return f.Scroll.TokenAt(f.CursorAtScroll(), func(r rune) bool {
+	_, _, uri := f.Scroll.TokenAt(f.CursorAtScroll(), func(r rune) bool {
 		return (r >= 'A' && r <= 'Z') ||
 			(r >= 'a' && r <= 'z') || r == '_' ||
 			(r >= '0' && r <= '9') || r == ':' || r == '@' ||
 			r == '+' || r == '/' || r == '.' || r == '-'
 	})
+	return uri
 }
 
 func (h *gfEditorHandler) openFileUnderCursor(uri workspace.URI) error {
