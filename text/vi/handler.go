@@ -200,19 +200,19 @@ func (vi *viHandlerImpl) setYankMode() {
 	vi.setMode(yankMode)
 }
 
-func (vi *viHandlerImpl) setviHandlerVisualMode() {
+func (vi *viHandlerImpl) setVisualMode() {
 	if vi.cursor.Select() {
 		vi.setMode(visualMode)
 	}
 }
 
-func (vi *viHandlerImpl) setviHandlerVisualLineMode() {
+func (vi *viHandlerImpl) setVisualLineMode() {
 	if vi.cursor.SelectLine() {
 		vi.setMode(visualLineMode)
 	}
 }
 
-func (vi *viHandlerImpl) setviHandlerVisualBlockMode() {
+func (vi *viHandlerImpl) setVisualBlockMode() {
 	if vi.cursor.SelectBlock() {
 		vi.setMode(visualBlockMode)
 	}
@@ -434,9 +434,9 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.Delete()
 			vi.setInsertMode()
 		case 'v':
-			vi.setviHandlerVisualMode()
+			vi.setVisualMode()
 		case 'V':
-			vi.setviHandlerVisualLineMode()
+			vi.setVisualLineMode()
 		case 'w':
 			vi.cursor.MoveRightStartWord()
 		case 'W':
@@ -467,9 +467,10 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 		default:
 			switch ev.Key {
 			case term.KeyCtrlV:
-				vi.setviHandlerVisualBlockMode()
+				vi.setVisualBlockMode()
 			case term.KeyEsc:
 				handled = vi.setNormalMode()
+				vi.cursor.Unselect()
 			default:
 				handled = false
 			}
@@ -529,14 +530,14 @@ func (vi *viHandlerImpl) repeatInsertStart() {
 	}
 }
 
-func (vi *viHandlerImpl) handleviHandlerVisualBlockInsertStart() {
+func (vi *viHandlerImpl) handleVisualBlockInsertStart() {
 	vi.setInsertMode()
 	vi.blockRepeat.From, _ = vi.cursor.SelectionFrom()
 	vi.blockRepeat.To = vi.cursor.CursorAtScroll()
 	vi.setCursorAtScroll(vi.blockRepeat.From)
 }
 
-func (vi *viHandlerImpl) handleviHandlerVisual(ev term.Event) (quit, handled bool) {
+func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 	if ev.Key == term.KeyEsc {
 		vi.setNormalMode()
 		vi.cursor.Unselect()
@@ -563,7 +564,7 @@ func (vi *viHandlerImpl) handleviHandlerVisual(ev term.Event) (quit, handled boo
 		case 'I':
 			switch vi.currMode {
 			case visualBlockMode:
-				vi.handleviHandlerVisualBlockInsertStart()
+				vi.handleVisualBlockInsertStart()
 			default:
 				handled = false
 			}
@@ -762,7 +763,7 @@ func (vi *viHandlerImpl) Handle(ev term.Event) (quit, handled bool) {
 	case deleteMode:
 		quit, handled = vi.handleDelete(ev)
 	case visualMode, visualLineMode, visualBlockMode:
-		quit, handled = vi.handleviHandlerVisual(ev)
+		quit, handled = vi.handleVisual(ev)
 	case replaceMode:
 		quit, handled = vi.handleReplace(ev)
 	case replaceOneMode:

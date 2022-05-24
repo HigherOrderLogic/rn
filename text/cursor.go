@@ -203,8 +203,7 @@ func (c *Cursor) MoveToScroll(pos term.Coordinates) (
 // the bounds of the current view, then underlying scroll is used
 // to seek to pos.
 func (c *Cursor) moveToScroll(pos term.Coordinates) {
-	c.scroll.SeekTo(term.Coordinates{X: pos.X, Y: pos.Y})
-	c.cursor = c.scrollToWindowCoordinates(pos)
+	c.setCursor(c.scrollToWindowCoordinates(pos))
 }
 
 func (c *Cursor) seekToScrollCoordinates() {
@@ -1509,7 +1508,7 @@ func (c *Cursor) SubscribeScroll(subs component.ScrollSubscriber) {
 	c.scroll.Subscribe(subs)
 }
 
-// NewMark returns a new cursor mark from the given pos content coordinates
-func (c *Cursor) NewMark(pos term.Coordinates) CursorMark {
-	return CursorMark{c.scrollToWindowCoordinates(pos)}
+// ScrollCoordinates translates window coordinates to the scroll coordinates system.
+func (c *Cursor) ScrollCoordinates(pos term.Coordinates) term.Coordinates {
+	return c.windowToScrollCoordinates(pos)
 }

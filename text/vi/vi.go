@@ -30,6 +30,7 @@ type Vi struct {
 	handler   viHandler
 	buf       *cell.Buffer
 	cursor    *text.Cursor
+	mouse     *text.Mouse
 	logger    *log.Logger
 	messenger text.Messenger
 	less      *handler.Less
@@ -68,6 +69,7 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspace.URI, opts ...Option) {
 	vi.messenger = viHandler.config.messenger
 	vi.less = &viHandler.less
 	vi.cursor = &viHandler.cursor
+	vi.mouse = text.NewMouse(newMouseDelegate(viHandler))
 	vi.clipboard = viHandler.config.clipboard
 
 	vi.repeatEdits = make([]term.Event, 0)
@@ -161,6 +163,10 @@ func (vi *Vi) Copy(registerID string, data text.ClipboardData) error {
 
 // Handle satisfies tui.Handler
 func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
+	if ev.Type == term.EventMouse {
+		return vi.mouse.Handle(ev)
+	}
+
 	switch vi.handler.mode() {
 	case normalMode:
 		switch ev.Type {
