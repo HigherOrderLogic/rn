@@ -158,9 +158,11 @@ func TestMouseHandle(t *testing.T) {
 					expectSetSelectionStart(t, 1, 2),
 				),
 				multiExpect(
+					expectScrollDown(t, 3),
 					expectSetSelectionEnd(t, 4, 8),
 				),
 				multiExpect(
+					expectScrollDown(t, 3),
 					expectSetSelectionEnd(t, 4, 9),
 				),
 				multiExpect(

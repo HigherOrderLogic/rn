@@ -135,6 +135,11 @@ func (h *Mouse) handleLeftClickSelect(pos term.Coordinates) (handled bool) {
 	if h.mousePressedLeft { /* drag */
 		handled = true
 		h.delegate.SetSelectionEnd(pos)
+		if pos.Y < 4 {
+			h.delegate.ScrollUp(3)
+		} else if pos.Y > h.delegate.Height()-4 {
+			h.delegate.ScrollDown(3)
+		}
 		return
 	}
 
