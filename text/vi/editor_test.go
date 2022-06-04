@@ -54,7 +54,7 @@ func TestEditorDispatchScroll(t *testing.T) {
 	require.NoError(t, err)
 
 	h.Resize(2, 2)
-	h.Handle(term.Event{Ch: 'j'})
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 
 	at := term.Coordinates{X: -1}
 	ed.SubscribeEditorEvents([]text.EventType{text.EventTypeScroll},
@@ -63,15 +63,15 @@ func TestEditorDispatchScroll(t *testing.T) {
 			return false
 		}))
 
-	h.Handle(term.Event{Ch: 'k'})
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
 	assert.Equal(t, term.Coordinates{}, at)
 
 	at = term.Coordinates{X: -1}
-	h.Handle(term.Event{Ch: 'j'})
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 	assert.Equal(t, term.Coordinates{Y: 1}, at)
 
 	at = term.Coordinates{X: -1}
-	h.Handle(term.Event{Ch: 'j'})
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 	assert.Equal(t, term.Coordinates{X: -1}, at)
 }
 
@@ -98,17 +98,17 @@ func TestEditorDispatchCursor(t *testing.T) {
 			return false
 		}))
 
-	h.Handle(term.Event{Ch: 'k'})
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'k'})
 	assert.Equal(t, term.Coordinates{X: -1}, windowCursor)
 	assert.Equal(t, term.Coordinates{X: -1}, scrollCursor)
 
-	h.Handle(term.Event{Ch: 'j'})
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'j'})
 	assert.Equal(t, term.Coordinates{Y: 0}, windowCursor)
 	assert.Equal(t, term.Coordinates{Y: 1}, scrollCursor)
 
 	windowCursor = term.Coordinates{X: -1}
 	scrollCursor = term.Coordinates{X: -1}
-	h.Handle(term.Event{Ch: 'l'})
+	h.Handle(term.Event{Type: term.EventKey, Ch: 'l'})
 	assert.Equal(t, term.Coordinates{X: 1}, windowCursor)
 	assert.Equal(t, term.Coordinates{Y: 1, X: 1}, scrollCursor)
 }

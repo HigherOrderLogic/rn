@@ -1,9 +1,8 @@
 //go:build !js
-// +build !js
 
 package term
 
-import "github.com/nsf/termbox-go"
+import "github.com/ernestrc/tcell/v2/termbox"
 
 // Cell colors, you can combine a color with multiple attributes using bitwise
 // OR ('|').
@@ -140,8 +139,9 @@ const (
 
 // Alt modifier constant, see Event.Mod field and SetInputMode function.
 const (
-	ModAlt    Modifier = Modifier(termbox.ModAlt)
-	ModMotion          = Modifier(termbox.ModMotion)
-	modCtrl            = Modifier(0x11)
-	modShift           = Modifier(0x10)
+	ModAlt Modifier = Modifier(termbox.ModAlt)
+	// TODO remove
+	ModMotion = Modifier(0x22)
+	modCtrl   = Modifier(0x11)
+	modShift  = Modifier(0x10)
 )

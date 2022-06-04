@@ -45,9 +45,9 @@ func (h *mockHandler) Handle(ev term.Event) (bool, bool) {
 	h.received = append(h.received, ev)
 	switch ev.Ch {
 	case '#': // map for convenience
-		ev = term.Event{Key: term.KeyEsc}
+		ev = term.Event{Type: term.EventKey, Key: term.KeyEsc}
 	case '&':
-		ev = term.Event{Key: term.KeyEnter}
+		ev = term.Event{Type: term.EventKey, Key: term.KeyEnter}
 	}
 	h.h.Handle(ev)
 	return false, true
@@ -181,7 +181,7 @@ func testViHandleSize(t *testing.T, width, height int) {
 		vi.handler = mock
 		vi.Resize(width, height)
 		for _, ch := range in {
-			ev := term.Event{Ch: ch}
+			ev := term.Event{Type: term.EventKey, Ch: ch}
 			vi.Handle(ev)
 		}
 		var received strings.Builder
@@ -240,12 +240,12 @@ Love isn't love 'til you give it away.
 
 			for i := 0; i < 5; i++ {
 				for _, ch := range tcase.cmd {
-					ev := term.Event{Ch: ch}
+					ev := term.Event{Type: term.EventKey, Ch: ch}
 					vi.Handle(ev)
 				}
 				assert.NotEqual(t, undoFortune, buf.String())
-				vi.Handle(term.Event{Key: term.KeyEsc})
-				quit, handled := vi.Handle(term.Event{Ch: 'u'})
+				vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+				quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 				assert.False(t, quit)
 				assert.True(t, handled)
 			}
@@ -264,16 +264,16 @@ Love isn't love 'til you give it away.
 
 		for _, tcase := range suite {
 			for _, ch := range tcase.cmd {
-				ev := term.Event{Ch: ch}
+				ev := term.Event{Type: term.EventKey, Ch: ch}
 				vi.Handle(ev)
 			}
-			vi.Handle(term.Event{Key: term.KeyEsc})
+			vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
 		}
 
 		middle := buf.String()
 
 		for i := range suite {
-			quit, handled := vi.Handle(term.Event{Ch: 'u'})
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
 		}
@@ -282,7 +282,7 @@ Love isn't love 'til you give it away.
 		assert.Equal(t, prev, after)
 
 		for i := range suite {
-			quit, handled := vi.Handle(term.Event{Key: term.KeyCtrlR})
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyCtrlR})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
 		}
@@ -291,7 +291,7 @@ Love isn't love 'til you give it away.
 		assert.Equal(t, middle, afterRedo)
 
 		for i := range suite {
-			quit, handled := vi.Handle(term.Event{Ch: 'u'})
+			quit, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 			assert.False(t, quit, i)
 			assert.True(t, handled, i)
 		}
@@ -308,17 +308,17 @@ func TestIntegrationInsertRowBelow(t *testing.T) {
 	vi.Resize(4, 4)
 
 	for _, ch := range "Goworld" {
-		vi.Handle(term.Event{Ch: ch})
+		vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
 	}
 	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
 
-	vi.Handle(term.Event{Key: term.KeyEsc})
-	_, handled := vi.Handle(term.Event{Ch: 'u'})
+	vi.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
+	_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'u'})
 	require.True(t, handled)
 	require.Equal(t, "hello", vi.less.Buffer().String())
 
 	for _, ch := range "Goworld" {
-		vi.Handle(term.Event{Ch: ch})
+		vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
 	}
 	assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
 }
@@ -365,13 +365,13 @@ func TestCopyDelete(t *testing.T) {
 			vi.Resize(10, 10)
 
 			for _, ch := range tcase.in {
-				ev := term.Event{Ch: ch}
+				ev := term.Event{Type: term.EventKey, Ch: ch}
 				if ch == '#' {
-					ev = term.Event{Key: term.KeyEsc}
+					ev = term.Event{Type: term.EventKey, Key: term.KeyEsc}
 				} else if ch == '<' {
-					ev = term.Event{Key: term.KeyBackspace}
+					ev = term.Event{Type: term.EventKey, Key: term.KeyBackspace}
 				} else if ch == 'R' {
-					ev = term.Event{Key: term.KeyCtrlR}
+					ev = term.Event{Type: term.EventKey, Key: term.KeyCtrlR}
 				}
 				vi.Handle(ev)
 			}

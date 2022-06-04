@@ -309,12 +309,14 @@ func testServerSplit(t *testing.T, expectedSplit Orientation, split proto.Orient
 		Orientation: split,
 	}
 	protoEv := proto.Event{
+		Type:   proto.Event_TypeMouse,
 		Key:    proto.Event_MouseMiddle,
 		Mod:    proto.Event_Motion,
 		MouseX: 10,
 		MouseY: 1393291,
 	}
 	termEv := term.Event{
+		Type:   term.EventMouse,
 		Key:    term.MouseMiddle,
 		Mod:    term.ModMotion,
 		MouseX: 10,

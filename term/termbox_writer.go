@@ -1,12 +1,9 @@
 //go:build !js
-// +build !js
 
 package term
 
 import (
-	"github.com/nsf/termbox-go"
-	// TODO should use
-	// https://github.com/gdamore/tcell/blob/master/termbox/compat.go
+	"github.com/ernestrc/tcell/v2/termbox"
 )
 
 type termboxWriter struct{}
@@ -22,7 +19,7 @@ func (w termboxWriter) Flush() error {
 }
 
 func (w termboxWriter) Clear(attr Attributes) (err error) {
-	err = termbox.Clear(termbox.Attribute(attr.Fg), termbox.Attribute(attr.Bg))
+	termbox.Clear(termbox.Attribute(attr.Fg), termbox.Attribute(attr.Bg))
 	return
 }
 
