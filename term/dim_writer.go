@@ -18,7 +18,7 @@ func DimAttr(attr Attribute) Attribute {
 	switch attr {
 	case 0:
 		attr = 103
-	case 17, 233:
+	case 1, 17, 233:
 		/* cannot dim a black */
 	case 53, 89, 125, 161, 197:
 		attr -= 36
@@ -34,9 +34,9 @@ func DimAttr(attr Attribute) Attribute {
 	case ColorGreen:
 		attr = 71
 	case ColorYellow:
-		attr = 215
+		attr = 137
 	case ColorBlue:
-		attr = 20
+		attr = 238
 	case 6:
 		attr = 131
 	case 7:
@@ -52,7 +52,7 @@ func DimAttr(attr Attribute) Attribute {
 	case 12:
 		attr = ColorYellow
 	case 13:
-		attr = 25
+		attr = ColorBlue
 	case 14:
 		attr = 6
 	case 15:
