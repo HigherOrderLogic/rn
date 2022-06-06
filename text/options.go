@@ -18,7 +18,6 @@ type CommandOverlayConfig struct {
 	Frame            bool
 	Width, Height    int
 	MatchedTextAttr  term.Attributes
-	CountAttr        term.Attributes
 	FocusElementAttr term.Attributes
 	ElementAttr      term.Attributes
 }
@@ -49,7 +48,6 @@ func DefaultCommandOverlayConfig() (cfg CommandOverlayConfig) {
 	cfg.Width = 50
 	cfg.Height = 14
 	cfg.MatchedTextAttr = term.Attributes{Fg: term.ColorRed}
-	cfg.CountAttr = term.Attributes{Fg: term.ColorRed | term.AttrBold}
 	cfg.FocusElementAttr = term.Attributes{Fg: term.AttrBold | term.ColorRed}
 	cfg.ElementAttr = term.Attributes{}
 	return

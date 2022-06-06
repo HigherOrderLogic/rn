@@ -62,14 +62,16 @@ func (h *commandListHandler) init(
 	// but we can display arguments
 	h.buf.Init()
 	h.responsive = component.BufferResponsive(&h.buf,
-		component.StringConfig{})
+		component.StringConfig{
+			Attributes:           overlayCfg.ElementAttr,
+			BackgroundAttributes: overlayCfg.ElementAttr,
+		})
 
 	cfg := search.ListConfig{
 		Algo:             search.FuzzyMatch,
 		Interrupt:        term.Interrupt,
 		CaseSensitive:    false,
 		MatchedTextAttr:  &overlayCfg.MatchedTextAttr,
-		CountAttr:        &overlayCfg.CountAttr,
 		FocusElementAttr: &overlayCfg.FocusElementAttr,
 		ElementAttr:      &overlayCfg.ElementAttr,
 	}

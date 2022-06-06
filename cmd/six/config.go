@@ -338,10 +338,6 @@ func (c ideConfig) commandOverlayMatchedTextAttr() (ret term.Attributes) {
 		text.DefaultCommandOverlayConfig().MatchedTextAttr)
 }
 
-func (c ideConfig) commandOverlayCountAttr() (ret term.Attributes) {
-	return c.getCommandAttr("count_attr", text.DefaultCommandOverlayConfig().CountAttr)
-}
-
 func (c ideConfig) commandOverlayFocusElementAttr() (ret term.Attributes) {
 	return c.getCommandAttr("focus_element_attr", text.DefaultCommandOverlayConfig().FocusElementAttr)
 }
@@ -356,7 +352,6 @@ func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
 		Width:            c.commandOverlayWidth(),
 		Height:           c.commandOverlayHeight(),
 		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(),
-		CountAttr:        c.commandOverlayCountAttr(),
 		FocusElementAttr: c.commandOverlayFocusElementAttr(),
 		ElementAttr:      c.commandOverlayElementAttr(),
 	}

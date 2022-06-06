@@ -11,6 +11,7 @@ import (
 
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/browser"
+	"github.com/ernestrc/go-tui/component"
 	"github.com/ernestrc/go-tui/handler/search"
 	"github.com/ernestrc/go-tui/plugin"
 	"github.com/ernestrc/go-tui/proto"
@@ -53,6 +54,7 @@ type fuzzyFinderHandler struct {
 	quitChan     chan struct{}
 	height       int
 	list         search.List
+	background   tui.Component
 	listHandler  tui.Handler
 	killed       bool
 
@@ -304,6 +306,13 @@ func New(
 		h.addSearchHistory(searchQuery)
 	})
 
+	var defCell term.Cell
+	if listConfig.ElementAttr != nil {
+		defCell.Bg = listConfig.ElementAttr.Bg
+		defCell.Fg = listConfig.ElementAttr.Fg
+	}
+	h.background = component.WithBackground(h.listHandler, defCell)
+
 	go h.scanData()
 
 	return h, nil
@@ -332,11 +341,11 @@ func (h *fuzzyFinderHandler) getListConfig(config plugin.Config) search.ListConf
 		CaseSensitive: caseSensitive,
 	}
 
-	matchedTextAttr, err := plugin.GetAttributes(config, "match_text_attr")
+	matchedTextAttr, err := plugin.GetAttributes(config, "matched_text_attr")
 	if err != nil && err != plugin.ErrNotFound {
-		log.Errorf("failed to load 'match_base_attr' from config: %v", err)
+		log.Errorf("failed to load 'matched_text_attr' from config: %v", err)
 	} else if err == nil {
-		log.Tracef("loaded 'match_base_attr' from config: %v", matchedTextAttr)
+		log.Tracef("loaded 'matchied_text_attr' from config: %v", matchedTextAttr)
 		cfg.MatchedTextAttr = &matchedTextAttr
 	}
 
@@ -372,14 +381,14 @@ func (h *fuzzyFinderHandler) Resize(width, height int) {
 	defer h.mu.Unlock()
 
 	h.height = height
-	h.listHandler.Resize(width, height)
+	h.background.Resize(width, height)
 }
 
 func (h *fuzzyFinderHandler) Draw(w term.Writer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.listHandler.Draw(w)
+	h.background.Draw(w)
 }
 
 func (h *fuzzyFinderHandler) writeLastSearchQuery() {
