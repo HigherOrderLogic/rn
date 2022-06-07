@@ -570,7 +570,7 @@ func (c *Component) Flush(win browser.Window) error {
 		return fmt.Errorf("editor.Component.Flush: win.Content: %v", err)
 	}
 	t, ok := content.(*browser.Tab)
-	if !ok {
+	if !ok || t.Closer() == nil {
 		return ErrInvalidSave
 	}
 

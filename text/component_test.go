@@ -785,3 +785,63 @@ func testTabIntegration(t *testing.T,
 		testutil.TestHandlerIsolated(t, fn, 20, 10, cases)
 	})
 }
+
+func TestFlush(t *testing.T) {
+	resource1, err := workspace.ParseURI("file:///a")
+	require.NoError(t, err)
+
+	t.Run("calls underlying closer Flush", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mock := NewMockHandler(ctrl)
+		mockEditor := NewMockEditor(ctrl)
+		mockWorkspace := workspace.NewMockResourceOpener(ctrl)
+		mockFlusherCloser := workspace.NewMockFlusherCloser(ctrl)
+
+		c := newTestComponent(t, mockEditor)
+		c.workspace = mockWorkspace
+
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		mockWorkspace.EXPECT().Open(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(mockFlusherCloser, nil).Times(1)
+		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
+		mockEditor.EXPECT().CellView(gomock.Any()).
+			Return(NewCellView(cell.NewBuffer().View())).Times(1)
+		mockEditor.EXPECT().Edit(gomock.Any(), gomock.Any()).Return(mock, nil)
+
+		h, err := c.OpenFileTab(resource1, true)
+		require.NoError(t, win.SetContent(h))
+
+		mockFlusherCloser.EXPECT().Flush().Times(1)
+		require.NoError(t, c.Flush(win))
+	})
+
+	t.Run("returns ErrInvalidSave if called on tab with nil closer handle", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mock := NewMockHandler(ctrl)
+		c := newTestComponent(t, nil)
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).Times(1)
+		h, err := c.Tab(resource1, "Rupi Kaur", mock)
+		require.NoError(t, win.SetContent(h))
+
+		require.Equal(t, ErrInvalidSave, c.Flush(win))
+	})
+
+	t.Run("returns ErrInvalidSave if called on non-tab", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mock := NewMockHandler(ctrl)
+		c := newTestComponent(t, nil)
+		win, err := c.Focus()
+		require.NoError(t, err)
+
+		mock.EXPECT().Resize(gomock.Any(), gomock.Any()).AnyTimes()
+		_, err = c.Split(browser.OrientationTop, mock)
+		require.NoError(t, err)
+
+		require.Equal(t, ErrInvalidSave, c.Flush(win))
+	})
+}
