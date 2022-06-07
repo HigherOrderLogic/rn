@@ -19,6 +19,7 @@ import (
 	"github.com/ernestrc/go-tui/proto"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/text"
+	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -238,7 +239,7 @@ func (h *fileBarEditorHandler) setFileDirty(filename string, dirty bool) {
 
 func (h *fileBarEditorHandler) handleEvents() {
 	for ev := range h.ch {
-		if ev.Resource == nil {
+		if ev.URI == (workspace.URI{}) {
 			continue
 		}
 
