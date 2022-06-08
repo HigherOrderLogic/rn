@@ -294,11 +294,16 @@ func (e *emulator) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 	return
 }
 
-// TODO handle signals elegantly so plugins know that they should interrupt whatever.
+// TODO figure out a way to not close tab on last ctrl-w on a terminal
+//       - maybe should change all bindings thing to use meta rather than ctrl?
+//       - could simply use ctrl-q
+// TODO fix passing env variables to six plugin terminal
+// TODO handle double ctrl-c by sending SIGINT to underlying terminal.
+//	- expose as command and add default binding
 // TODO reading from stdout should not block the next resize
-// TODO add fullscreen handling for window manager
-// TODO fix control of windows, it should work in all scenarios
-// TODO workspaces switching, no hardcoded defaults. Should use <c-x><c-{i}>
+// TODO add fullscreen capabilities to window manager
+// TODO add moving of windows for window manager
+// NOTE: ito reading large file from stdout blocking the whole editor
 // what's probably happenning is a thundering herd effect
 // calls to publish interrupt are flooding client and server goroutine pools
 // so a resize is unlikely to go through responsively
