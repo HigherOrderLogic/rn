@@ -18,27 +18,12 @@ func TestSequencer(t *testing.T) {
 		}}
 		s := NewSequencer(interests, 1*time.Hour)
 
-		seq, match := s.Handle(term.Event{Type: term.EventKey, Ch: 'd'})
-		assert.False(t, match)
+		seq, match := s.Sequence(term.KeyComb{Ch: 'd'})
+		assert.Equal(t, SequencePartialMatch, match)
 		assert.Zero(t, seq)
 
-		seq, match = s.Handle(term.Event{Type: term.EventKey, Ch: 'd'})
-		require.True(t, match)
-		assert.Equal(t, interests[0], seq)
-	})
-	t.Run("ignores superfluous event fields in Handle", func(t *testing.T) {
-		interests := []Sequence{{
-			First: term.KeyComb{Ch: 'd'},
-			Last:  term.KeyComb{Ch: 'd'},
-		}}
-		s := NewSequencer(interests, time.Hour)
-
-		seq, match := s.Handle(term.Event{Type: term.EventKey, MouseY: 1, Ch: 'd'})
-		assert.False(t, match)
-		assert.Zero(t, seq)
-
-		seq, match = s.Handle(term.Event{Type: term.EventKey, MouseY: 1, Ch: 'd'})
-		require.True(t, match)
+		seq, match = s.Sequence(term.KeyComb{Ch: 'd'})
+		require.Equal(t, SequenceMatch, match)
 		assert.Equal(t, interests[0], seq)
 	})
 	t.Run("does not return match if it took too long for second event", func(t *testing.T) {
@@ -48,14 +33,14 @@ func TestSequencer(t *testing.T) {
 		}}
 		s := NewSequencer(interests, 1*time.Nanosecond)
 
-		seq, match := s.Handle(term.Event{Type: term.EventKey, MouseY: 1, Ch: 'd'})
-		assert.False(t, match)
+		seq, match := s.Sequence(term.KeyComb{Ch: 'd'})
+		assert.Equal(t, SequencePartialMatch, match)
 		assert.Zero(t, seq)
 
 		time.Sleep(time.Millisecond)
 
-		seq, match = s.Handle(term.Event{Type: term.EventKey, MouseY: 1, Ch: 'd'})
-		require.False(t, match)
+		seq, match = s.Sequence(term.KeyComb{Ch: 'd'})
+		require.Equal(t, SequencePartialMatch, match)
 		assert.Zero(t, seq)
 	})
 	t.Run("returns sequence match even if last event failed to match with initial event", func(t *testing.T) {
@@ -65,18 +50,37 @@ func TestSequencer(t *testing.T) {
 		}}
 		s := NewSequencer(interests, 25*time.Millisecond)
 
-		seq, match := s.Handle(term.Event{Type: term.EventKey, MouseY: 1, Ch: 'd'})
-		assert.False(t, match)
+		seq, match := s.Sequence(term.KeyComb{Ch: 'd'})
+		assert.Equal(t, SequencePartialMatch, match)
 		assert.Zero(t, seq)
 
 		time.Sleep(40 * time.Millisecond)
 
-		seq, match = s.Handle(term.Event{Type: term.EventKey, MouseY: 1, Ch: 'd'})
-		require.False(t, match)
+		seq, match = s.Sequence(term.KeyComb{Ch: 'd'})
+		assert.Equal(t, SequencePartialMatch, match)
 		assert.Zero(t, seq)
 
-		seq, match = s.Handle(term.Event{Type: term.EventKey, MouseY: 1, Ch: 'd'})
-		require.True(t, match)
+		seq, match = s.Sequence(term.KeyComb{Ch: 'd'})
+		assert.Equal(t, SequenceMatch, match)
+		assert.Equal(t, interests[0], seq)
+	})
+	t.Run("returns SequenceNoMatch if there's is no match", func(t *testing.T) {
+		interests := []Sequence{{
+			First: term.KeyComb{Ch: 'x'},
+			Last:  term.KeyComb{Ch: 'd'},
+		}}
+		s := NewSequencer(interests, 1*time.Hour)
+
+		seq, match := s.Sequence(term.KeyComb{Ch: 'd'})
+		assert.Equal(t, SequenceNoMatch, match)
+		assert.Zero(t, seq)
+
+		seq, match = s.Sequence(term.KeyComb{Ch: 'x'})
+		require.Equal(t, SequencePartialMatch, match)
+		assert.Zero(t, seq)
+
+		seq, match = s.Sequence(term.KeyComb{Ch: 'd'})
+		require.Equal(t, SequenceMatch, match)
 		assert.Equal(t, interests[0], seq)
 	})
 }

@@ -69,7 +69,7 @@ func DefaultConfig() Config {
 		SequencerTimeout:        400 * time.Millisecond,
 		CommandOverlay:          DefaultCommandOverlayConfig(),
 		SendInterrupt:           term.Interrupt,
-		SendEventNone:           term.SendNoneEvent,
+		SendEventNone:           term.PublishNoneEvent,
 	}
 	return cfg
 }

@@ -651,7 +651,7 @@ func TestExCommandResponsive(t *testing.T) {
 
 func TestExKeySequence(t *testing.T) {
 	cases := []testutil.HandlerSequenceTestCase{
-		{"gl",
+		{"zgl",
 			`┌──────────────────┐
 │10k.go  button.go │
 ├──────────────────┤
@@ -661,6 +661,41 @@ func TestExKeySequence(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
 │AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+		{"g",
+			`┌──────────────────┐
+│10k.go  button.go │
+├──────────────────┤
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+│AAAAAAAAAAAAAAAAAA│
+└──────────────────┘`},
+		{"go",
+			`┌──────────────────┐
+│10k.go  button.go │
+├──────────────────┤
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+└──────────────────┘`},
+		// 2 seconds of wait should be plenty for sequencer to deem 'g' sequence
+		// stale and re-issue event.
+		{"g____________________",
+			`┌──────────────────┐
+│10k.go  button.go │
+├──────────────────┤
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBBBBBB│
 └──────────────────┘`},
 		{"gg",
 			`┌──────────────────┐
@@ -694,7 +729,7 @@ func TestExKeySequence(t *testing.T) {
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'g'},
 			}, []string{"bufferCloseAll"}),
-			text.WithSequencerTimeout(10 * time.Second),
+			text.WithSequencerTimeout(1 * time.Second),
 		}
 		initExForTesting(t, b, text.Mock(), opts...)
 		closeFns = append(closeFns, b.Close)
@@ -833,6 +868,9 @@ func initExForTestingWithWorkspace(
 ) {
 	require.NoError(t, ex.doInit(ed, workspace, exCommandList, nil, opts...))
 	require.NoError(t, ex.comp.Init(ex.ed, workspace, ex.config))
+	ex.publishEvent = func(ev term.Event) {
+		_, _ = ex.Handle(ev)
+	}
 }
 
 func initExForTesting(t *testing.T, ex *ex, ed text.Editor, opts ...text.Option) {

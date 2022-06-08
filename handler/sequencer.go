@@ -9,6 +9,14 @@ import (
 	"github.com/ernestrc/go-tui/term"
 )
 
+type SequenceMatchResult uint8
+
+const (
+	SequenceNoMatch SequenceMatchResult = iota
+	SequencePartialMatch
+	SequenceMatch
+)
+
 // Sequence represents a term.EventKey sequence. For matching purposes,
 // only Event.Mod, Event.Key and Event.Ch are considered,
 // the rest of fields are ignored.
@@ -52,22 +60,26 @@ func (s *Sequencer) Init(interests []Sequence, timeout time.Duration) {
 	s.ctxClean()
 }
 
-// Handle processes ev and returns whether there's a match or not,
-// and if so, which sequence was processed. It ignores events that are not
-// of Type term.EventKey.
-func (s *Sequencer) Handle(ev term.Event) (seq Sequence, match bool) {
-	if ev.Type != term.EventKey {
-		return
-	}
-
+// Sequence processes ev and returns whether there's a sequence match or not,
+// and if so, which sequence was processed.
+func (s *Sequencer) Sequence(key term.KeyComb) (
+	seq Sequence, match SequenceMatchResult,
+) {
 	first := s.first
+	last := key
+
 	firstCtx := s.firstCtx
 	ctxClean := s.ctxClean
-	last := ev.KeyComb()
-
 	defer ctxClean()
+
 	s.firstCtx, s.ctxClean = context.WithTimeout(context.Background(), s.timeout)
 	s.first = last
+
+	if _, ok := s.interests[last]; ok {
+		match = SequencePartialMatch
+	} else {
+		match = SequenceNoMatch
+	}
 
 	select {
 	case <-firstCtx.Done():
@@ -88,7 +100,7 @@ func (s *Sequencer) Handle(ev term.Event) (seq Sequence, match bool) {
 	// first is consumed if match is found
 	s.Reset()
 	seq = Sequence{First: first, Last: last}
-	match = true
+	match = SequenceMatch
 	return
 }
 

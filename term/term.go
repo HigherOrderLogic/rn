@@ -179,9 +179,14 @@ func Interrupt() {
 	mu.Unlock()
 }
 
-// SendNoneEvent sends a term.EventNone to the event poller and
+// PublishEvent sends a synthetic event to the event poller.
+func PublishEvent(ev Event) {
+	events <- ev
+}
+
+// PublishNoneEvent sends a term.EventNone to the event poller and
 // forces event handling which in turn forces redraw.
-func SendNoneEvent() {
+func PublishNoneEvent() {
 	mu.Lock()
 	select {
 	case events <- Event{Type: EventNone}:
