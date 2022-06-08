@@ -333,28 +333,41 @@ func (c ideConfig) promptHighlightAttr() term.Attributes {
 	)
 }
 
-func (c ideConfig) commandOverlayMatchedTextAttr() (ret term.Attributes) {
-	return c.getCommandAttr("matched_text_attr",
-		text.DefaultCommandOverlayConfig().MatchedTextAttr)
+func (c ideConfig) commandOverlayMatchedTextAttr(frame bool) (ret term.Attributes) {
+	def := text.DefaultCommandOverlayConfig().MatchedTextAttr
+	if !frame {
+		def = term.Attributes{Fg: term.ColorRed, Bg: 238}
+	}
+	return c.getCommandAttr("matched_text_attr", def)
 }
 
-func (c ideConfig) commandOverlayFocusElementAttr() (ret term.Attributes) {
-	return c.getCommandAttr("focus_element_attr", text.DefaultCommandOverlayConfig().FocusElementAttr)
+func (c ideConfig) commandOverlayFocusElementAttr(frame bool) (ret term.Attributes) {
+	def := text.DefaultCommandOverlayConfig().FocusElementAttr
+	if !frame {
+		def = term.Attributes{Fg: term.AttrBold | term.ColorRed, Bg: 240}
+	}
+	return c.getCommandAttr("focus_element_attr", def)
 }
 
-func (c ideConfig) commandOverlayElementAttr() (ret term.Attributes) {
-	return c.getCommandAttr("element_attr", text.DefaultCommandOverlayConfig().ElementAttr)
+func (c ideConfig) commandOverlayElementAttr(frame bool) (ret term.Attributes) {
+	def := text.DefaultCommandOverlayConfig().ElementAttr
+	if !frame {
+		def = term.Attributes{Fg: term.ColorWhite, Bg: 238}
+	}
+	return c.getCommandAttr("element_attr", def)
 }
 
 func (c ideConfig) commandOverlayConfig() text.CommandOverlayConfig {
-	return text.CommandOverlayConfig{
-		Frame:            c.commandOverlayFrame(),
+	frame := c.commandOverlayFrame()
+	cfg := text.CommandOverlayConfig{
+		Frame:            frame,
 		Width:            c.commandOverlayWidth(),
 		Height:           c.commandOverlayHeight(),
-		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(),
-		FocusElementAttr: c.commandOverlayFocusElementAttr(),
-		ElementAttr:      c.commandOverlayElementAttr(),
+		MatchedTextAttr:  c.commandOverlayMatchedTextAttr(frame),
+		FocusElementAttr: c.commandOverlayFocusElementAttr(frame),
+		ElementAttr:      c.commandOverlayElementAttr(frame),
 	}
+	return cfg
 }
 
 func (c ideConfig) promptConfig() browser.PromptConfig {
