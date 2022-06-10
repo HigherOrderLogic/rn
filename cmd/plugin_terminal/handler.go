@@ -294,16 +294,20 @@ func (e *emulator) handleInput(ev term.Event) (exit, handled bool, raw []byte) {
 	return
 }
 
-// TODO handle signals elegantly so plugins know that they should interrupt whatever.
-// TODO reading from stdout should not block the next resize
-// TODO add fullscreen handling for window manager
-// TODO fix control of windows, it should work in all scenarios
-// TODO workspaces switching, no hardcoded defaults. Should use <c-x><c-{i}>
-// what's probably happenning is a thundering herd effect
-// calls to publish interrupt are flooding client and server goroutine pools
-// so a resize is unlikely to go through responsively
+// TODO fix remote workspace
 // TODO implement adding SysProcAttr to workspace Start command
 // then hook into creaty.pty to use workspace command
+// TODO fix passing env variables to six plugin terminal
+// TODO make sure that a double ctrl-c is delivered to underlying shell to stop proc
+//	- needs to fix when program is reading printing continously to stdout and
+//    is flooding the system with publish interrupt events.
+//    - reading from stdout should not block the next resize
+// TODO take tcell for a spin and then use Meta key, mouse hints and other features
+// TODO figure out a way to not close tab on last ctrl-w on a terminal
+//       - maybe should change all bindings thing to use meta rather than ctrl?
+//       - could simply use ctrl-q
+// TODO add fullscreen capabilities to window manager
+// TODO add moving of windows for window manager
 func (e *emulator) Handle(ev term.Event) (exit, handled bool) {
 	exit, handled, raw := e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {
