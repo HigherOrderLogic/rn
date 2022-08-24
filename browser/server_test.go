@@ -35,6 +35,9 @@ func newTestServer(ctrl *gomock.Controller, mu *sync.Mutex) (
 	mockBrowser := NewMockBrowser(ctrl)
 	mockBroker := proto.NewMockMuxBroker(ctrl)
 	s := NewServer(mockBroker, mockBrowser, mu)
+
+	mockBroker.EXPECT().Cleanup(gomock.Any()).AnyTimes()
+
 	return s, mockBrowser, mockBroker
 }
 

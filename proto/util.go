@@ -10,8 +10,10 @@ import (
 	"sync"
 	"time"
 
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui"
 	"github.com/ernestrc/go-tui/cell"
+	"github.com/ernestrc/go-tui/debug"
 	"github.com/ernestrc/go-tui/term"
 	"github.com/ernestrc/go-tui/workspace"
 	log "github.com/sirupsen/logrus"
@@ -196,27 +198,33 @@ func DrawResponseToTermString(r *DrawResponse) (str string, width, height int) {
 // ForceCloseResource is a helper function to remove a resource
 // from a resource server or client and close it, safely.
 func ForceCloseResource(
-	brokerID uint64, getResourcesFn func() map[uint64]io.Closer,
-	logger *log.Logger, locker sync.Locker,
+	broker MuxBroker, brokerID uint64, getResourcesFn func() map[uint64]io.Closer,
+	locker sync.Locker,
 ) (io.Closer, error) {
 	locker.Lock()
 	defer locker.Unlock()
 	resources := getResourcesFn()
 	res, ok := resources[brokerID]
 	if !ok {
-		if logger != nil {
-			logger.Debugf("resource %d already closed", brokerID)
-		}
+		debug.StandardLogger().Debugf("resource %d already closed", brokerID)
 		return nil, nil
 	}
 	delete(resources, brokerID)
 
-	err := res.Close()
-	if err != nil && logger != nil {
-		logger.Errorf("resource.Close %d error: %v", brokerID, err)
+	ret := res.Close()
+	if ret != nil {
+		debug.StandardLogger().Errorf("resource.Close %d error: %v", brokerID, ret)
 	}
 
-	return res, err
+	if err := broker.Cleanup(uint32(brokerID)); err != nil {
+		// add to Close error or ignore, if io.Closer
+		// already cleans up underlying resources
+		if ret != nil {
+			ret = multierr.Append(ret, err)
+		}
+	}
+
+	return res, ret
 }
 
 // MonitorConnection blocks the calling goroutine and calls doClosed callback

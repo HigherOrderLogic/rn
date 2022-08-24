@@ -33,6 +33,10 @@ func (p grpcBroker) AcceptAndServe(
 	})
 }
 
+func (p grpcBroker) Cleanup(ID uint32) error {
+	return nil
+}
+
 // GRPCBroker adapts the signature of plugin.GRPCBroker to satisfy MuxBroker.
 // It also wraps the connections returned by Dial, with a trace-level logging
 // connection.

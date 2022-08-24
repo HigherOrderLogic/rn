@@ -32,6 +32,7 @@ func newTestServer(t *testing.T, ctrl *gomock.Controller) (*proto.MockMuxBroker,
 	ed := NewMockEditor(ctrl)
 	expectInitialServerSubscribe(t, ed)
 	s := NewServer(broker, ed, new(sync.Mutex))
+	broker.EXPECT().Cleanup(gomock.Any()).AnyTimes()
 	return broker, ed, s
 }
 

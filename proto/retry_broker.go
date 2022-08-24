@@ -55,6 +55,10 @@ func (b retryBroker) Dial(ID uint32) (conn MuxConn, err error) {
 	return
 }
 
-func (b retryBroker) Close() (err error) {
+func (b retryBroker) Cleanup(ID uint32) error {
+	return b.b.Cleanup(ID)
+}
+
+func (b retryBroker) Close() error {
 	return b.b.Close()
 }

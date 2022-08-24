@@ -80,7 +80,8 @@ func (c *Client) getServers() map[uint64]io.Closer {
 
 func (c *Client) safeForceCloseHandler(brokerID uint32, reason string) error {
 	c.tryLog("editor.Client.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(uint64(brokerID), c.getServers, c.Logger, &c.mu)
+	_, err := proto.ForceCloseResource(c.broker, uint64(brokerID),
+		c.getServers, &c.mu)
 	return err
 }
 

@@ -107,7 +107,8 @@ func (s *clipboardServer) dialRegister(handlerID uint32) (ClipboardRegister, err
 
 	ctx, cancelFn := context.WithCancel(context.Background())
 	go proto.MonitorConnection(ctx, s.failureTimeout, handlerConn, func(reason string) {
-		_, _ = proto.ForceCloseResource(uint64(handlerID), s.getClients, s.logger, s.locker)
+		_, _ = proto.ForceCloseResource(s.broker, uint64(handlerID),
+			s.getClients, s.locker)
 		s.locker.Lock()
 		defer s.locker.Unlock()
 		if client.hook != nil {

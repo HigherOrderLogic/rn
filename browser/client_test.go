@@ -53,6 +53,8 @@ func newMockedClient(ctrl *gomock.Controller) (
 	mockCC = proto.NewMockClientConnInterface(ctrl)
 	mockMux = proto.NewMockMuxBroker(ctrl)
 	client = NewClient(mockMux, mockCC)
+
+	mockMux.EXPECT().Cleanup(gomock.Any()).AnyTimes()
 	return
 }
 

@@ -40,6 +40,12 @@ func (b loggingBroker) Dial(ID uint32) (conn MuxConn, err error) {
 	return
 }
 
+func (b loggingBroker) Cleanup(ID uint32) (err error) {
+	err = b.root.Cleanup(ID)
+	b.logger.Tracef("loggingBroker: Cleanup(%d): %v", ID, err)
+	return err
+}
+
 func (b loggingBroker) Close() error {
 	err := b.root.Close()
 	b.logger.Tracef("loggingBroker: Close(): %v", err)

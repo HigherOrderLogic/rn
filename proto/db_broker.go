@@ -10,6 +10,7 @@ import (
 
 	"github.com/ernestrc/blue/datastore/document"
 	"github.com/ernestrc/blue/retry"
+	multierr "github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/go-tui/util"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -20,7 +21,7 @@ type dbBroker struct {
 	mu        sync.Mutex
 	id        uint32
 	svc       document.Service
-	listeners []net.Listener
+	listeners map[uint32]net.Listener
 	logger    *log.Logger
 }
 
@@ -40,6 +41,7 @@ func NewDatastoreBroker(svc document.Service, logger *log.Logger) MuxBroker {
 	ret.logger = logger
 	// start with 1 so zero-valued uint32 can be interpreted as not valid
 	ret.id = 1
+	ret.listeners = make(map[uint32]net.Listener)
 	return ret
 }
 
@@ -81,6 +83,23 @@ func (t *dbBroker) NextId() uint32 {
 	return t.id
 }
 
+func (t *dbBroker) Cleanup(ID uint32) (ret error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if err := t.svc.Delete(context.Background(), makeListenerDocumentKey(ID)); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	l, ok := t.listeners[ID]
+	if !ok {
+		return
+	}
+	if err := l.Close(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return
+}
+
 func (t *dbBroker) Accept(id uint32) (net.Listener, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -94,7 +113,7 @@ func (t *dbBroker) Accept(id uint32) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
-	t.listeners = append(t.listeners, listener)
+	t.listeners[id] = listener
 	return listener, nil
 }
 
@@ -147,5 +166,5 @@ func (t *dbBroker) Close() error {
 		_ = lis.Close()
 	}
 	t.listeners = nil
-	return nil
+	return t.svc.Close()
 }

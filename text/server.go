@@ -185,8 +185,8 @@ func (s *Server) safeForceCloseHandler(brokerID uint32, reason string) error {
 
 	s.tryLog(log.TraceLevel,
 		"editor.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(uint64(brokerID), s.getClients,
-		s.Logger, s.editor.Locker)
+	_, err := proto.ForceCloseResource(s.broker, uint64(brokerID), s.getClients,
+		s.editor.Locker)
 	return err
 }
 

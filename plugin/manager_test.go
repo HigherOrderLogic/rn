@@ -20,6 +20,10 @@ type nopBroker struct {
 	_closed bool
 }
 
+func (b *nopBroker) Cleanup(uint32) error {
+	return nil
+}
+
 func (b *nopBroker) NextId() uint32 {
 	b.mu.Lock()
 	defer b.mu.Unlock()

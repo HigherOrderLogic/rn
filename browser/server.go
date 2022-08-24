@@ -191,7 +191,8 @@ func (s *Server) getServers() map[uint64]io.Closer {
 
 func (s *Server) forceCloseWindow(winID uint64, reason string) error {
 	s.tryLog("browser.Server.forceCloseWindow(%d, reason=%s)", winID, reason)
-	_, err := proto.ForceCloseResource(winID, s.getServers, s.Logger, nopLocker{})
+	_, err := proto.ForceCloseResource(s.broker, winID,
+		s.getServers, nopLocker{})
 	return err
 }
 
@@ -204,12 +205,14 @@ func (s *Server) tryLog(msg string, args ...interface{}) {
 
 func (s *Server) safeForceCloseHandler(brokerID uint64, reason string) error {
 	s.tryLog("browser.Server.safeForceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(brokerID, s.getClients, s.Logger, &s.browser)
+	_, err := proto.ForceCloseResource(s.broker, brokerID,
+		s.getClients, &s.browser)
 	return err
 }
 func (s *Server) forceCloseHandler(brokerID uint64, reason string) error {
 	s.tryLog("browser.Server.forceCloseHandler(%d, reason=%s)", brokerID, reason)
-	_, err := proto.ForceCloseResource(brokerID, s.getClients, s.Logger, nopLocker{})
+	_, err := proto.ForceCloseResource(s.broker, brokerID,
+		s.getClients, nopLocker{})
 	return err
 }
 
