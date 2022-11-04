@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path"
-	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
@@ -33,6 +32,8 @@ var (
 
 	defaultConfigPath string
 	flagConfigPath    *string
+	defaultDataPath   string
+	flagDataPath      *string
 
 	flagRecover                = flag.String("r", "", "recover from recovery file")
 	flagPprof                  = flag.Bool("p", false, "start pprof server at :6060")
@@ -45,10 +46,13 @@ var (
 func init() {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		home = "."
 	}
 	defaultConfigPath = path.Join(home, ".sixrc")
 	flagConfigPath = flag.String("c", defaultConfigPath, "config file path")
+	defaultDataPath = path.Join(home, ".six")
+	flagDataPath = flag.String("d", defaultDataPath, "data directory path")
 
 	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
 }
@@ -179,26 +183,15 @@ func main() {
 		}
 	}
 
-	// NOTE: not configurable yet but once configuration is migrated to .six/config
-	// it will be passed via CLI.
-	var sixDir string
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		sixDir = filepath.Join(os.TempDir(), ".six")
-		log.Warnf("failed to read user home dir: %v. Installing .six in %s", err, sixDir)
-	} else {
-		sixDir = filepath.Join(homeDir, ".six")
-	}
-
 	var i *ide
 	if *flagRecover != "" && len(filenames) != 0 {
 		i, err = newIdeRecovery(*flagWorkspace, *flagConfigPath,
-			filenames[0], *flagRecover, sixDir, term.PublishEvent)
+			filenames[0], *flagRecover, *flagDataPath, term.PublishEvent)
 	} else if *flagRecover != "" {
 		log.Fatal("flag -r requires to pass the original filename")
 	} else {
 		i, err = newIde(*flagWorkspace, *flagConfigPath,
-			sixDir, term.PublishEvent, filenames...)
+			*flagDataPath, term.PublishEvent, filenames...)
 	}
 
 	if err != nil {
