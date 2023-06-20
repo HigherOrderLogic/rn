@@ -1,1 +1,4 @@
 
+[submodule "cmd/plugin_fuzzy_syntax/plugin/nvim-treesitter"]
+	path = cmd/plugin_fuzzy_syntax/plugin/nvim-treesitter
+	url = git@github.com:nvim-treesitter/nvim-treesitter.git

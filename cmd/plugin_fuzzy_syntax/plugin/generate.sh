@@ -1,4 +1,4 @@
-#!/bin/env bash
+#!/bin/bash
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 QUERIES=$DIR/queries.go
 
@@ -21,14 +21,14 @@ type languageQueries struct {
 var languageQueriesByName = map[string]languageQueries{
 EOF
 
-for language in $(/bin/ls $DIR/testdata/nvim-treesitter/queries | xargs); do \
+for language in $(/bin/ls $DIR/nvim-treesitter/queries | xargs); do \
   echo "\"$language\": languageQueries{" >> $QUERIES; \
 
-  FOLDS=$DIR/testdata/nvim-treesitter/queries/$language/folds.scm
-  HIGHLIGHTS=$DIR/testdata/nvim-treesitter/queries/$language/highlights.scm
-  INDENTS=$DIR/testdata/nvim-treesitter/queries/$language/indents.scm
-  INJECTIONS=$DIR/testdata/nvim-treesitter/queries/$language/injections.scm
-  LOCALS=$DIR/testdata/nvim-treesitter/queries/$language/locals.scm
+  FOLDS=$DIR/nvim-treesitter/queries/$language/folds.scm
+  HIGHLIGHTS=$DIR/nvim-treesitter/queries/$language/highlights.scm
+  INDENTS=$DIR/nvim-treesitter/queries/$language/indents.scm
+  INJECTIONS=$DIR/nvim-treesitter/queries/$language/injections.scm
+  LOCALS=$DIR/nvim-treesitter/queries/$language/locals.scm
 
   if [ -f "$FOLDS" ]; then
     echo "folds: ${language}Folds," >> $QUERIES; \
@@ -57,14 +57,14 @@ done
 echo "}" >> $QUERIES
 
 # define embeds
-for language in $(/bin/ls $DIR/testdata/nvim-treesitter/queries | xargs); do \
+for language in $(/bin/ls $DIR/nvim-treesitter/queries | xargs); do \
   pushd $DIR > /dev/null
 
-  FOLDS=testdata/nvim-treesitter/queries/$language/folds.scm
-  HIGHLIGHTS=testdata/nvim-treesitter/queries/$language/highlights.scm
-  INDENTS=testdata/nvim-treesitter/queries/$language/indents.scm
-  INJECTIONS=testdata/nvim-treesitter/queries/$language/injections.scm
-  LOCALS=testdata/nvim-treesitter/queries/$language/locals.scm
+  FOLDS=nvim-treesitter/queries/$language/folds.scm
+  HIGHLIGHTS=nvim-treesitter/queries/$language/highlights.scm
+  INDENTS=nvim-treesitter/queries/$language/indents.scm
+  INJECTIONS=nvim-treesitter/queries/$language/injections.scm
+  LOCALS=nvim-treesitter/queries/$language/locals.scm
 
   echo "// Language $language scm embeds" >> $QUERIES; \
 
