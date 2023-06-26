@@ -49,6 +49,11 @@ func Buffer(buf *cell.Buffer, cfg StringResponsiveConfig) Responsive {
 	return &respBuf{buf: buf, respStr: respStr{cfg: cfg}}
 }
 
+// NopResponsive returns a Responsive tui.Component that draws nothing.
+func NopResponsive() Responsive {
+	return Buffer(cell.NewBuffer(), StringConfig{})
+}
+
 type respStr struct {
 	cfg StringResponsiveConfig
 	in  [][]term.Cell

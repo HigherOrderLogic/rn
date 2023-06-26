@@ -171,3 +171,67 @@ ZZZZZZZZ`,
 
 	testutil.TestComponent(t, l, w, tests)
 }
+
+func TestResponsiveListResizeLarger(t *testing.T) {
+	l := NewResponsiveList()
+
+	w := term.NewStringWriter(8, 4)
+
+	tests := []testutil.ComponentTestCase{
+		{
+			func() {
+				l.PushBack(&TestResponsive{
+					WantHeight: 2,
+					TestComponent: TestComponent{
+						Ch: 'X',
+					},
+				},
+				)
+				l.PushBack(&TestResponsive{
+					WantHeight: 2,
+					TestComponent: TestComponent{
+						Ch: 'Y',
+					},
+				},
+				)
+				l.PushBack(&TestResponsive{
+					WantHeight: 3,
+					TestComponent: TestComponent{
+						Ch: 'Z',
+					},
+				},
+				)
+				assert.True(t, l.SeekEnd())
+				l.Resize(8, 4)
+				assert.True(t, l.SeekEnd())
+			}, `
+YYYYYYYY
+ZZZZZZZZ
+ZZZZZZZZ
+ZZZZZZZZ`,
+		}, {
+			func() {
+				el, ok := l.ElementAt(term.Coordinates{})
+				require.True(t, ok)
+				v := el.Value().(*TestResponsive)
+				assert.Equal(t, 'Y', v.Ch)
+
+				el, ok = l.ElementAt(term.Coordinates{Y: 1})
+				require.True(t, ok)
+				v = el.Value().(*TestResponsive)
+				assert.Equal(t, 'Z', v.Ch)
+
+				el, ok = l.ElementAt(term.Coordinates{Y: 3})
+				require.True(t, ok)
+				v = el.Value().(*TestResponsive)
+				assert.Equal(t, 'Z', v.Ch)
+			}, `
+YYYYYYYY
+ZZZZZZZZ
+ZZZZZZZZ
+ZZZZZZZZ`,
+		},
+	}
+
+	testutil.TestComponent(t, l, w, tests)
+}

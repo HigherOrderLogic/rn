@@ -348,3 +348,15 @@ func TestBufferWithEdits(t *testing.T) {
 		assert.Equal(t, "a    \nb    \ncxyz \n     \n     ", w.String())
 	})
 }
+
+func TestNopResponsive(t *testing.T) {
+	t.Run("does not panic", func(t *testing.T) {
+		w := term.NewStringWriter(5, 5)
+		s := NopResponsive()
+		s.Resize(4, 4)
+
+		s.Draw(w)
+		require.NoError(t, w.Flush())
+		assert.Equal(t, "     \n     \n     \n     \n     ", w.String())
+	})
+}

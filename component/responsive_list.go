@@ -105,6 +105,8 @@ func (l *ResponsiveList) Remove(e ListNode) Responsive {
 
 // CanSeekDown returns whether SeekDown would seek one row down.
 func (l *ResponsiveList) CanSeekDown() bool {
+	// let it get to == len, so we are always able to draw
+	// a last element that would not fit with a last index == len-1
 	return l.offset.value+l.drawn < l.Len()
 }
 
@@ -112,6 +114,9 @@ func (l *ResponsiveList) CanSeekDown() bool {
 func (l *ResponsiveList) SeekDown() bool {
 	ok := l.CanSeekDown()
 	if ok {
+		// NOTE: we break encapsulation but it's necessary to enable
+		// drawing last element until the end of it, in case the elements
+		// drawn in the screen are > 1 in element height.
 		l.offset.value++
 		l.simulateDraw()
 		l.setDrawOffset()
@@ -122,10 +127,14 @@ func (l *ResponsiveList) SeekDown() bool {
 // SeekEnd shifts the contents of this list such that the last element
 // is drawn at the top of the list.
 func (l *ResponsiveList) SeekEnd() (ok bool) {
-	for l.SeekDown() {
-		ok = true
+	// fix case when a previous seek down/end went past
+	// max offset with new width/height.
+	prev := l.offset.value
+	for l.SeekUp() {
 	}
-	return
+	for l.SeekDown() {
+	}
+	return prev != l.offset.value
 }
 
 // if offset is last, we should make sure last component is fully drawn
@@ -197,9 +206,6 @@ func (l *ResponsiveList) Resize(width, height int) {
 }
 
 // Draw draws this list's elements with the current seek offset.
-// Note that this calls first Resize to cleanup node offsets,
-// so esternallty calling Resize on this tui.Component is
-// not technically necessary.
 func (l *ResponsiveList) Draw(w term.Writer) {
 	// re-build list offsets to cleanup nodes
 	l.Resize(l.width, l.height)
@@ -240,7 +246,12 @@ func (l *ResponsiveList) ElementAt(pos term.Coordinates) (ListNode, bool) {
 	}
 
 	for i := 0; i < l.offset.value; i++ {
-		el, _ = el.Next()
+		// we could have gone past if there was a resize
+		// from 0,0 to anything larger
+		el, ok = el.Next()
+		if !ok {
+			return ListNode{}, false
+		}
 	}
 
 	ok = true
