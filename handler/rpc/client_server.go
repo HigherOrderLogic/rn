@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"runtime"
+	"sync/atomic"
 	"time"
 
 	"github.com/ernestrc/blue/logging"
@@ -236,12 +237,16 @@ func (c *Client) Close() error {
 	return nil
 }
 
+type dimensions struct {
+	width  int
+	height int
+}
+
 // Server serves a tui.Handler implementation over GRPC.
 type Server struct {
 	UnimplementedHandlerServer
-	handler tui.Handler
-	width   int
-	height  int
+	handler    tui.Handler
+	dimensions atomic.Value
 }
 
 // NewServer allocates storage for a new Server and initializes it.
@@ -254,16 +259,17 @@ func NewServer(handler tui.Handler) *Server {
 // Init initializes this Server to serve handler.
 func (s *Server) Init(handler tui.Handler) {
 	s.handler = handler
+	s.dimensions.Store(dimensions{})
 }
 
 func (s *Server) draw(ctx context.Context, in *DrawRequest) (
 	*DrawResponse, error,
 ) {
-	if int(in.Width) != s.width || int(in.Height) != s.height {
+	dim := s.dimensions.Load().(dimensions)
+	if int(in.Width) != dim.width || int(in.Height) != dim.height {
 		s.handler.Resize(int(in.Width), int(in.Height))
 	}
-	s.width = int(in.Width)
-	s.height = int(in.Height)
+	s.dimensions.Store(dimensions{width: int(in.Width), height: int(in.Height)})
 	cursor, show := s.handler.Cursor()
 	res := NewDrawResponse(s.handler, int(in.Width), int(in.Height))
 	res.Cursor.Position.X = int32(cursor.X)
