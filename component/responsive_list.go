@@ -1,6 +1,8 @@
 package component
 
 import (
+	"math"
+
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 )
@@ -8,15 +10,25 @@ import (
 // ResponsiveList differs from List in that it enables clients to
 // set the min width and height of the children components by using a push
 // API with Responsive components, rather than tui.Components.
+//
+// It also seeks in rows rather than elements, so long elements
+// greater than height can be seeked top to bottom, one row at a time.
+//
+// Alignment responds to SpanAlignmentTop or SpanAlignmentBottom for
+// content alignment.
 type ResponsiveList struct {
-	// we override only the relevant methods:
-	//   - methods that use elementHeight
-	//   - methods that manipulate children components
-	List
+	Alignment
 
-	drawn int // used to keep track of how many elements are drawn
+	list List
 
-	loffset, ypos int // used to mark a draw offset when List's offset is last
+	// in number of rows
+	totalHeight int
+	offset      int
+
+	// cannot be used directly here otherwise we would need to somehow
+	// override ListNode to also set true this ReponsiveList's
+	// returned ListNode, to set dirty ot SetValue
+	// dirty bool
 }
 
 // NewList allocates storage for a new ResponsiveList and initializes it.
@@ -29,14 +41,15 @@ func NewResponsiveList() (l *ResponsiveList) {
 // Init initializes this list. It can be used to reset its internal state.
 func (l *ResponsiveList) Init() {
 	l.Reset()
-	l.List.Init(1)
+	l.list.Init(1)
 }
 
 // Reset resets the contents of this List.
 func (l *ResponsiveList) Reset() {
-	l.List.Reset()
-	l.drawn = 0
-	l.loffset = 0
+	l.list.Reset()
+	l.offset = 0
+	l.totalHeight = 0
+	l.list.dirty = true
 }
 
 // PushBackList inserts a copy of an other list at the back of list l. The
@@ -56,7 +69,7 @@ func (l *ResponsiveList) PushFrontList(other *ResponsiveList) {
 	if l == other {
 		panic("other list cannot be self: components can't be deep cloned")
 	}
-	for node, ok := other.Back(); ok; node, ok = node.Prev() {
+	for node, ok := other.list.Back(); ok; node, ok = node.Prev() {
 		l.PushFront(node.Value().(Responsive))
 	}
 }
@@ -65,172 +78,118 @@ func (l *ResponsiveList) PushFrontList(other *ResponsiveList) {
 // returns the linked node. If mark is not an element of l, the list
 // is not modified.
 func (l *ResponsiveList) InsertAfter(c Responsive, mark ListNode) ListNode {
-	defer l.setDrawOffset()
-	defer l.simulateDraw()
-	return l.List.InsertAfter(c, mark)
+	defer l.calculateTotalHeight()
+	l.list.dirty = true
+	return l.list.InsertAfter(c, mark)
 }
 
 // InsertBefore inserts a new element c immediately before mark
 // and returns the linked node. If mark is not an element of l,
 // the list is not modified.
 func (l *ResponsiveList) InsertBefore(c Responsive, mark ListNode) ListNode {
-	defer l.setDrawOffset()
-	defer l.simulateDraw()
-	return l.List.InsertBefore(c, mark)
+	defer l.calculateTotalHeight()
+	l.list.dirty = true
+	return l.list.InsertBefore(c, mark)
 }
 
 // PushBack inserts a new element c at the back of list l and
 // returns the linked node.
 func (l *ResponsiveList) PushBack(c Responsive) ListNode {
-	defer l.setDrawOffset()
-	defer l.simulateDraw()
-	return l.List.PushBack(c)
+	defer l.calculateTotalHeight()
+	l.list.dirty = true
+	return l.list.PushBack(c)
 }
 
 // PushFront inserts a new element c at the front of list l and
 // returns the linked node.
 func (l *ResponsiveList) PushFront(c Responsive) ListNode {
-	defer l.setDrawOffset()
-	defer l.simulateDraw()
-	return l.List.PushFront(c)
+	defer l.calculateTotalHeight()
+	l.list.dirty = true
+	return l.list.PushFront(c)
 }
 
 // Remove removes e from l if e is a node of list l. It returns the element
 // value e.Value.
 func (l *ResponsiveList) Remove(e ListNode) Responsive {
-	defer l.setDrawOffset()
-	defer l.simulateDraw()
-	return l.List.Remove(e).(Responsive)
+	defer l.calculateTotalHeight()
+	l.list.dirty = true
+	return l.list.Remove(e).(Responsive)
 }
 
 // CanSeekDown returns whether SeekDown would seek one row down.
 func (l *ResponsiveList) CanSeekDown() bool {
-	// let it get to == len, so we are always able to draw
-	// a last element that would not fit with a last index == len-1
-	return l.offset.value+l.drawn < l.Len()
+	return l.offset < l.MaxOffset()
+}
+
+// MaxOffset returns the max seek offset of this list,
+// given the current dimensions.
+func (l *ResponsiveList) MaxOffset() int {
+	return int(math.Max(0, float64(l.totalHeight-l.list.height)))
+}
+
+// CanSeekUp returns whether SeekUp would seek one row up.
+func (l *ResponsiveList) CanSeekUp() bool {
+	return l.offset > 0
 }
 
 // SeekDown shifts the contents of this list one row down.
 func (l *ResponsiveList) SeekDown() bool {
-	ok := l.CanSeekDown()
-	if ok {
-		// NOTE: we break encapsulation but it's necessary to enable
-		// drawing last element until the end of it, in case the elements
-		// drawn in the screen are > 1 in element height.
-		l.offset.value++
-		l.simulateDraw()
-		l.setDrawOffset()
+	if l.Alignment == SpanAlignmentBottom {
+		return l.seekUp()
 	}
-	return ok
+	return l.seekDown()
 }
 
-// SeekEnd shifts the contents of this list such that the last element
-// is drawn at the top of the list.
+// SeekUp shifts the contents of this list one row up.
+func (l *ResponsiveList) SeekUp() bool {
+	if l.Alignment == SpanAlignmentBottom {
+		return l.seekDown()
+	}
+	return l.seekUp()
+}
+
+// SeekEnd shifts the contents of this list such that the end of the last element
+// is drawn at the end of the draw area.
 func (l *ResponsiveList) SeekEnd() (ok bool) {
-	// fix case when a previous seek down/end went past
-	// max offset with new width/height.
-	prev := l.offset.value
-	for l.SeekUp() {
+	if l.Alignment == SpanAlignmentBottom {
+		return l.seekStart()
 	}
-	for l.SeekDown() {
-	}
-	return prev != l.offset.value
+	return l.seekEnd()
 }
 
-// if offset is last, we should make sure last component is fully drawn
-// this should be called every time we manipulate list or resize
-func (l *ResponsiveList) setDrawOffset() {
-	l.loffset = 0
-	// only set loffset if we are at last offset
-	if l.offset.value+l.drawn != l.Len() {
-		return
+// SeekStarts shifts the contents of this list to the start of the list.
+func (l *ResponsiveList) SeekStart() (ok bool) {
+	if l.Alignment == SpanAlignmentBottom {
+		return l.seekEnd()
 	}
-	// only set loffset if drawn elements overflowed height
-	if l.ypos <= l.height {
-		return
-	}
-	l.loffset = l.ypos - l.height
-}
-
-func (l *ResponsiveList) simulateDraw() {
-	l.drawn = 0
-	l.ypos = 0
-	var i int
-	for el, ok := l.Front(); ok; el, ok = el.Next() {
-		comp := el.el.Value.(*Virtual)
-		if i < l.offset.value {
-			i++
-			continue
-		}
-
-		if l.ypos >= l.height {
-			break
-		}
-
-		l.ypos += comp.C.(Responsive).Height(l.width)
-		l.drawn++
-		i++
-	}
+	return l.seekStart()
 }
 
 // Resize resizes this list to fit within width and height.
 func (l *ResponsiveList) Resize(width, height int) {
-	l.width, l.height = width, height
-	l.drawn = 0
-	l.ypos = 0
+	defer l.calculateTotalHeight()
 
-	var i int
-	for el, ok := l.Front(); ok; el, ok = el.Next() {
+	l.list.width, l.list.height = width, height
+	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
 		comp := el.el.Value.(*Virtual)
-		if i < l.offset.value {
-			// clean break signal for Draw
-			comp.Move(term.Coordinates{X: 0, Y: 0})
-			i++
-			continue
-		}
-
-		if l.ypos >= height {
-			// signals Draw to break loop
-			comp.Move(term.Coordinates{X: 0, Y: -1})
-			break
-		}
-
-		compHeight := comp.C.(Responsive).Height(width)
-		comp.Resize(width, compHeight)
-		comp.Move(term.Coordinates{X: 0, Y: l.ypos})
-		l.ypos += compHeight
-		l.drawn++
-		i++
+		height := comp.C.(Responsive).Height(l.list.width)
+		comp.Resize(l.list.width, height)
 	}
-	l.setDrawOffset()
+	l.list.dirty = false
 }
 
 // Draw draws this list's elements with the current seek offset.
 func (l *ResponsiveList) Draw(w term.Writer) {
-	// re-build list offsets to cleanup nodes
-	l.Resize(l.width, l.height)
-
-	// elements can be partially rendered
-	w = term.BoundsCheckWriter(l.width, l.height, w)
-
-	var i int
-	for el, ok := l.Front(); ok; el, ok = el.Next() {
-		if i < l.offset.value {
-			i++
-			continue
-		}
-		if el.el.Value.(*Virtual).Position().Y == -1 {
-			break
-		}
-		pos := el.el.Value.(*Virtual).Position()
-		pos.Y -= l.loffset
-
-		el.el.Value.(*Virtual).Move(pos)
-		el.el.Value.(*Virtual).Draw(w)
-		i++
+	if l.list.dirty {
+		l.Resize(l.list.width, l.list.height)
 	}
-
-	return
+	// elements can be partially rendered
+	w = term.BoundsCheckWriter(l.list.width, l.list.height, w)
+	if l.Alignment == SpanAlignmentBottom {
+		l.drawBottom(w)
+	} else {
+		l.drawTop(w)
+	}
 }
 
 // ElementAt returns the element at pos Coordinates or panics if
@@ -240,28 +199,27 @@ func (l *ResponsiveList) ElementAt(pos term.Coordinates) (ListNode, bool) {
 		panic("negative coordinates")
 	}
 
-	el, ok := l.Front()
-	if !ok {
-		return ListNode{}, ok
-	}
-
-	for i := 0; i < l.offset.value; i++ {
-		// we could have gone past if there was a resize
-		// from 0,0 to anything larger
-		el, ok = el.Next()
-		if !ok {
-			return ListNode{}, false
+	var offseted int
+	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
+		comp := el.el.Value.(*Virtual)
+		height := comp.C.(Responsive).Height(l.list.width)
+		if offseted < l.offset {
+			offseted += height
+			if offseted > l.offset {
+				pos.Y += offseted - l.offset
+				if pos.Y-height < 0 {
+					return el, true
+				}
+				pos.Y -= height
+			}
+			continue
 		}
-	}
 
-	ok = true
-	ypos := -l.loffset
-	for ok {
-		ypos += el.el.Value.(*Virtual).Height()
-		if ypos > pos.Y {
+		if pos.Y-height < 0 {
 			return el, true
 		}
-		el, ok = el.Next()
+
+		pos.Y -= height
 	}
 
 	return ListNode{}, false
@@ -269,20 +227,130 @@ func (l *ResponsiveList) ElementAt(pos term.Coordinates) (ListNode, bool) {
 
 // Sort sorts the elements of this list with the provided less function.
 func (l *ResponsiveList) Sort(less func(a, b Responsive) bool) {
-	l.List.Sort(func(a, b tui.Component) bool {
+	l.list.Sort(func(a, b tui.Component) bool {
 		return less(a.(Responsive), b.(Responsive))
 	})
 }
 
 // Iterate iterates over all elements in l.
 func (l *ResponsiveList) Iterate(fn func(Responsive)) {
-	for node, ok := l.Front(); ok; node, ok = node.Next() {
+	for node, ok := l.list.Front(); ok; node, ok = node.Next() {
 		fn(node.Value().(Responsive))
 	}
 }
 
-// SetElementHeight panics because this list's elements are Responsive
-// components and so they are responsible for setting their own height.
-func (l *ResponsiveList) SetElementHeight(i int) {
-	panic("Invalid method for ResponsiveList")
+// Back returns the last node of list l or false if the list is empty.
+func (l *ResponsiveList) Back() (ListNode, bool) {
+	return l.list.Back()
+}
+
+// Front returns the first node of list l or false if the list is empty.
+func (l *ResponsiveList) Front() (ListNode, bool) {
+	return l.list.Front()
+}
+
+// Len returns the number of nodes of list l in O(1).
+func (l *ResponsiveList) Len() int {
+	return l.list.Len()
+}
+
+func (l *ResponsiveList) seekDown() bool {
+	ok := l.CanSeekDown()
+	if ok {
+		l.offset++
+	}
+	return ok
+}
+func (l *ResponsiveList) seekUp() bool {
+	ok := l.CanSeekUp()
+	if ok {
+		l.offset--
+	}
+	return ok
+}
+func (l *ResponsiveList) seekEnd() (ok bool) {
+	prev := l.offset
+	l.offset = l.MaxOffset()
+	return prev != l.offset
+}
+
+func (l *ResponsiveList) seekStart() (ok bool) {
+	for l.SeekUp() {
+		ok = true
+	}
+	return
+}
+
+func (l *ResponsiveList) calculateTotalHeight() {
+	l.totalHeight = 0
+
+	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
+		comp := el.el.Value.(*Virtual)
+		l.totalHeight += comp.C.(Responsive).Height(l.list.width)
+	}
+}
+
+func (l *ResponsiveList) drawTop(w term.Writer) {
+	var pos term.Coordinates
+	var offseted int
+	for el, ok := l.list.Front(); ok; el, ok = el.Next() {
+		comp := el.el.Value.(*Virtual)
+		height := comp.C.(Responsive).Height(l.list.width)
+		if offseted < l.offset {
+			offseted += height
+			// draw end of current element partially if the next one
+			// would start past y = 0
+			if offseted > l.offset {
+				pos.Y -= offseted - l.offset
+				el.el.Value.(*Virtual).Move(pos)
+				el.el.Value.(*Virtual).Draw(w)
+				pos.Y += height
+			}
+			continue
+		}
+
+		el.el.Value.(*Virtual).Move(pos)
+		el.el.Value.(*Virtual).Draw(w)
+		pos.Y += height
+
+		if pos.Y >= l.list.height {
+			break
+		}
+	}
+}
+
+func (l *ResponsiveList) drawBottom(w term.Writer) {
+	back, ok := l.list.Back()
+	if !ok {
+		return
+	}
+
+	comp := back.el.Value.(*Virtual)
+	lastHeight := comp.C.(Responsive).Height(l.list.width)
+	pos := term.Coordinates{Y: l.list.height - lastHeight}
+	var offseted int
+	for el, ok := back, true; ok; el, ok = el.Prev() {
+		comp := el.el.Value.(*Virtual)
+		height := comp.C.(Responsive).Height(l.list.width)
+		if offseted < l.offset {
+			offseted += height
+			// draw end of current element partially if the next one
+			// would start past y = 0
+			if offseted > l.offset {
+				pos.Y += offseted - l.offset
+				el.el.Value.(*Virtual).Move(pos)
+				el.el.Value.(*Virtual).Draw(w)
+				pos.Y -= height
+			}
+			continue
+		}
+
+		el.el.Value.(*Virtual).Move(pos)
+		el.el.Value.(*Virtual).Draw(w)
+		pos.Y -= height
+
+		if pos.Y < 0 {
+			break
+		}
+	}
 }

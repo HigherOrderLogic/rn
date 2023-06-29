@@ -60,17 +60,17 @@ func (l *responsiveTestList) SetElementHeight(i int) {
 	// allows for all test Responsive components to be resized
 	// and emulate SetElementHeight behaviour.
 	l.elementHeight = i
-	l.Resize(l.width, l.height)
+	l.Resize(l.list.width, l.list.height)
+}
+
+func (l *responsiveTestList) ElementHeight() int {
+	return l.elementHeight
 }
 
 func newResponsiveTestList(i int) testList {
 	ret := &responsiveTestList{ResponsiveList: NewResponsiveList()}
 	ret.elementHeight = i
 	return ret
-}
-
-func TestResponsiveListDraw(t *testing.T) {
-	testListDraw(t, []int{13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}, newResponsiveTestList)
 }
 
 func TestResponsiveListSort(t *testing.T) {
@@ -217,6 +217,11 @@ ZZZZZZZZ`,
 				assert.Equal(t, 'Y', v.Ch)
 
 				el, ok = l.ElementAt(term.Coordinates{Y: 1})
+				require.True(t, ok)
+				v = el.Value().(*TestResponsive)
+				assert.Equal(t, 'Z', v.Ch)
+
+				el, ok = l.ElementAt(term.Coordinates{Y: 2})
 				require.True(t, ok)
 				v = el.Value().(*TestResponsive)
 				assert.Equal(t, 'Z', v.Ch)
