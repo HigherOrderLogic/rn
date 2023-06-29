@@ -37,7 +37,7 @@ func (p *Publisher) Init() {
 // PublishEdit publishes EventTypeOpen and EventTypeFocus events to subscribers
 // and wraps root with a Handler that dispatches EventTypeCursor events.
 // It also subscribes to scroll changes to dispatch EventTypeScroll, and
-// subscribes to buffer updates to dispatch EventTypeDelete and EventTypeInsert.
+// subscribes to buffer updates to dispatch EventTypeEdit.
 func (p *Publisher) PublishEdit(
 	resource workspaceapi.URI, buf *cell.Buffer, root Handler, cursor *Cursor,
 ) Handler {

@@ -45,8 +45,7 @@ func (e *viEditor) Editor(file workspaceapi.URI) (text.Handler, error) {
 }
 
 // SubscribeEvents subsribes sub to ev. Note that this Editor is only capable
-// of dispatching EventTypeOpen, EventTypeInsert and EventTypeDelete
-// EventType events.
+// of dispatching EventTypeOpen, EventTypeEdit EventType events.
 func (e *viEditor) SubscribeEvents(
 	evs []textapi.EventType, sub text.EventHandler,
 ) error {
