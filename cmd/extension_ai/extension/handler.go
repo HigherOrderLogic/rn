@@ -707,6 +707,7 @@ func createCompletions(
 
 		it, err := dialogueManager.CreateCompletion(req.ctx, id, []string{req.msg})
 		if err != nil {
+			cancelAnimation()
 			if errors.Is(err, context.Canceled) {
 				// if global ctx has been cancel, rather than req.ctx
 				// then the next iteration will handle it
@@ -717,8 +718,7 @@ func createCompletions(
 			if err != nil {
 				log.Errorf("notify: %v", err)
 			}
-			cancelAnimation()
-			return
+			continue
 		}
 		drawMessage(ctx, it, tx, noti)
 		cancelAnimation()
