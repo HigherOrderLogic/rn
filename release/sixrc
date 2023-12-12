@@ -87,10 +87,16 @@ extensions:
   ai:
     path: /usr/local/bin/extension_ai
     config:
-      # default LLM used, unless specified in command
-      model: gpt-4
+      # default LLM model used by all commands. The assistantChat command
+      # allows for overriding it.
+      default_model: gpt-4
+
       # OpenAI API key
       # api_key: ""
+
+      # Overrides openai's default base URL
+      # base_url: ""
+
       # Colors
       background_attr:
         bg: default
@@ -109,6 +115,13 @@ extensions:
       input_box_frame_attr:
         bg: default
         fg: default
+
+       # frequency_penalty: 0
+       # presence_penalty: 0
+       # max_tokens: 120
+       # temperature: 0.9
+       # top_p: 1
+
   # This extension is used for navigating the editor's issue
   # tracker and creating new issues.
   rtc:

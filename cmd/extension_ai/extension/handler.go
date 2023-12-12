@@ -48,26 +48,22 @@ const (
 )
 
 var (
-	AIHandlerCommands = func(availableModels map[string]int) []textapi.CommandManual {
-		return []textapi.CommandManual{
-			{
-				Name: commandQuery,
-				Summary: fmt.Sprintf("Send a coding question to your AI assistant. "+
-					"The current active file is loaded and available in the model's context. "+
-					"The default coding model used is configured via extension configuration. "+
-					"Available models: %s", availableModelsString(availableModels)),
-				Synopsis: "[message]",
-			},
-			{
-				Name: commandChat,
-				Summary: fmt.Sprintf("Open a new conversation tab with your AI assistant. "+
-					"If no dialogue ID is provided, a new conversation is started. "+
-					"If not passed, the default model used is configured via extension configuration. "+
-					"Available models: %s", availableModelsString(availableModels)),
-				Synopsis: "[dialogue_id [model]]",
-			},
-			{Name: commandResetChat, Summary: "Clear all current chat's history."},
-		}
+	AIHandlerCommands = []textapi.CommandManual{
+		{
+			Name: commandQuery,
+			Summary: "Send a coding question to your AI assistant. " +
+				"The current active file is loaded and available in the model's context. " +
+				"The default coding model used is configured via extension configuration. ",
+			Synopsis: "[message]",
+		},
+		{
+			Name: commandChat,
+			Summary: "Open a new conversation tab with your AI assistant. " +
+				"If no dialogue ID is provided, a new conversation is started. " +
+				"If not passed, the default model used is configured via extension configuration. ",
+			Synopsis: "[dialogue_id [model]]",
+		},
+		{Name: commandResetChat, Summary: "Clear all current chat's history."},
 	}
 	AIHandlerEvents      = append(extutil.ResourceTrackerEventsComplete(), textapi.EventTypeUnfocus)
 	AIHandlerPermissions = []extension.Permission{
@@ -123,8 +119,8 @@ var (
 func CommandEventHandler(
 	ed textapi.Editor, grants []extension.Grant,
 	broker proto.MuxBroker, pconfig configapi.Config,
-	svcFn func(c configapi.Config, model string) (backend.Service, error),
-	availableModels map[string]int,
+	svcFn func(configapi.Config, map[string]int, string) (backend.Service, error),
+	defaultAvailableModels map[string]int,
 	defaultModel string,
 	queryOptions ...aiDialogue.Option,
 ) (hret extutil.CommandEventHandler, err error) {
@@ -133,13 +129,20 @@ func CommandEventHandler(
 	ret.ed = ed
 	ret.svcFn = svcFn
 	ret.config = pconfig
-	ret.availableModels = availableModels
-	ret.defaultModel, err = pconfig.GetString("model")
+	ret.defaultModel, err = pconfig.GetString("default_model")
 	if err != nil {
 		if err != configapi.ErrNotFound {
 			ret.log(log.WarnLevel, "get 'model' from config: %v", err)
 		}
 		ret.defaultModel = defaultModel
+	}
+	ret.availableModels, err = configapi.GetMapInt(pconfig, "available_models")
+	if err != nil {
+		if err != configapi.ErrNotFound {
+			err = fmt.Errorf("get 'available_models' from config: %v. ", err)
+			return nil, err
+		}
+		ret.availableModels = defaultAvailableModels
 	}
 
 	if err := isAvailableModel(ret.availableModels, ret.defaultModel); err != nil {
@@ -254,7 +257,7 @@ func CommandEventHandler(
 		}
 	}
 	ret.dialogueStore = aiDialogue.NewStore(ret.db)
-	queryService, err := ret.svcFn(ret.config, ret.defaultModel)
+	queryService, err := ret.svcFn(ret.config, ret.availableModels, ret.defaultModel)
 	if err != nil {
 		return nil, fmt.Errorf("new backend for query dialogues: %v", err)
 	}
@@ -279,7 +282,7 @@ type aiEditorHandler struct {
 	queryDialogueManager *aiDialogue.Manager
 
 	clip   clipboard.Register
-	svcFn  func(configapi.Config, string) (backend.Service, error)
+	svcFn  func(configapi.Config, map[string]int, string) (backend.Service, error)
 	ed     textapi.Editor
 	wm     browserapi.WindowManager
 	n      browserapi.Notifications
@@ -379,7 +382,7 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) (bool, error) {
 	}
 
 	comp := h.newDialogueComponent()
-	backendService, err := h.svcFn(h.config, model)
+	backendService, err := h.svcFn(h.config, h.availableModels, model)
 	if err != nil {
 		return false, fmt.Errorf("new backend: %v", err)
 	}

@@ -13,8 +13,8 @@ import (
 // GranteeWithService returns this extension's grantee, with the given
 // backend.Service constructor as the backend servicing the LLM.
 func GranteeWithService(
-	svcFunc func(config configapi.Config, model string) (backend.Service, error),
-	availableModels map[string]int,
+	svcFunc func(configapi.Config, map[string]int, string) (backend.Service, error),
+	defaultAvailableModels map[string]int,
 	defaultModel string,
 	options ...dialogue.Option,
 ) (extension.Grantee, []extension.Permission) {
@@ -23,10 +23,10 @@ func GranteeWithService(
 		broker proto.MuxBroker, pconfig configapi.Config,
 	) (hret extutil.CommandEventHandler, err error) {
 		return CommandEventHandler(ed, grants, broker, pconfig,
-			svcFunc, availableModels, defaultModel, options...)
+			svcFunc, defaultAvailableModels, defaultModel, options...)
 	}
 	grantee, perms := extutil.NewEditorEventHandler(
-		AIHandlerCommands(availableModels), commandEventHandler, AIHandlerEvents,
+		AIHandlerCommands, commandEventHandler, AIHandlerEvents,
 		AIHandlerPermissions...)
 	return grantee, perms
 }

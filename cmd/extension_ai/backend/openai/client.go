@@ -25,7 +25,7 @@ type Config struct {
 	// Number between -2.0 and 2.0. Positive values penalize new tokens based
 	// on their existing frequency in the text so far, decreasing the model's likelihood
 	// to repeat the same line verbatim.
-	FrequencyPenalty float32
+	FrequencyPenalty float64
 	// Modify the likelihood of specified tokens appearing in the completion.
 	//Accepts a JSON object that maps tokens (specified by their token ID in the tokenizer)
 	// to an associated bias value from -100 to 100. Mathematically, the bias is added to
@@ -40,7 +40,7 @@ type Config struct {
 
 	// Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they
 	// appear in the text so far, increasing the model's likelihood to talk about new topics.
-	PresencePenalty float32
+	PresencePenalty float64
 	// If specified, our system will make a best effort to sample deterministically, such that repeated
 	// requests with the same seed and parameters should return the same result.
 	// Determinism is not guaranteed, and you should refer to the system_fingerprint response
@@ -52,12 +52,12 @@ type Config struct {
 	// make the output more random, while lower values like 0.2 will make it more
 	// focused and deterministic.
 	// Openai generally recommends altering this or top_p but not both.
-	Temperature float32
+	Temperature float64
 	// An alternative to sampling with temperature, called nucleus sampling,
 	// where the model considers the results of the tokens with top_p probability mass.
 	// So 0.1 means only the tokens comprising the top 10% probability mass are considered.
 	// Openai generally recommends altering this or temperature but not both.
-	TopP float32
+	TopP float64
 
 	// A list of tools the model may call. Currently, only functions are supported
 	// as a tool. Use this to provide a list of functions the model may generate JSON inputs for.
@@ -79,7 +79,7 @@ func NewClient(
 	}
 
 	if _, ok := availableModels[config.Model]; !ok {
-		panic("model not in available models")
+		panic(fmt.Errorf("model not in available models: %s vs %+v", config.Model, availableModels))
 	}
 
 	var tools []openai.Tool
@@ -185,12 +185,12 @@ func (a client) CreateChatCompletion(
 	req := openai.ChatCompletionRequest{
 		Messages:         messages,
 		Model:            a.config.Model,
-		FrequencyPenalty: a.config.FrequencyPenalty,
+		FrequencyPenalty: float32(a.config.FrequencyPenalty),
 		LogitBias:        a.config.LogitBias,
 		MaxTokens:        a.config.MaxTokens,
-		PresencePenalty:  a.config.PresencePenalty,
-		Temperature:      a.config.Temperature,
-		TopP:             a.config.TopP,
+		PresencePenalty:  float32(a.config.PresencePenalty),
+		Temperature:      float32(a.config.Temperature),
+		TopP:             float32(a.config.TopP),
 		Tools:            a.tools,
 		// NOTE: openai's choices/N API is not very useful at the moment
 		// so we simply do not allow user to employ it

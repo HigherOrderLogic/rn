@@ -2,12 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	_ "net/http/pprof"
 
 	"github.com/ernestrc/blue/logging"
-	"github.com/sashabaranov/go-openai/jsonschema"
 	log "github.com/sirupsen/logrus"
 	configapi "unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/cmd/extension_ai/backend"
@@ -17,23 +17,74 @@ import (
 	"unstable.build/go-tui/extension/process"
 )
 
+const (
+	defaultDefaultModel = openai.GPT3Dot5Turbo
+	defaultBaseURL      = "" // uses openai's default base URL
+)
+
 func main() {
 	go func() {
 		log.Println(http.ListenAndServe("localhost:8886", nil))
 	}()
-	openaiSvc := func(config configapi.Config, model string) (backend.Service, error) {
+
+	openaiSvc := func(
+		config configapi.Config, availableModels map[string]int, model string,
+	) (backend.Service, error) {
 		apiKey, err := config.GetString("api_key")
 		if err != nil {
 			err = fmt.Errorf("failed to get 'api_key' from config: %w", err)
 			return nil, err
 		}
-		return openai.NewClient(apiKey, openai.Config{
+		openaiConfig := openai.Config{
 			Model: model,
-			Tools: editorTools(),
-		}, availableModels()), nil
+		}
+		openaiConfig.BaseURL, err = config.GetString("base_url")
+		if err != nil {
+			if !errors.Is(err, configapi.ErrNotFound) {
+				err = fmt.Errorf("failed to get 'base_url' from config: %w", err)
+				return nil, err
+			}
+			openaiConfig.BaseURL = defaultBaseURL
+		}
+		openaiConfig.FrequencyPenalty, err = config.GetFloat("frequency_penalty")
+		if err != nil {
+			if !errors.Is(err, configapi.ErrNotFound) {
+				err = fmt.Errorf("failed to get 'frequency_penalty' from config: %w", err)
+				return nil, err
+			}
+		}
+		openaiConfig.MaxTokens, err = config.GetInt("max_tokens")
+		if err != nil {
+			if !errors.Is(err, configapi.ErrNotFound) {
+				err = fmt.Errorf("failed to get 'max_tokens' from config: %w", err)
+				return nil, err
+			}
+		}
+		openaiConfig.PresencePenalty, err = config.GetFloat("presence_penalty")
+		if err != nil {
+			if !errors.Is(err, configapi.ErrNotFound) {
+				err = fmt.Errorf("failed to get 'presence_penalty' from config: %w", err)
+				return nil, err
+			}
+		}
+		openaiConfig.Temperature, err = config.GetFloat("temperature")
+		if err != nil {
+			if !errors.Is(err, configapi.ErrNotFound) {
+				err = fmt.Errorf("failed to get 'temperature' from config: %w", err)
+				return nil, err
+			}
+		}
+		openaiConfig.TopP, err = config.GetFloat("top_p")
+		if err != nil {
+			if !errors.Is(err, configapi.ErrNotFound) {
+				err = fmt.Errorf("failed to get 'top_p' from config: %w", err)
+				return nil, err
+			}
+		}
+		return openai.NewClient(apiKey, openaiConfig, availableModels), nil
 	}
 	grantee, perms := extension.GranteeWithService(openaiSvc,
-		availableModels(), defaultModel,
+		openai.AvailableModels(), defaultDefaultModel,
 		dialogue.WithCompleter(dialogue.FuncCompleter(logCompletion)),
 		dialogue.WithInitialContext([]backend.ChatCompletionMessage{
 			{
@@ -45,8 +96,6 @@ func main() {
 	)
 	process.Serve(grantee, perms...)
 }
-
-var defaultModel = openai.GPT4Turbo
 
 func logCompletion(
 	ctx context.Context, dialogueID, completionID string,
@@ -60,65 +109,4 @@ func logCompletion(
 		logging.KeyCallType: "logCompletion",
 		logging.KeyFile:     "main.go",
 	}).Debugf("%+v", msg)
-}
-
-func availableModels() map[string]int {
-	return openai.AvailableModels()
-}
-
-func editorTools() []openai.Tool {
-	return []openai.Tool{}
-	/*return []openai.Tool{
-		{Type: openai.ToolTypeFunction, Function: openai.FunctionDefinition{
-			Name: "editFile",
-			Description: fmt.Sprintf("Edit replaces any file content between a 'start' and 'end' " +
-				"coordinates. If 'start' and 'end' are equal, then content is just inserted. " +
-				"For instance, if a file's content was \"hello\nworld\" " +
-				"and we performed 'editFile' with 'start' coordinates of line 0 column 4 and " +
-				"'end' coordinates of  line 1, column 1, with 'content' \"u v\", " +
-				"the resulting content in the file would be \"hellu vorld\"."),
-			Parameters: jsonschema.Definition{
-				Type: jsonschema.Object,
-				Properties: map[string]jsonschema.Definition{
-					"start": {
-						Type:        jsonschema.Object,
-						Description: "left-inclusive start coordinates",
-						Properties:  coordinatesProperties(),
-						Required:    coordinatesRequired(),
-					},
-					"end": {
-						Type:        jsonschema.Object,
-						Description: "right-exclusive end coordinates",
-						Properties:  coordinatesProperties(),
-						Required:    coordinatesRequired(),
-					},
-					"content": {
-						Type:        jsonschema.String,
-						Description: "replacement content",
-					},
-				},
-				Required: []string{"start", "end", "content"},
-			},
-		}},
-	}*/
-}
-
-func coordinatesProperties() map[string]jsonschema.Definition {
-	return map[string]jsonschema.Definition{
-		"column": {
-			Type: jsonschema.Integer,
-			Description: "zero-based character index for a given line. " +
-				"For instance in the string 'hello\nworld', the character 'o' is at column 4",
-		},
-		"line": {
-			Type: jsonschema.Object,
-			Description: "zero-based line index. " +
-				"For instance, in the string " +
-				"'hello\nworld', the character 'd' is at line 1.",
-		},
-	}
-}
-
-func coordinatesRequired() []string {
-	return []string{"line", "column"}
 }

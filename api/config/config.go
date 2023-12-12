@@ -138,6 +138,26 @@ func GetDuration(
 	return duration, nil
 }
 
+// GetMapInt returns pconfig 'key' value as a map of string to integers.
+func GetMapInt(pconfig Config, key string) (map[string]int, error) {
+	mapOfIfc, err := pconfig.GetMap(key)
+	if err != nil {
+		if err != ErrNotFound {
+			err = fmt.Errorf("get '%s' from config: %w. ", key, err)
+		}
+		return nil, err
+	}
+	ret := make(map[string]int, len(mapOfIfc))
+	cfg := mapConfig(mapOfIfc)
+	for k := range mapOfIfc {
+		ret[k], err = cfg.GetInt(k)
+		if err != nil { // ErrNotFound is not possible
+			return nil, fmt.Errorf("expected %s to be map of string to integer: %v", key, err)
+		}
+	}
+	return ret, nil
+}
+
 // GetEvent is a helper which extracts and parses a component.FrameCharSet
 //
 //	as a map of string to runes from a Config.
