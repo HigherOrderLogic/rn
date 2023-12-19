@@ -30,7 +30,7 @@ func (i *Proxy) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor satisfies tui.Handler.
-func (i *Proxy) Cursor() (pos term.Coordinates, show bool) {
+func (i *Proxy) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return i.Target.Cursor()
 }
 

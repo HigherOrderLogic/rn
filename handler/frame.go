@@ -45,8 +45,8 @@ func (f *Frame) Handle(ev term.Event) (bool, bool) {
 
 // Cursor returns the underlying handler's cursor position
 // with the frame offset.
-func (f *Frame) Cursor() (pos term.Coordinates, show bool) {
-	pos, show = f.handler.Cursor()
+func (f *Frame) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
+	pos, style, show = f.handler.Cursor()
 	content := f.Frame.ContentPosition()
 	pos.X += content.X
 	pos.Y += content.Y

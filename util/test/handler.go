@@ -84,7 +84,7 @@ func handleTestCase(
 	}
 	h.Draw(w)
 
-	cursor, ok := h.Cursor()
+	cursor, _, ok := h.Cursor()
 	if ok {
 		w.SetCursor(cursor)
 	}

@@ -12,6 +12,7 @@ type TestHandler struct {
 	component.TestComponent
 	tui.Manual
 	CursorPos      term.Coordinates
+	CursorStyle    term.CursorStyle
 	Exit           bool
 	Handled        bool
 	HandleOverride func(term.Event) (bool, bool)
@@ -35,11 +36,11 @@ func (t *TestHandler) Handle(ev term.Event) (bool, bool) {
 }
 
 // Cursor returns the set CursorPos.
-func (t *TestHandler) Cursor() (term.Coordinates, bool) {
+func (t *TestHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	if t.CursorPos == (term.Coordinates{}) {
-		return term.Coordinates{X: -1, Y: -1}, false
+		return term.Coordinates{X: -1, Y: -1}, 0, false
 	}
-	return t.CursorPos, true
+	return t.CursorPos, t.CursorStyle, true
 }
 
 // Man returns set Manual.

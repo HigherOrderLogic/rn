@@ -757,9 +757,9 @@ func (h *Prompt) reset() {
 }
 
 // Cursor satisfies tui.Handler
-func (h *Prompt) Cursor() (term.Coordinates, bool) {
+func (h *Prompt) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	if h.width == 0 {
-		return term.Coordinates{}, false
+		return term.Coordinates{}, 0, false
 	}
 	leftWidgetWidth := h.width - animationWidth
 	if leftWidgetWidth <= 0 {
@@ -775,7 +775,7 @@ func (h *Prompt) Cursor() (term.Coordinates, bool) {
 		pos.X += x
 		pos.Y += y
 	}
-	return pos, true
+	return pos, term.CursorStyleBlinkingBar, true
 }
 
 // Man satisfies tui.Handler

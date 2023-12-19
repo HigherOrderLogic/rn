@@ -67,7 +67,7 @@ func testRPCHandlerCursor(t *testing.T, rpcHandler *Client) {
 	// then force collect cursor response
 	rpcHandler.Draw(term.NewStringWriter(0, 0))
 
-	pos, ok := rpcHandler.Cursor()
+	pos, _, ok := rpcHandler.Cursor()
 	require.False(t, ok)
 
 	assert.Equal(t, term.Coordinates{X: -1, Y: -1}, pos)

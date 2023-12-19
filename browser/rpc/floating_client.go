@@ -58,10 +58,10 @@ func (f *floatingClientImpl) Handle(ev term.Event) (exit, handled bool) {
 	return exit, handled
 }
 
-func (f *floatingClientImpl) Cursor() (pos term.Coordinates, show bool) {
-	pos, show = f.client.Cursor()
+func (f *floatingClientImpl) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
+	pos, style, show = f.client.Cursor()
 	runtime.KeepAlive(f)
-	return pos, show
+	return pos, style, show
 }
 
 func (f *floatingClientImpl) Man() tui.Manual {

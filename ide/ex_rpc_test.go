@@ -67,7 +67,7 @@ func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
 	h.Handler.Wait()
 	return
 }
-func (h *safeHandler) Cursor() (pos term.Coordinates, show bool) {
+func (h *safeHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return h.Handler.Cursor()

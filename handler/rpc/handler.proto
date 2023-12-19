@@ -15,6 +15,7 @@ message DrawResponse {
 	message Cursor {
 		term.Coordinates position = 1;
 		bool show = 2;
+		int32 style = 3;
 	}
 
 	repeated term.CellRow rows = 1;

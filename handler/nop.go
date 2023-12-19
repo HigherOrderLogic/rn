@@ -26,7 +26,7 @@ func (n nopHandler) Handle(term.Event) (exit, handled bool) {
 	return
 }
 
-func (n nopHandler) Cursor() (pos term.Coordinates, show bool) {
+func (n nopHandler) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return
 }
 

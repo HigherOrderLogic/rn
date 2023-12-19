@@ -35,7 +35,7 @@ func (s hsync) Handle(ev term.Event) (exit, handled bool) {
 	return s.h.Handle(ev)
 }
 
-func (s hsync) Cursor() (pos term.Coordinates, show bool) {
+func (s hsync) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.h.Cursor()

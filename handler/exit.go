@@ -30,7 +30,7 @@ func (e *keyExit) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (e *keyExit) Cursor() (pos term.Coordinates, show bool) {
+func (e *keyExit) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return
 }
 

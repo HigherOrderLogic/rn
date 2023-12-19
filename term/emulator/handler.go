@@ -231,20 +231,38 @@ func (e *Handler) MaxWidth() int {
 }
 
 // Cursor satisfies tui.Handler.
-func (e *Handler) Cursor() (term.Coordinates, bool) {
+func (e *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	e.terminal.Lock()
 	defer e.terminal.Unlock()
 
 	termbuf := e.terminal.GetActiveBuffer()
 
 	if !termbuf.IsCursorVisible() {
-		return term.Coordinates{}, false
+		return term.Coordinates{}, 0, false
+	}
+
+	var style term.CursorStyle
+	switch termbuf.GetCursorShape() {
+	case termutil.CursorShapeBlinkingBlock:
+		style = term.CursorStyleBlinkingBlock
+	case termutil.CursorShapeDefault:
+		style = term.CursorStyleDefault
+	case termutil.CursorShapeSteadyBlock:
+		style = term.CursorStyleSteadyBlock
+	case termutil.CursorShapeBlinkingUnderline:
+		style = term.CursorStyleBlinkingUnderline
+	case termutil.CursorShapeSteadyUnderline:
+		style = term.CursorStyleSteadyUnderline
+	case termutil.CursorShapeBlinkingBar:
+		style = term.CursorStyleBlinkingBar
+	case termutil.CursorShapeSteadyBar:
+		style = term.CursorStyleSteadyBar
 	}
 
 	return term.Coordinates{
 		X: int(math.Min(float64(termbuf.CursorColumn()), float64(e.width-1))),
 		Y: int(math.Min(float64(termbuf.CursorLine()), float64(e.height-1))),
-	}, true
+	}, style, true
 }
 
 // Man satisfies tui.Handler.

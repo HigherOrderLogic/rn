@@ -141,11 +141,11 @@ func (p *Publisher) Handle(ctx context.Context, ev textapi.Event) bool {
 // then an EventTypeCursor is dispatched to subscribers.
 func (p *Publisher) RecordCursorChange(h Handler) (dispatchEvent func()) {
 	handler := h.(*cursorPublisher)
-	cursor0, _ := handler.Handler.Cursor()
+	cursor0, _, _ := handler.Handler.Cursor()
 	cursorAtScroll0 := handler.cursor.CursorAtScroll()
 
 	return func() {
-		cursor1, _ := handler.Handler.Cursor()
+		cursor1, _, _ := handler.Handler.Cursor()
 		cursorAtScroll1 := handler.cursor.CursorAtScroll()
 
 		if cursor0 != cursor1 || cursorAtScroll0 != cursorAtScroll1 {

@@ -6,6 +6,7 @@ import (
 	"github.com/ernestrc/blue/logging"
 	log "github.com/sirupsen/logrus"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/clipboard"
@@ -143,16 +144,17 @@ func (s *dialogueHandler) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (s *dialogueHandler) Cursor() (cursor term.Coordinates, ok bool) {
+func (s *dialogueHandler) Cursor() (
+	cursor term.Coordinates, style term.CursorStyle, ok bool,
+) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	cursor, ok = s.comp.Input().Cursor()
+	cursor, style, ok = s.comp.Input().Cursor()
 	if !ok {
 		return
 	}
-	cursor.Y += s.comp.InputPosition().Y
-	cursor.X += s.comp.InputPosition().X
+	cursor = cell.CoordinatesSum(cursor, s.comp.InputPosition())
 	return
 }
 

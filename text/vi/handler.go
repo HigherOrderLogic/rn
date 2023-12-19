@@ -139,12 +139,21 @@ func (vi *viHandlerImpl) Man() tui.Manual {
 }
 
 // Cursor : tui.Handler
-func (vi *viHandlerImpl) Cursor() (term.Coordinates, bool) {
-	// use less Cursor if we are in search mode
-	if vi.mode() == searchMode {
+func (vi *viHandlerImpl) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	var style term.CursorStyle
+	switch vi.mode() {
+	case searchMode:
 		return vi.less.Cursor()
+	case insertMode:
+		style = term.CursorStyleSteadyBar
+	case gMode, yankMode, deleteMode, replaceMode, replaceOneMode:
+		style = term.CursorStyleSteadyUnderline
+	case normalMode, visualMode, visualLineMode, visualBlockMode:
+		style = term.CursorStyleDefault
+	default:
+		panic(fmt.Sprintf("unknown mode: %d", vi.currMode))
 	}
-	return vi.cursor.Coordinates(), true
+	return vi.cursor.Coordinates(), style, true
 }
 
 func (vi *viHandlerImpl) setMode(mode viMode) {

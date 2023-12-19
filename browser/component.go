@@ -822,7 +822,7 @@ func (c *Component) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor calls the underlying FrameUnion's Cursor.
-func (c *Component) Cursor() (pos term.Coordinates, show bool) {
+func (c *Component) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return c.union.Cursor()
 }
 

@@ -6,6 +6,8 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+var _ tui.Handler = (*Tabs)(nil)
+
 // Tabs add mouse handling to component.Tabs.
 type Tabs struct {
 	component.Tabs
@@ -48,8 +50,8 @@ func (f *Tabs) Handle(ev term.Event) (quit, handled bool) {
 
 // Cursor returns the underlying handler's cursor position
 // with the frame offset.
-func (f *Tabs) Cursor() (term.Coordinates, bool) {
-	return term.Coordinates{}, false
+func (f *Tabs) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleDefault, false
 }
 
 // Man just delegates Man call to underlying handler.

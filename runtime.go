@@ -13,29 +13,34 @@ import (
 
 const exitSignalDuration = 1 * time.Second
 
-func redraw(root Handler, lock sync.Locker, termw term.Writer) (err error) {
+func redraw(
+	root Handler, lock sync.Locker, termw term.Writer,
+	prevCursor term.CursorStyle,
+) (term.CursorStyle, error) {
 	// TODO Attr should be removed and Clear should no take any parameters
-	if err = termw.Clear(term.Attr()); err != nil {
-		return err
+	if err := termw.Clear(term.Attr()); err != nil {
+		return 0, err
 	}
 
 	lock.Lock()
 	root.Draw(termw)
-	cursor, show := root.Cursor()
+	cursor, style, show := root.Cursor()
 	lock.Unlock()
 
 	if show {
 		termw.SetCursor(cursor)
+		if style != prevCursor {
+			term.SetCursorStyle(style)
+		}
 	} else {
 		termw.SetCursor(term.Coordinates{X: -1, Y: -1})
 	}
 
-	if err = termw.Flush(); err != nil {
-		return err
+	if err := termw.Flush(); err != nil {
+		return 0, err
 	}
 
-	return
-
+	return style, nil
 }
 
 func drain(evs <-chan tcell.Event) {
@@ -85,10 +90,11 @@ func run(root Handler, lock sync.Locker, termw term.Writer) (err error) {
 
 	var handled, exit bool
 	var lastSignalAt time.Time
+	var prevCursor term.CursorStyle
 	for !exit && err == nil {
 		// reset interrupts so we don't stay forever in pending mode
 		interruptPending.Store(false)
-		if err = redraw(root, lock, termw); err != nil {
+		if prevCursor, err = redraw(root, lock, termw, prevCursor); err != nil {
 			return
 		}
 

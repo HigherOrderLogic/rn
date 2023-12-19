@@ -55,12 +55,13 @@ func (mr *MockFloatingMockRecorder) Close() *gomock.Call {
 }
 
 // Cursor mocks base method.
-func (m *MockFloating) Cursor() (term.Coordinates, bool) {
+func (m *MockFloating) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Cursor")
 	ret0, _ := ret[0].(term.Coordinates)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
+	ret1, _ := ret[1].(term.CursorStyle)
+	ret2, _ := ret[2].(bool)
+	return ret0, ret1, ret2
 }
 
 // Cursor indicates an expected call of Cursor.
@@ -230,6 +231,20 @@ func (m *MockWindow) ID() uint64 {
 func (mr *MockWindowMockRecorder) ID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ID", reflect.TypeOf((*MockWindow)(nil).ID))
+}
+
+// IsFloating mocks base method.
+func (m *MockWindow) IsFloating() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsFloating")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsFloating indicates an expected call of IsFloating.
+func (mr *MockWindowMockRecorder) IsFloating() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsFloating", reflect.TypeOf((*MockWindow)(nil).IsFloating))
 }
 
 // SetContent mocks base method.

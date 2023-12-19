@@ -38,7 +38,7 @@ type Component interface {
 type Handler interface {
 	Component
 	Handle(term.Event) (exit, handled bool)
-	Cursor() (pos term.Coordinates, show bool)
+	Cursor() (c term.Coordinates, s term.CursorStyle, show bool)
 	Man() Manual
 }
 

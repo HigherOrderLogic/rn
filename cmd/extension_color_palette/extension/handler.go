@@ -116,7 +116,7 @@ func (h *colorPaletteHandler) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (h *colorPaletteHandler) Cursor() (pos term.Coordinates, show bool) {
+func (h *colorPaletteHandler) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return
 }
 

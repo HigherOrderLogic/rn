@@ -54,12 +54,13 @@ func (mr *MockHandlerMockRecorder) Close() *gomock.Call {
 }
 
 // Cursor mocks base method.
-func (m *MockHandler) Cursor() (term.Coordinates, bool) {
+func (m *MockHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Cursor")
 	ret0, _ := ret[0].(term.Coordinates)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
+	ret1, _ := ret[1].(term.CursorStyle)
+	ret2, _ := ret[2].(bool)
+	return ret0, ret1, ret2
 }
 
 // Cursor indicates an expected call of Cursor.
@@ -159,12 +160,13 @@ func (mr *MockFloatingMockRecorder) Close() *gomock.Call {
 }
 
 // Cursor mocks base method.
-func (m *MockFloating) Cursor() (term.Coordinates, bool) {
+func (m *MockFloating) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Cursor")
 	ret0, _ := ret[0].(term.Coordinates)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
+	ret1, _ := ret[1].(term.CursorStyle)
+	ret2, _ := ret[2].(bool)
+	return ret0, ret1, ret2
 }
 
 // Cursor indicates an expected call of Cursor.

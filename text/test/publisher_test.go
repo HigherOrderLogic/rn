@@ -126,12 +126,12 @@ func TestPublisher(t *testing.T) {
 
 		var times int
 		mock.EXPECT().Cursor().
-			DoAndReturn(func() (term.Coordinates, bool) {
+			DoAndReturn(func() (term.Coordinates, term.CursorStyle, bool) {
 				if times == 0 {
 					times++
-					return term.Coordinates{Y: 1}, true
+					return term.Coordinates{Y: 1}, 0, true
 				}
-				return term.Coordinates{Y: 2}, true
+				return term.Coordinates{Y: 2}, 0, true
 			}).Times(2)
 
 		exit, handled := h.Handle(term.Event{Type: term.EventInterrupt})

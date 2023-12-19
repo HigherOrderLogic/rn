@@ -392,7 +392,7 @@ func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
 	}
 	if ok {
 		scmd.Cursor.Content, _ = e.ed.Cursor(h)
-		scmd.Cursor.Window, _ = h.Cursor()
+		scmd.Cursor.Window, _, _ = h.Cursor()
 	}
 	var handled bool
 	handled, err = e.comp.DispatchCommand(scmd)
@@ -937,7 +937,9 @@ func (e *ex) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor satisfies tui.Handler.
-func (e *ex) Cursor() (pos term.Coordinates, show bool) {
+func (e *ex) Cursor() (
+	pos term.Coordinates, style term.CursorStyle, show bool,
+) {
 	if e.cmd != nil {
 		return e.cmdV.Cursor()
 	}

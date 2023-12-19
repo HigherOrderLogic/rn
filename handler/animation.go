@@ -78,7 +78,7 @@ func (p *player) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (p *player) Cursor() (pos term.Coordinates, show bool) {
+func (p *player) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return
 }
 

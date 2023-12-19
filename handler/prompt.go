@@ -16,6 +16,8 @@ type PromptConfig struct {
 	OptionAttr     term.Attributes
 }
 
+var _ tui.Handler = (*Prompt)(nil)
+
 // Prompt wraps a component.Prompt to satisfy tui.Handler.
 type Prompt struct {
 	component.Prompt
@@ -106,7 +108,7 @@ func (f *Prompt) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor satisfies tui.Handler.
-func (f *Prompt) Cursor() (pos term.Coordinates, show bool) {
+func (f *Prompt) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return
 }
 

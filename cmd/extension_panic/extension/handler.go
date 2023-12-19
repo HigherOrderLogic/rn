@@ -72,7 +72,9 @@ func (h *panicHandler) Handle(ev term.Event) (exit, handled bool) {
 	panic("kaboom")
 }
 
-func (h *panicHandler) Cursor() (pos term.Coordinates, show bool) {
+func (h *panicHandler) Cursor() (
+	pos term.Coordinates, style term.CursorStyle, show bool,
+) {
 	return
 }
 

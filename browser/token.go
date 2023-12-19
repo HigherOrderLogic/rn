@@ -21,7 +21,7 @@ func (h Token) Handle(term.Event) (exit, handled bool) {
 }
 
 // Cursor panics if called. This tui.Handler implementation is symbolic.
-func (h Token) Cursor() (pos term.Coordinates, show bool) {
+func (h Token) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	panic(errMsg)
 }
 

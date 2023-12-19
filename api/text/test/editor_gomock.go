@@ -11,7 +11,6 @@ import (
 	tui "unstable.build/go-tui"
 	api "unstable.build/go-tui/api/text"
 	api0 "unstable.build/go-tui/api/workspace"
-	cell "unstable.build/go-tui/cell"
 	term "unstable.build/go-tui/term"
 )
 
@@ -53,12 +52,13 @@ func (mr *MockHandlerMockRecorder) Close() *gomock.Call {
 }
 
 // Cursor mocks base method.
-func (m *MockHandler) Cursor() (term.Coordinates, bool) {
+func (m *MockHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Cursor")
 	ret0, _ := ret[0].(term.Coordinates)
-	ret1, _ := ret[1].(bool)
-	return ret0, ret1
+	ret1, _ := ret[1].(term.CursorStyle)
+	ret2, _ := ret[2].(bool)
+	return ret0, ret1, ret2
 }
 
 // Cursor indicates an expected call of Cursor.
@@ -278,34 +278,19 @@ func (mr *MockEditorMockRecorder) Cursor(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Cursor", reflect.TypeOf((*MockEditor)(nil).Cursor), arg0)
 }
 
-// Edit mocks base method.
-func (m *MockEditor) Edit(file api0.URI, buf *cell.Buffer) (api.Handler, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Edit", file, buf)
-	ret0, _ := ret[0].(api.Handler)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Edit indicates an expected call of Edit.
-func (mr *MockEditorMockRecorder) Edit(file, buf interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Edit", reflect.TypeOf((*MockEditor)(nil).Edit), file, buf)
-}
-
 // Editor mocks base method.
-func (m *MockEditor) Editor(file api0.URI) (api.Handler, error) {
+func (m *MockEditor) Editor(resource api0.URI) (api.Handler, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Editor", file)
+	ret := m.ctrl.Call(m, "Editor", resource)
 	ret0, _ := ret[0].(api.Handler)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Editor indicates an expected call of Editor.
-func (mr *MockEditorMockRecorder) Editor(file interface{}) *gomock.Call {
+func (mr *MockEditorMockRecorder) Editor(resource interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Editor", reflect.TypeOf((*MockEditor)(nil).Editor), file)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Editor", reflect.TypeOf((*MockEditor)(nil).Editor), resource)
 }
 
 // MoveToNextLocation mocks base method.

@@ -558,7 +558,9 @@ func (h *fuzzyFinderHandler) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (h *fuzzyFinderHandler) Cursor() (pos term.Coordinates, show bool) {
+func (h *fuzzyFinderHandler) Cursor() (
+	pos term.Coordinates, style term.CursorStyle, show bool,
+) {
 	return h.listHandler.Cursor()
 }
 

@@ -175,6 +175,28 @@ func Poll() <-chan tcell.Event {
 	return termbox.Screen().Poll()
 }
 
+// FromTcellEvent converts a tcell.Event into a term.Event.
 func FromTcellEvent(tev tcell.Event) Event {
 	return makeEvent(termbox.NewEvent(tev))
+}
+
+// CursorStyle represents a given cursor style, which can include the shape and
+// whether the cursor blinks or is solid.  Support for changing this is not universal.
+type CursorStyle int
+
+const (
+	CursorStyleDefault           = CursorStyle(tcell.CursorStyleDefault)
+	CursorStyleBlinkingBlock     = CursorStyle(tcell.CursorStyleBlinkingBlock)
+	CursorStyleSteadyBlock       = CursorStyle(tcell.CursorStyleSteadyBlock)
+	CursorStyleBlinkingUnderline = CursorStyle(tcell.CursorStyleBlinkingUnderline)
+	CursorStyleSteadyUnderline   = CursorStyle(tcell.CursorStyleSteadyUnderline)
+	CursorStyleBlinkingBar       = CursorStyle(tcell.CursorStyleBlinkingBar)
+	CursorStyleSteadyBar         = CursorStyle(tcell.CursorStyleSteadyBar)
+)
+
+// SetCursorStyle is used to set the cursor style. If the style
+// is not supported (or cursor styles are not supported at all),
+// then this will have no effect.
+func SetCursorStyle(style CursorStyle) {
+	termbox.Screen().SetCursorStyle(tcell.CursorStyle(style))
 }

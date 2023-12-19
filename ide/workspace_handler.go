@@ -424,7 +424,7 @@ func (h *workspaceManagerHandler) Handle(ev term.Event) (exit, handled bool) {
 	return false, true
 }
 
-func (h *workspaceManagerHandler) Cursor() (pos term.Coordinates, show bool) {
+func (h *workspaceManagerHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return h.focusHandler().Cursor()
 }
 

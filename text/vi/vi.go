@@ -83,7 +83,7 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) 
 }
 
 // Cursor satisfies tui.Handler
-func (vi *Vi) Cursor() (term.Coordinates, bool) {
+func (vi *Vi) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return vi.handler.Cursor()
 }
 

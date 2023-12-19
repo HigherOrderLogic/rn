@@ -168,7 +168,7 @@ func (i *Box) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor satisfies tui.Handler.
-func (i *Box) Cursor() (pos term.Coordinates, show bool) {
+func (i *Box) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return i.frame.Cursor()
 }
 

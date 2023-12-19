@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
@@ -272,15 +273,15 @@ func (wm *WindowManager) Shiftable() (w Window, ok bool) {
 }
 
 // Cursor returns the cursor coordinates of the tile in focus.
-func (wm *WindowManager) Cursor() (term.Coordinates, bool) {
+func (wm *WindowManager) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	offset := wm.focus.Window.Position()
 	content := wm.focus.Content()
 	if wm.config.Frame {
 		offset.Y++
 		offset.X++
 	}
-	cursor, show := content.Cursor()
-	return term.Coordinates{X: offset.X + cursor.X, Y: offset.Y + cursor.Y}, show
+	cursor, style, show := content.Cursor()
+	return cell.CoordinatesSum(cursor, offset), style, show
 }
 
 // Man : Handler

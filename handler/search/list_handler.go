@@ -62,12 +62,12 @@ func (s simpleHandler) Handle(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (s simpleHandler) Cursor() (term.Coordinates, bool) {
-	c, ok := s.ed.Cursor()
+func (s simpleHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	c, style, ok := s.ed.Cursor()
 	if s.cfg.bottomSearchBar {
 		c.Y += (s.List.height - s.List.inputHeight())
 	}
-	return c, ok
+	return c, style, ok
 }
 
 func (s simpleHandler) Man() tui.Manual {

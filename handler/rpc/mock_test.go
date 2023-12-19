@@ -32,14 +32,15 @@ func (c *mockHandlerClient) Handle(
 
 	width, height := int(in.GetDraw().GetWidth()), int(in.GetDraw().GetHeight())
 	c.remote.Resize(width, height)
-	pos, show := c.remote.Cursor()
+	pos, style, show := c.remote.Cursor()
 	resp.Draw = NewDrawResponse(c.remote, width, height)
 	resp.Draw.Cursor = &DrawResponse_Cursor{
 		Position: &termpb.Coordinates{
 			X: int32(pos.X),
 			Y: int32(pos.Y),
 		},
-		Show: show,
+		Show:  show,
+		Style: int32(style),
 	}
 
 	// mimic server

@@ -22,8 +22,8 @@ func (v *Virtual) Handle(ev term.Event) (bool, bool) {
 }
 
 // Cursor tui.Handler
-func (v *Virtual) Cursor() (pos term.Coordinates, show bool) {
-	pos, show = v.C.(tui.Handler).Cursor()
+func (v *Virtual) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
+	pos, style, show = v.C.(tui.Handler).Cursor()
 	offset := v.Position()
 	pos.X += offset.X
 	pos.Y += offset.Y

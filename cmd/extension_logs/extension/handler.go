@@ -376,14 +376,14 @@ func (s *logsHandler) handleFilter(ev term.Event) (exit, handled bool) {
 	return
 }
 
-func (s *logsHandler) Cursor() (term.Coordinates, bool) {
+func (s *logsHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	if s.mode == normalMode {
-		return term.Coordinates{}, false
+		return term.Coordinates{}, 0, false
 	}
-	c, ok := s.currentEd().Cursor()
+	c, style, ok := s.currentEd().Cursor()
 	// NOTE: assumes bottomSearchBar is true
 	c.Y += (s.l.Height() - s.l.InputHeight())
-	return c, ok
+	return c, style, ok
 }
 
 func (s *logsHandler) Man() tui.Manual {

@@ -3,6 +3,7 @@ package handler
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/term"
 	testutil "unstable.build/go-tui/util/test"
@@ -80,10 +81,9 @@ func TestKeyMappingMan(t *testing.T) {
 }
 
 func TestKeyMappingCursor(t *testing.T) {
-	handler := &TestHandler{}
-	cursor, _ := handler.Cursor()
-	kmCursor, _ := WithMapping(handler, nil).Cursor()
-	if cursor != kmCursor {
-		t.Errorf("did not proxy Cursor correctly")
-	}
+	handler := &TestHandler{CursorStyle: term.CursorStyleBlinkingBlock}
+	cursor, style, _ := handler.Cursor()
+	kmCursor, kmStyle, _ := WithMapping(handler, nil).Cursor()
+	assert.Equal(t, cursor, kmCursor)
+	assert.Equal(t, style, kmStyle)
 }

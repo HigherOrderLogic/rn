@@ -87,9 +87,9 @@ func (u *FrameUnion) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor returns the main component's cursor position.
-func (u *FrameUnion) Cursor() (pos term.Coordinates, show bool) {
+func (u *FrameUnion) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	o := u.FrameUnion.MainPosition()
-	pos, show = u.main.Cursor()
+	pos, style, show = u.main.Cursor()
 	pos.X += o.X
 	pos.Y += o.Y
 	return

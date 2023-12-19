@@ -34,7 +34,7 @@ func (n wrapHandler) Handle(ev term.Event) (exit, handled bool) {
 	return n.fn(ev)
 }
 
-func (n wrapHandler) Cursor() (pos term.Coordinates, show bool) {
+func (n wrapHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return n.h.Cursor()
 }
 

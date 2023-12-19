@@ -319,7 +319,7 @@ func testWindowManagerCursor(
 	wm := NewWindowManager(handler, cfg)
 	wm.Resize(10, 10)
 
-	pos, ok := wm.Cursor()
+	pos, _, ok := wm.Cursor()
 	require.True(t, ok)
 	assert.Equal(t, expected, pos)
 }

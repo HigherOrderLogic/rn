@@ -47,7 +47,8 @@ type Client struct {
 	width, height int
 	cursor        struct {
 		term.Coordinates
-		show bool
+		show  bool
+		style term.CursorStyle
 	}
 
 	errors chan error
@@ -181,6 +182,7 @@ func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
 	c.cursor.Coordinates.X = int(resp.Draw.Cursor.Position.X)
 	c.cursor.Coordinates.Y = int(resp.Draw.Cursor.Position.Y)
 	c.cursor.show = resp.Draw.Cursor.Show
+	c.cursor.style = term.CursorStyle(resp.Draw.Cursor.Style)
 	c.resp.HandleResponse = resp
 	c.resp.width = int(drawReq.Width)
 	c.resp.height = int(drawReq.Height)
@@ -189,8 +191,8 @@ func (c *Client) handle(ev term.Event) (exit, handled bool, err error) {
 }
 
 // Cursor satisfies tui.Handler
-func (c *Client) Cursor() (pos term.Coordinates, show bool) {
-	return c.cursor.Coordinates, c.cursor.show
+func (c *Client) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
+	return c.cursor.Coordinates, c.cursor.style, c.cursor.show
 }
 
 // Man satisfies tui.Handler
@@ -270,11 +272,12 @@ func (s *Server) draw(ctx context.Context, in *DrawRequest) (
 		s.handler.Resize(int(in.Width), int(in.Height))
 	}
 	s.dimensions.Store(dimensions{width: int(in.Width), height: int(in.Height)})
-	cursor, show := s.handler.Cursor()
+	cursor, style, show := s.handler.Cursor()
 	res := NewDrawResponse(s.handler, int(in.Width), int(in.Height))
 	res.Cursor.Position.X = int32(cursor.X)
 	res.Cursor.Position.Y = int32(cursor.Y)
 	res.Cursor.Show = show
+	res.Cursor.Style = int32(style)
 	return res, nil
 }
 

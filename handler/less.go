@@ -243,8 +243,9 @@ func (l *Less) Mode() LessMode {
 }
 
 // Cursor : Handler
-func (l *Less) Cursor() (term.Coordinates, bool) {
-	return term.Coordinates{X: l.cursorOffset, Y: l.height - 1}, true
+func (l *Less) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	ret := term.Coordinates{X: l.cursorOffset, Y: l.height - 1}
+	return ret, term.CursorStyleDefault, true
 }
 
 // Draw : Component

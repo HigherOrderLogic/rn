@@ -71,12 +71,12 @@ func (b *Tab) Draw(w term.Writer) {
 // Handle satisfies tui.Handler
 func (b *Tab) Handle(ev term.Event) (exit, handled bool) {
 	// ignore exit, a tab is managed manually by user
-	_ , handled = b.handler.Handle(ev)
+	_, handled = b.handler.Handle(ev)
 	return
 }
 
 // Cursor satisfies tui.Handler
-func (b *Tab) Cursor() (pos term.Coordinates, show bool) {
+func (b *Tab) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return b.handler.Cursor()
 }
 

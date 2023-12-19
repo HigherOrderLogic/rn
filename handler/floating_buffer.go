@@ -22,7 +22,7 @@ func (f floatingBuffer) Handle(ev term.Event) (exit, handled bool) {
 	return f.h.Handle(ev)
 }
 
-func (f floatingBuffer) Cursor() (pos term.Coordinates, show bool) {
+func (f floatingBuffer) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return f.h.Cursor()
 }
 

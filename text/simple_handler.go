@@ -146,8 +146,10 @@ func (h *simpleEditorHandler) Handle(ev term.Event) (exit, handled bool) {
 }
 
 // Cursor satisfies tui.Handler
-func (h *simpleEditorHandler) Cursor() (pos term.Coordinates, show bool) {
-	return h.cursor.Coordinates(), true
+func (h *simpleEditorHandler) Cursor() (
+	pos term.Coordinates, style term.CursorStyle, show bool,
+) {
+	return h.cursor.Coordinates(), term.CursorStyleSteadyBar, true
 }
 
 // Man satisfies tui.Handler

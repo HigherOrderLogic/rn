@@ -61,8 +61,8 @@ func (n nopFloating) Handle(term.Event) (bool, bool) {
 	return false, false
 }
 
-func (n nopFloating) Cursor() (term.Coordinates, bool) {
-	return term.Coordinates{}, false
+func (n nopFloating) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleDefault, false
 }
 
 func (n nopFloating) Man() tui.Manual {

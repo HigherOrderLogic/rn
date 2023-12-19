@@ -197,8 +197,8 @@ func (e *pluginHandler) Resize(width, height int) {
 	e.union.Resize(width, height)
 }
 
-func (e *pluginHandler) Cursor() (term.Coordinates, bool) {
-	return term.Coordinates{}, false
+func (e *pluginHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, term.CursorStyleDefault, false
 }
 
 func (e *pluginHandler) Man() tui.Manual {

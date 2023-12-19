@@ -38,7 +38,7 @@ func (k keyMappingHandler) Handle(ev term.Event) (bool, bool) {
 }
 
 // Cursor delegates call to underlying handler.
-func (k keyMappingHandler) Cursor() (term.Coordinates, bool) {
+func (k keyMappingHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return k.inner.Cursor()
 }
 
