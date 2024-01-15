@@ -50,8 +50,8 @@ github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504 h1:+v3dfsJghDlJel
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504/go.mod h1:T9+4zGzWs0JFtwPMJWg9ww68XpBzRi4R8X/3Iz3ZXDw=
 github.com/ernestrc/sensible v0.3.1 h1:r/kFTGQ+ffjCymTDJRXz6hUWQwWmeaCTwD449h0PEcc=
 github.com/ernestrc/sensible v0.3.1/go.mod h1:DMXklvqxnduBxPT1DWryJe9lHUDWV/Nd7ZcrqAlTw4Q=
-github.com/ernestrc/tcell/v2 v2.8.1-erc h1:6i47EgJ26DrrKA+vmHUiWhv8l4ZxkJ1IkEw9oV1SHnM=
-github.com/ernestrc/tcell/v2 v2.8.1-erc/go.mod h1:u/BhhH1yoHdubf5rjF8Unvl5UacDB2WIrpKswIa34gk=
+github.com/ernestrc/tcell/v2 v2.9.0-erc h1:3VJ95N0Ii9/CW4etm6OxY9PBaKHXGDfaMF+E3mHMVPU=
+github.com/ernestrc/tcell/v2 v2.9.0-erc/go.mod h1:tj0T+O2UnfZfxm5vEX6VQqEkhoVd6I/r7VfvgV91i0s=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
 github.com/fatih/color v1.10.0 h1:s36xzo75JdqLaaWoiEHk767eHiwo0598uUxyfiPkDsg=
 github.com/fatih/color v1.10.0/go.mod h1:ELkj/draVOlAH/xkhN6mQ50Qd0MPOk5AAr3maGEBuJM=
