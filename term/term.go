@@ -5,8 +5,8 @@ package term
 import (
 	"sync/atomic"
 
-	"github.com/ernestrc/tcell/v2"
-	"github.com/ernestrc/tcell/v2/termbox"
+	"github.com/ernestrc/tcell/v3"
+	"github.com/ernestrc/tcell/v3/termbox"
 )
 
 var (

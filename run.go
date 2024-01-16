@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ernestrc/tcell/v2"
+	"github.com/ernestrc/tcell/v3"
 	"unstable.build/go-tui/term"
 )
 

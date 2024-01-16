@@ -2,7 +2,7 @@
 
 package term
 
-import "github.com/ernestrc/tcell/v2/termbox"
+import "github.com/ernestrc/tcell/v3/termbox"
 
 // Cell colors, you can combine a color with multiple attributes using bitwise
 // OR ('|').

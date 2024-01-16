@@ -5,7 +5,7 @@ package term
 import (
 	"context"
 
-	"github.com/ernestrc/tcell/v2/termbox"
+	"github.com/ernestrc/tcell/v3/termbox"
 )
 
 type termboxWriter struct {
