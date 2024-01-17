@@ -51,8 +51,8 @@ github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504 h1:+v3dfsJghDlJel
 github.com/ernestrc/logd-go v0.0.0-20180509171507-65871c1d5504/go.mod h1:T9+4zGzWs0JFtwPMJWg9ww68XpBzRi4R8X/3Iz3ZXDw=
 github.com/ernestrc/sensible v0.3.1 h1:r/kFTGQ+ffjCymTDJRXz6hUWQwWmeaCTwD449h0PEcc=
 github.com/ernestrc/sensible v0.3.1/go.mod h1:DMXklvqxnduBxPT1DWryJe9lHUDWV/Nd7ZcrqAlTw4Q=
-github.com/ernestrc/tcell/v3 v3.1.1 h1:KTIG1rKRenTyPBixSHN70rMU1860r+Q9Pepv43tE8Ks=
-github.com/ernestrc/tcell/v3 v3.1.1/go.mod h1:Oe7Aj1mrsY+fop0HDoNk9gPOHc9psnuYb7ogftyn8Ms=
+github.com/ernestrc/tcell/v3 v3.1.2 h1:TjU9ojC2LQcAAWuEigz0uyLQ+izOiXbZhmxy8i6LGYM=
+github.com/ernestrc/tcell/v3 v3.1.2/go.mod h1:Oe7Aj1mrsY+fop0HDoNk9gPOHc9psnuYb7ogftyn8Ms=
 github.com/fatih/color v1.7.0/go.mod h1:Zm6kSWBoL9eyXnKyktHP6abPY2pDugNf5KwzbycvMj4=
 github.com/fatih/color v1.10.0 h1:s36xzo75JdqLaaWoiEHk767eHiwo0598uUxyfiPkDsg=
 github.com/fatih/color v1.10.0/go.mod h1:ELkj/draVOlAH/xkhN6mQ50Qd0MPOk5AAr3maGEBuJM=
