@@ -69,6 +69,7 @@ type viHandlerImpl struct {
 		To   term.Coordinates
 	}
 	pendingSetCursor *term.Coordinates
+	setLocations     bool
 }
 
 // DefaultviHandlerImplConfig is a sane configuration defaults for viHandlerImpl.
@@ -127,8 +128,10 @@ func (vi *viHandlerImpl) Draw(w term.Writer) {
 	locs, ok := vi.cursor.Locations()
 	if ok {
 		vi.setActiveLocationListMessage(locs)
-	} else {
+		vi.setLocations = true
+	} else if vi.setLocations {
 		vi.setMode(vi.currMode)
+		vi.setLocations = false
 	}
 	vi.less.Draw(w)
 }
