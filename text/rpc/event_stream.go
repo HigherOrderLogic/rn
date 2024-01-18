@@ -124,6 +124,11 @@ func (s eventStreamServer) receiveEvents(c *Client) {
 		cancel()
 		if err := ctx.Err(); err != nil {
 			s.log(log.ErrorLevel, "could not dispatch event %v in time: %v", ev.Type, err)
+			select {
+			case <-s.parentCtx.Done():
+				return
+			default:
+			}
 		}
 		if exit {
 			break
