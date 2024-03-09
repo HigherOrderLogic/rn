@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math"
 	"strings"
 
 	"github.com/rivo/uniseg"
@@ -47,10 +48,10 @@ func (c *rawCells) reset() {
 }
 
 func (c *rawCells) resetWithCap(rowCap, columnCap int) {
-	c.columnCap = columnCap
-	c.rowCap = rowCap
-	c.cells = make([][]term.Cell, 1, rowCap)
-	c.cells[0] = makeNewRow(0, columnCap)
+	c.columnCap = int(math.Max(float64(columnCap), float64(defColumnCap)))
+	c.rowCap = int(math.Max(float64(rowCap), float64(defRowCap)))
+	c.cells = make([][]term.Cell, 1, c.rowCap)
+	c.cells[0] = makeNewRow(0, c.columnCap)
 	c.zwj = false
 	c.zwjPos = term.Coordinates{}
 }
