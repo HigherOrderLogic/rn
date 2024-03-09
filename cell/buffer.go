@@ -2,6 +2,7 @@ package cell
 
 import (
 	"io"
+	"math"
 	"strings"
 
 	"unstable.build/go-tui/term"
@@ -112,7 +113,7 @@ func (b *Buffer) InitPerformance(tabspaces int, rowCapacity, columnCapacity int)
 
 // ResetCapacity resets the capacity given to new rows.
 func (b *Buffer) ResetCapacity(capacity int) {
-	b.cells.columnCap = capacity
+	b.cells.columnCap = int(math.Max(float64(defColumnCap), float64(capacity)))
 }
 
 // Init initializes this Buffer with the default configuration.

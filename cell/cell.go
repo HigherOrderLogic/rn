@@ -29,6 +29,11 @@ type Editor interface {
 
 // NewView returns a new Reader which reads from cells and uses tabspaces.
 func NewView(cells [][]term.Cell, tabspaces int) View {
-	r := &rawCells{cells: cells, tabspaces: tabspaces}
+	r := &rawCells{
+		cells:     cells,
+		tabspaces: tabspaces,
+		columnCap: defColumnCap,
+		rowCap:    defRowCap,
+	}
 	return r
 }

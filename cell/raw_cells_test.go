@@ -124,6 +124,16 @@ func (r *readFromTestCase) Read(p []byte) (n int, err error) {
 	return
 }
 
+func TestRawCellsReset(t *testing.T) {
+	var c rawCells
+	assert.NotPanics(t, func() {
+		c.resetWithCap(1, 0)
+	})
+	assert.NotPanics(t, func() {
+		c.resetWithCap(0, 1)
+	})
+}
+
 func TestRawCellsReadFrom(t *testing.T) {
 	myError := errors.New("oopsie daisy")
 

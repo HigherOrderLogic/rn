@@ -39,7 +39,7 @@ func (w *BufferWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	w.cells[pos.Y][pos.X].Ch = c.Ch
 	w.cells[pos.Y][pos.X].Fg = c.Fg
 	w.cells[pos.Y][pos.X].Bg = c.Bg
-	w.cells[pos.Y][pos.X].Attrs = c.Attrs 
+	w.cells[pos.Y][pos.X].Attrs = c.Attrs
 	w.cells[pos.Y][pos.X].Width = c.Width
 	w.cells[pos.Y][pos.X].Combining = c.Combining
 }
@@ -68,6 +68,8 @@ func (w *BufferWriter) ToBuffer(b *Buffer) {
 	cells := new(rawCells)
 	cells.cells = w.cells
 	cells.tabspaces = 1
+	cells.columnCap = defColumnCap
+	cells.rowCap = defRowCap
 	b.initWithCells(cells)
 }
 
