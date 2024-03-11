@@ -143,5 +143,5 @@ func (b *PrimaryBuffer) MaxOffset() int {
 // The start to end range is left inclusive, right exclusive.
 // As oppposed to AltBuffer's ResetLines, the `end` argument is not capped.
 func (b *PrimaryBuffer) ResetLines(start, end int) {
-	b.AltBuffer.ResetLinesWith(start, end, ' ')
+	b.AltBuffer.ResetLinesWith(start, end, b.defaultChar)
 }

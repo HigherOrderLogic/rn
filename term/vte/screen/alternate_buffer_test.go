@@ -32,6 +32,7 @@ func TestNewAltBuffer(t *testing.T) {
 func TestResize(t *testing.T) {
 	t.Run("resize up", func(t *testing.T) {
 		b := NewAltBuffer()
+		b.defaultChar = 'X'
 		b.Resize(2, 2)
 		assert.Equal(t, 2, b.Width())
 		assert.Equal(t, 2, b.Height())
@@ -40,13 +41,14 @@ func TestResize(t *testing.T) {
 		require.NotNil(t, b.Cells.RawCells())
 
 		assert.Equal(t, [][]term.Cell{
-			{{Ch: ' ', Width: 1}, {Ch: ' ', Width: 1}},
-			{{Ch: ' ', Width: 1}, {Ch: ' ', Width: 1}},
+			{{Ch: 'X', Width: 1}, {Ch: 'X', Width: 1}},
+			{{Ch: 'X', Width: 1}, {Ch: 'X', Width: 1}},
 		}, b.Cells.RawCells())
 	})
 	t.Run("resize down", func(t *testing.T) {
 		b := NewAltBuffer()
 		b.Resize(3, 3)
+		b.defaultChar = 'X'
 		b.Resize(2, 2)
 		assert.Equal(t, 2, b.Width())
 		assert.Equal(t, 2, b.Height())
@@ -55,8 +57,8 @@ func TestResize(t *testing.T) {
 		require.NotNil(t, b.Cells.RawCells())
 
 		assert.Equal(t, [][]term.Cell{
-			{{Ch: ' ', Width: 1}, {Ch: ' ', Width: 1}},
-			{{Ch: ' ', Width: 1}, {Ch: ' ', Width: 1}},
+			{{Ch: 'X', Width: 1}, {Ch: 'X', Width: 1}},
+			{{Ch: 'X', Width: 1}, {Ch: 'X', Width: 1}},
 		}, b.Cells.RawCells())
 	})
 }

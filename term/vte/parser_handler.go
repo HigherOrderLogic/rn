@@ -500,7 +500,7 @@ func (t *parserHandler) EraseChars(count int) {
 
 	pos := t.sync.buf.CursorAtScroll()
 	start := pos.X
-	end := int(math.Min(float64(start+count), float64(t.sync.buf.Columns(pos.Y))))
+	end := int(math.Min(float64(start+count), float64(t.endOfLine(pos.Y))))
 
 	t.sync.buf.ResetCells(start, end)
 }
@@ -563,11 +563,11 @@ func (t *parserHandler) ClearLine(mode parser.LineClearMode) {
 			return
 		}
 		start = pos.X
-		end = t.sync.buf.Columns(pos.Y)
+		end = t.endOfLine(pos.Y)
 	case parser.LineClearModeLeft:
 		end = pos.X + 1
 	case parser.LineClearModeAll:
-		end = t.sync.buf.Columns(pos.Y)
+		end = t.endOfLine(pos.Y)
 	default:
 		t.log(log.WarnLevel, "unknown clear line mode: %v", mode)
 		return
@@ -582,12 +582,11 @@ func (t *parserHandler) ClearScreen(mode parser.ClearMode) {
 	defer t.sync.mu.Unlock()
 
 	pos := t.sync.buf.CursorAtScroll()
-	columns := t.sync.buf.Columns(pos.Y)
-	lines := t.sync.buf.Rows()
+	columns := t.endOfLine(pos.Y)
+	lines := t.maxRows()
 
 	switch mode {
 	case parser.ClearModeBelow:
-		t.log(log.TraceLevel, "clear screen mode below: cursor pos=%+v, lines=%d", pos, lines)
 		t.sync.buf.ResetCells(pos.X, columns)
 		if pos.Y+1 < lines {
 			t.sync.buf.ResetLines(pos.Y+1, lines)
@@ -603,7 +602,7 @@ func (t *parserHandler) ClearScreen(mode parser.ClearMode) {
 
 	case parser.ClearModeAll:
 		if t.useAlt {
-			resetBufLines(t.sync.buf)
+			t.resetBufLines(t.sync.buf)
 		} else {
 			t.scrollUpPrimaryView()
 		}
@@ -1146,7 +1145,7 @@ func (t *parserHandler) swapAlt() {
 		t.sync.primBuf.SetSavedCursor(t.sync.primBuf.CloneCursor())
 
 		// Reset alternate screen contents.
-		resetBufLines(t.sync.altBuf)
+		t.resetBufLines(t.sync.altBuf)
 
 		t.sync.buf = t.sync.altBuf
 		t.useAlt = true
@@ -1164,13 +1163,13 @@ func (t *parserHandler) deccolm() {
 		t.sync.primBuf.SetOffset(term.Coordinates{})
 		t.shouldWrap = false
 	}
-	resetBufLines(t.sync.buf)
+	t.resetBufLines(t.sync.buf)
 }
 
-func resetBufLines(buf screenBuffer) {
-	// use cells rather than height to be resilient against
-	// constant resizes
-	buf.ResetLines(0, buf.Rows())
+func (t *parserHandler) resetBufLines(buf screenBuffer) {
+	// use rows rather than height if height is not yet == rows
+	// to be resilient against constant resizes
+	buf.ResetLines(0, t.maxRows())
 }
 
 func (t *parserHandler) carriageReturn() {
@@ -1180,7 +1179,7 @@ func (t *parserHandler) carriageReturn() {
 	}, false)
 }
 
-func (t *parserHandler) scrollDown(rows int, capPrimary bool) bool {
+func (t *parserHandler) scrollDown(rows int, userScroll bool) bool {
 	if t.useAlt {
 		return t.scrollDownAltRelative(t.sync.buf.TopScrollableRegion(), rows)
 	}
@@ -1189,7 +1188,7 @@ func (t *parserHandler) scrollDown(rows int, capPrimary bool) bool {
 	offset := buf.Offset()
 	t.shouldWrap = false
 
-	if capPrimary {
+	if userScroll {
 		newOffset := int(math.Max(float64(offset.Y-rows), 0))
 		if offset.Y != newOffset {
 			buf.MoveToOffset(term.Coordinates{Y: newOffset})
@@ -1200,7 +1199,10 @@ func (t *parserHandler) scrollDown(rows int, capPrimary bool) bool {
 
 	// satisfy alternate buffer semantics
 	// if it's a programmatic scroll down
-	defer buf.ResetLines(0, rows)
+	defer func() {
+		offset := buf.Offset().Y
+		buf.ResetLines(offset, offset+rows)
+	}()
 
 	offset.Y -= rows
 	if offset.Y < 0 {
@@ -1214,7 +1216,7 @@ func (t *parserHandler) scrollDown(rows int, capPrimary bool) bool {
 	return true
 }
 
-func (t *parserHandler) scrollUp(rows int, capPrimary bool) bool {
+func (t *parserHandler) scrollUp(rows int, userScroll bool) bool {
 	if t.useAlt {
 		return t.scrollUpAltRelative(t.sync.buf.TopScrollableRegion(), rows)
 	}
@@ -1223,7 +1225,7 @@ func (t *parserHandler) scrollUp(rows int, capPrimary bool) bool {
 	offset := buf.Offset()
 	t.shouldWrap = false
 
-	if capPrimary {
+	if userScroll {
 		newOffset := int(math.Min(float64(offset.Y+rows), float64(buf.MaxOffset())))
 		if offset.Y != newOffset {
 			buf.MoveToOffset(term.Coordinates{Y: newOffset})
@@ -1385,4 +1387,12 @@ func (t *parserHandler) scrollUpPrimaryView() {
 			}
 		}
 	}
+}
+
+func (t *parserHandler) endOfLine(y int) int {
+	return int(math.Max(float64(t.sync.buf.Columns(y)), float64(t.width)))
+}
+
+func (t *parserHandler) maxRows() int {
+	return int(math.Max(float64(t.height), float64(t.sync.buf.Rows())))
 }

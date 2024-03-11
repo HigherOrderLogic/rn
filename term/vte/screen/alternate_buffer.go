@@ -28,6 +28,7 @@ type AltBuffer struct {
 		to   term.Coordinates
 	}
 
+	defaultChar rune
 	tempScroll  [1][]term.Cell
 	savedCursor CursorState
 	cursor      CursorState
@@ -50,6 +51,7 @@ func NewAltBuffer() *AltBuffer {
 
 // Init initializes this buffer.
 func (b *AltBuffer) Init() {
+	b.defaultChar = ' '
 	b.width = 1
 	b.height = 1
 	b.topScrollableRegion = 0
@@ -58,7 +60,7 @@ func (b *AltBuffer) Init() {
 		Charsets: make(map[parser.CharsetIndex]parser.StandardCharset),
 	}
 	b.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80)
-	b.resetLinesTrim(0, b.height, true, ' ')
+	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 	b.scroll.InitPerformance(&b.Cells)
 }
 
@@ -66,7 +68,7 @@ func (b *AltBuffer) Init() {
 func (b *AltBuffer) Resize(width, height int) {
 	b.width = width
 	b.height = height
-	b.resetLinesTrim(0, height, true, ' ')
+	b.resetLinesTrim(0, height, true, b.defaultChar)
 	b.SetScrollableRegion(0, 0, true)
 	b.scroll.Resize(width, height)
 }
@@ -76,7 +78,7 @@ func (b *AltBuffer) Resize(width, height int) {
 // in the buffer, as it should always be capped at exactly b.Width(), set by
 // the previous call to Resize.
 func (b *AltBuffer) Insert(c rune, width int, charset parser.CharsetIndex) {
-	b.Cells.Insert(b.cursor.position, ' ')
+	b.Cells.Insert(b.cursor.position, b.defaultChar)
 	b.Write(c, width, charset)
 	columns := b.Cells.Columns(b.cursor.position.Y)
 	if columns > b.width {
@@ -93,7 +95,7 @@ func (b *AltBuffer) Write(c rune, width int, charset parser.CharsetIndex) {
 		c = charset.Map(c)
 	}
 	if b.cursor.hidden {
-		c = ' '
+		c = b.defaultChar
 	}
 	cell := b.CellAt(b.cursor.position)
 	if cell == nil {
@@ -108,7 +110,7 @@ func (b *AltBuffer) Write(c rune, width int, charset parser.CharsetIndex) {
 // ResetCells erases all the cells from start to end, on the current
 // cursor line. The start to end range is left inclusive, right exclusive.
 func (b *AltBuffer) ResetCells(start, end int) {
-	b.resetCellsAt(b.cursor.position.Y, start, end, ' ')
+	b.resetCellsAt(b.cursor.position.Y, start, end, b.defaultChar)
 }
 
 // ResetLines erases all the lines from start to end.
@@ -116,7 +118,7 @@ func (b *AltBuffer) ResetCells(start, end int) {
 // The `end` argument is capped to height.
 func (b *AltBuffer) ResetLines(start, end int) {
 	end = int(math.Min(float64(b.height), float64(end)))
-	b.ResetLinesWith(start, end, ' ')
+	b.ResetLinesWith(start, end, b.defaultChar)
 }
 
 // ResetLinesWith erases all the lines from start to end,
@@ -171,7 +173,7 @@ func (b *AltBuffer) SetCursorAtScroll(c term.Coordinates, relative bool) {
 // ScrollUp scrolls up the scrollable region set by SetScrollableRegion by count of lines
 func (b *AltBuffer) ScrollUp(start, end, count int) {
 	if end-start <= count {
-		b.ResetLinesWith(start, end, ' ')
+		b.ResetLinesWith(start, end, b.defaultChar)
 		return
 	}
 	var temp [][]term.Cell
@@ -189,13 +191,13 @@ func (b *AltBuffer) ScrollUp(start, end, count int) {
 	copy(cells[start:end-count], cells[start+count:end])
 	copy(cells[end-count:end], temp)
 
-	b.ResetLinesWith(end-count, end, ' ')
+	b.ResetLinesWith(end-count, end, b.defaultChar)
 }
 
 // ScrollDown scrolls down the scrollable region set by SetScrollableRegion by count of lines
 func (b *AltBuffer) ScrollDown(start, end, count int) {
 	if end-start <= count {
-		b.ResetLinesWith(start, end, ' ')
+		b.ResetLinesWith(start, end, b.defaultChar)
 		return
 	}
 
@@ -211,7 +213,7 @@ func (b *AltBuffer) ScrollDown(start, end, count int) {
 	copy(cells[start+count:end], cells[start:end-count])
 	copy(cells[start:start+count], temp)
 
-	b.ResetLinesWith(start, start+count, ' ')
+	b.ResetLinesWith(start, start+count, b.defaultChar)
 }
 
 // SetScrollableRegion sets the start and end of the scrollable area.
@@ -476,7 +478,7 @@ func (b *AltBuffer) resetLinesTrim(start, end int, trim bool, with rune) {
 
 	for y := start; y < end; y++ {
 		columns := b.Cells.Columns(y)
-		if columns > b.width && trim {
+		if columns > b.width {
 			from := term.Coordinates{Y: y, X: b.width}
 			to := term.Coordinates{Y: y, X: columns}
 			b.Cells.Delete(from, to)
