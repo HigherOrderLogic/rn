@@ -8,7 +8,10 @@ type ctxKey int
 
 var screenIDKey ctxKey
 
-func screenContext(ctx context.Context) context.Context {
+// NewContext returns a new Context that holds a screen context key,
+// such that any contexts that derive from it, including itself, would
+// return true in when passed on call to IsScreenContext.
+func NewContext(ctx context.Context) context.Context {
 	return context.WithValue(ctx, screenIDKey, struct{}{})
 }
 

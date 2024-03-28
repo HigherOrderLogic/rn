@@ -66,7 +66,7 @@ func (b *AltBuffer) Init() {
 	b.Cells.InitPerformance(cell.DefaultTabspaces, 120, 80)
 	b.resetLinesTrim(0, b.height, true, b.defaultChar)
 	b.scroll.InitPerformance(&b.Cells)
-	b.ctx = screenContext(context.Background())
+	b.ctx = NewContext(context.Background())
 }
 
 // Resize resizes this AltBuffer and resets the vertical margins.
