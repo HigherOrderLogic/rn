@@ -94,7 +94,7 @@ func newTestRPCBrowser(t *testing.T,
 		opts = append(opts, text.WithCommandKeyBinding(term.KeyComb{Key: term.KeyCtrlH}, []string{"previousTab"}))
 		ex := new(ex)
 		err := ex.init(ed, &testLoader{}, document.NewInMemoryService(),
-			vte.Config{}, nopPublishEvent, opts...)
+			vte.DefaultConfig(), nopPublishEvent, opts...)
 		if err != nil {
 			return nil, nil, err
 		}

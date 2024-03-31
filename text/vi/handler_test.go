@@ -255,7 +255,7 @@ diff_buf_adjust(win_
  diff_redraw(TRUE); 
  }                  
               INSERT`},
-		{"<hhhhhhR == NULL)",
+		{"<hhhhhhR == NULL)", // FIXME
 			`f (wp == NULL)▐     
                     
  i = diff_buf_idx(wi

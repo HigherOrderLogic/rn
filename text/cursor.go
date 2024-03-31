@@ -98,6 +98,13 @@ func NewCursor(scroll *component.Scroll) *Cursor {
 // updated scroll, unless it's a temporary swap.
 // Also, once initialized this cursor MUST NOT be copied.
 func (c *Cursor) Init(scroll *component.Scroll) {
+	c.InitPerformance(scroll)
+	c.scroll.Buffer().Subscribe(&c.subscriber)
+}
+
+// InitPerformance initializes this Cursor with a Scroll
+// that was initialized with InitPerformance.
+func (c *Cursor) InitPerformance(scroll *component.Scroll) {
 	c.cursor = term.Coordinates{}
 	c.scroll = scroll
 	c.selection.mode = NoSelection
@@ -105,8 +112,6 @@ func (c *Cursor) Init(scroll *component.Scroll) {
 	c.locs = make(map[string]LocationList)
 	c.drawLocations = make(map[string]*priorityLocationList)
 	c.messages = make(map[term.Coordinates][]message)
-
-	c.scroll.Buffer().Subscribe(&c.subscriber)
 }
 
 func (c *curSubscriber) OnWillEdit(
@@ -721,14 +726,19 @@ func (c *Cursor) InsertLineBelow() {
 	c.setCursorAfterUpdate(pos)
 }
 
-// Insert inserts rune at the current cursor's position.
+// Insert is equivalent to InsertContext with context.Background.
 func (c *Cursor) Insert(r rune) {
+	c.InsertContext(context.Background(), r)
+}
+
+// InsertContext inserts rune at the current cursor's position.
+func (c *Cursor) InsertContext(ctx context.Context, r rune) {
 	mode := c.selection.mode
 	c.selection.mode = NoSelection
 	c.setSelection()
 
 	insertAt := c.cursorAtScroll()
-	pos := c.buffer().Insert(insertAt, r)
+	pos := c.buffer().InsertContext(ctx, insertAt, r)
 	c.selection.mode = mode
 	c.setSelection()
 	c.setCursorAfterUpdate(pos)
@@ -840,10 +850,38 @@ func (c *Cursor) Paste(str string, mode SelectMode, after bool) {
 	}
 }
 
-// Delete deletes the cell at the current cursor position.
+// Replace is equivalent to ReplaceContext with context.Background.
+func (c *Cursor) Replace(r rune) {
+	c.ReplaceContext(context.Background(), r)
+}
+
+// ReplaceContext replaces the cell under the cursor with r.
+func (c *Cursor) ReplaceContext(ctx context.Context, r rune) {
+	mode := c.selection.mode
+	c.selection.mode = NoSelection
+	c.setSelection()
+
+	from := c.cursorAtScroll()
+	to := term.Coordinates{X: from.X + 1, Y: from.Y}
+	_, next, _ := c.buffer().Edit(ctx, from, to, string(r))
+
+	c.selection.mode = mode
+	c.setSelection()
+	c.setCursorAfterUpdate(next)
+
+	return
+}
+
+// Delete is equivalent to DeleteContext with context.Background.
 func (c *Cursor) Delete() (ok bool) {
+	ok = c.DeleteContext(context.Background())
+	return
+}
+
+// DeleteContext deletes the cell at the current cursor position.
+func (c *Cursor) DeleteContext(ctx context.Context) (ok bool) {
 	var pos term.Coordinates
-	pos, _, ok = c.buffer().DeleteCell(c.cursorAtScroll())
+	pos, _, ok = c.buffer().DeleteCellContext(ctx, c.cursorAtScroll())
 	if ok {
 		c.setCursorAfterUpdate(pos)
 	}
@@ -865,8 +903,13 @@ func (c *Cursor) Backspace() (ok bool) {
 	return
 }
 
-// Conflate removes the new line character at the end of the current line.
+// Conflate is equivalent to calling ConflateContext with context.Background.
 func (c *Cursor) Conflate() (ok bool) {
+	return c.ConflateContext(context.Background())
+}
+
+// ConflateContext removes the new line character at the end of the current line.
+func (c *Cursor) ConflateContext(ctx context.Context) (ok bool) {
 	enable := c.disablePublishing()
 	defer enable()
 
@@ -880,10 +923,10 @@ func (c *Cursor) Conflate() (ok bool) {
 
 	length := c.view().Columns(pos.Y)
 	if length == 0 {
-		c.buffer().DeleteRow(pos.Y)
+		c.buffer().DeleteRowContext(ctx, pos.Y)
 		return
 	}
-	c.buffer().ConflateRow(pos.Y)
+	c.buffer().ConflateRowContext(ctx, pos.Y)
 	c.setCursorAfterUpdate(term.Coordinates{Y: pos.Y, X: length})
 	return
 }

@@ -1169,9 +1169,22 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.Attributes = c.terminalDefaultAttr()
 	ret.SelectionAttributes = c.terminalSelectionAttr()
 	ret.NeedsAttentionAttributes = c.terminalNeedsAttentionAttr()
+	ret.Modal = c.editorMode() == editorModeModal
 	ret.Shell = c.terminalShell()
 	ret.Clipboard = c.clipboard()
-	ret.Bell = term.PublishBell
+	if log.IsLevelEnabled(log.TraceLevel) {
+		ret.ScheduleBell = func() {
+			log.Trace("schedule bell")
+			term.PublishBell()
+		}
+		ret.RingBell = func() {
+			log.Trace("ring bell")
+			term.RingBell()
+		}
+	} else {
+		ret.ScheduleBell = term.PublishBell
+		ret.RingBell = term.RingBell
+	}
 	return ret
 }
 

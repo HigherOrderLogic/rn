@@ -2456,6 +2456,43 @@ func TestCursorInsertBlock(t *testing.T) {
 	}
 }
 
+func TestCursorReplace(t *testing.T) {
+	t.Run("non wrap", func(t *testing.T) {
+		const initialContent = "a\nb\nc"
+		c := setupCursorContent(t, 5, 5, initialContent, false)
+
+		c.Replace('X')
+		assert.Equal(t, "X\nb\nc", c.buffer().String())
+
+		c.MoveDown()
+		c.MoveLeft()
+		c.Replace('Y')
+		assert.Equal(t, "X\nY\nc", c.buffer().String())
+
+		c.MoveDown()
+		c.MoveLeft()
+		c.Replace('Z')
+		assert.Equal(t, "X\nY\nZ", c.buffer().String())
+
+		c.Replace('A')
+		assert.Equal(t, "X\nY\nZA", c.buffer().String())
+
+		c.Replace('B')
+		assert.Equal(t, "X\nY\nZAB", c.buffer().String())
+	})
+
+	t.Run("wrap", func(t *testing.T) {
+		const initialContent = "aaaaaaaaaaa\nb\nc"
+		c := setupCursorContent(t, 5, 5, initialContent, false)
+
+		c.MoveEndLine()
+		c.MoveLeft()
+		c.Replace('X')
+		c.Replace('Y')
+		assert.Equal(t, "aaaaaaaaaXY\nb\nc", c.buffer().String())
+	})
+}
+
 func newBenchmarkScroll(width, height int, fortunes int) (scroll *component.Scroll) {
 	scroll = component.NewScroll(cell.NewBuffer())
 	for i := 0; i < fortunes; i++ {

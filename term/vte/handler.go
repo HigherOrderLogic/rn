@@ -28,11 +28,14 @@ type Handler struct {
 	publisher     browser.EventPublisher
 	notifications browser.Notifications
 	handleTimer   *time.Timer
+	vi            viHandler
 	ctx           context.Context
 	cancelCtx     func()
 
-	mouse       *text.Mouse
-	mouseDriver *mouseDriver
+	modalEnabled bool
+	viMode       bool
+	mouse        *text.Mouse
+	mouseDriver  *mouseDriver
 
 	bracketedPaste bool
 	closed         bool
@@ -74,6 +77,8 @@ func (e *Handler) Init(
 		return err
 	}
 	e.comp = comp
+	e.modalEnabled = config.Modal
+	e.vi.init(e.comp, config)
 
 	// set size hint before running firsrt program so output is correctly captured
 	if config.WidthHint != 0 || config.HeightHint != 0 {
@@ -136,6 +141,8 @@ func (e *Handler) Resize(width, height int) {
 	}
 	e.width, e.height = width, height
 
+	e.vi.Resize(width, height)
+
 	err := e.comp.Resize(width, height)
 	if err != nil {
 		e.log(log.ErrorLevel, "terminal set size: %s", err)
@@ -144,15 +151,34 @@ func (e *Handler) Resize(width, height int) {
 			e.notifications.Notify(notifications.LevelError, "terminal set size: %v", err)
 		}
 	}
+
+	e.comp.ScrollBottom()
 }
 
 // Draw satisfies tui.Component.
 func (e *Handler) Draw(w term.Writer) {
+	if e.viMode {
+		e.vi.Draw(w)
+		return
+	}
 	e.comp.Draw(w)
 }
 
 // Handle satisfies tui.Handler.
 func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
+	if e.viMode {
+		exit, handled := e.vi.Handle(ev)
+		if exit {
+			e.exitViMode()
+		}
+		return false, handled
+	}
+
+	if !e.comp.IsAltBuffer() && ev.Key == term.KeyEsc && e.modalEnabled {
+		e.enterViMode()
+		handled = true
+		return
+	}
 	exit, handled, raw := e.handleInput(ev)
 	if exit || handled || len(raw) == 0 {
 		return
@@ -205,15 +231,26 @@ func (e *Handler) OnFocusChange(inFocus bool) {
 
 // Cursor satisfies tui.Handler.
 func (e *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	if e.viMode {
+		return e.vi.Cursor()
+	}
 	if !e.comp.CursorVisible() {
 		return term.Coordinates{}, 0, false
 	}
 
-	return e.comp.CursorCoordinates(), e.comp.CursorStyle(), true
+	style := e.comp.CursorStyle()
+	if !e.comp.IsAltBuffer() && style == term.CursorStyleDefault {
+		style = term.CursorStyleSteadyBar
+	}
+
+	return e.comp.CursorAtScreen(), style, true
 }
 
 // Man satisfies tui.Handler.
 func (e *Handler) Man() tui.Manual {
+	if e.viMode {
+		return e.vi.Man()
+	}
 	panic("TODO")
 }
 
@@ -300,4 +337,15 @@ func (e *Handler) log(level log.Level, msg string, args ...any) {
 	log.WithFields(log.Fields{
 		logging.KeyClass: "emulator.Handler",
 	}).Logf(level, msg, args...)
+}
+
+func (e *Handler) enterViMode() {
+	e.viMode = true
+	e.comp.Unselect()
+	e.vi.enterViMode(e.comp.CursorAtScroll())
+}
+
+func (e *Handler) exitViMode() {
+	e.viMode = false
+	e.comp.ScrollBottom()
 }

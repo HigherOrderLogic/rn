@@ -8,6 +8,7 @@ import (
 	textapi "unstable.build/go-tui/api/text"
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -49,8 +50,6 @@ type Vi struct {
 	redoTimeline []snapshot
 }
 
-type viSubscriber Vi
-
 // New allocates storage for a new Vi handler, initializes it and returns it.
 func New(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) *Vi {
 	vi := new(Vi)
@@ -58,12 +57,32 @@ func New(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) *Vi {
 	return vi
 }
 
-// Init initialies this vi handle with a new Buffer.
+// Init initialies this vi handle with the given cell.Buffer.
 func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) {
-	vi.resource = resource
-
 	viHandler := new(viHandlerImpl)
 	viHandler.init(buf, opts...)
+
+	vi.init(viHandler, buf, resource, opts...)
+
+	text.WithCopyDelete(viHandler.config.defaultRegister,
+		vi, vi.cursor, buf)
+	vi.buf.Subscribe(vi)
+}
+
+// InitWithScroll initialies this vi handle with the given component.Scroll
+// and its cell.Buffer. This does not initialize this Vi implementation with copy
+// deletes to clipboard or undo/redo because we don't know if the given Scroll was initialized with
+// Subscribe functionality or not. Init should be used in favor of this method for standard
+// usage of Vi.
+func (vi *Vi) InitWithScroll(scroll *component.Scroll, resource workspaceapi.URI, opts ...Option) {
+	viHandler := new(viHandlerImpl)
+	viHandler.initWithScroll(scroll, opts...)
+
+	vi.init(viHandler, scroll.Buffer(), resource, opts...)
+}
+
+func (vi *Vi) init(viHandler *viHandlerImpl, buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) {
+	vi.resource = resource
 	vi.handler = viHandler
 	vi.buf = buf
 	vi.less = &viHandler.less
@@ -77,11 +96,7 @@ func (vi *Vi) Init(buf *cell.Buffer, resource workspaceapi.URI, opts ...Option) 
 	vi.redoTimeline = make([]snapshot, 0)
 	vi.oob = true
 
-	vi.buf.Subscribe((*viSubscriber)(vi))
 	vi.snapshotContent()
-
-	text.WithCopyDelete(viHandler.config.defaultRegister,
-		vi, vi.cursor, buf)
 }
 
 // Cursor satisfies tui.Handler
@@ -131,7 +146,7 @@ func (vi *Vi) pushNewSnapshot() {
 	vi.pushUndo(vi.currSnapshot)
 }
 
-func (vi *viSubscriber) OnWillEdit(
+func (vi *Vi) OnWillEdit(
 	ctx context.Context, from, to term.Coordinates, str string,
 ) {
 	if (!vi.oob && vi.oobEdited) || (!vi.currEdited && !vi.resetting) {
@@ -142,7 +157,7 @@ func (vi *viSubscriber) OnWillEdit(
 	}
 }
 
-func (vi *viSubscriber) OnDidEdit(
+func (vi *Vi) OnDidEdit(
 	ctx context.Context, start, end term.Coordinates, old string,
 ) {
 	if !vi.resetting {
@@ -311,6 +326,23 @@ func (vi *Vi) SetWrap(wrap bool) {
 // ShowCommandBar satisfies editor.Handler.
 func (vi *Vi) ShowCommandBar(show bool) {
 	vi.less.ShowCommandBar(show)
+}
+
+// IsEditMode returns whether the current mode is one of
+// the edit modes: insert, delete or replace.
+func (vi *Vi) IsEditMode() bool {
+	return isEditMode(vi.handler.mode())
+}
+
+// SetNormalMode switches the mode to normal.
+// It returns false if the current mode was already normal mode.
+func (vi *Vi) SetNormalMode() bool {
+	return vi.handler.setNormalMode()
+}
+
+// Unselect unselects any text that's been previously selected.
+func (vi *Vi) Unselect() bool {
+	return vi.handler.unselect()
 }
 
 // SetDefaultAttributes sets the underlying's Scroll's default Attributes.

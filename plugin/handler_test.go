@@ -89,7 +89,7 @@ sh-3.2$
 				return nil
 			})
 			h, err := New(nopBrowser{interrupt: waitInterrupt}, nopBrowser{}, fileScheme,
-				fileScheme, nopBrowser{}, vte.Config{}, test.cmdAndArgs, test.maxWidth,
+				fileScheme, nopBrowser{}, vte.DefaultConfig(), test.cmdAndArgs, test.maxWidth,
 				test.frame, component.FrameCharSetDefault(), term.Attributes{})
 			require.Equal(t, test.expectConstructorErr, err)
 			h.Resize(14, 6)

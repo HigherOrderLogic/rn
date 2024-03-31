@@ -47,14 +47,14 @@ lines:
 		}
 		from := term.Coordinates{Y: y}
 		to := term.Coordinates{Y: y}
-		b.Cells.DeleteLine(from, to)
+		b.Cells.DeleteLineContext(b.AltBuffer.ctx, from, to)
 	}
 }
 
 func (b *PrimaryBuffer) extendRowsToHeight() {
 	if b.AltBuffer.width > 0 && b.AltBuffer.height > 0 && b.Cells.Rows() < b.AltBuffer.height {
 		pos := term.Coordinates{Y: b.AltBuffer.height - 1, X: b.AltBuffer.width - 1}
-		b.Cells.Insert(pos, b.AltBuffer.defaultChar)
+		b.Cells.InsertContext(b.AltBuffer.ctx, pos, b.AltBuffer.defaultChar)
 	}
 }
 

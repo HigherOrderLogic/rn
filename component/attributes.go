@@ -114,7 +114,7 @@ func (s *AttrSetter) Draw(w term.Writer) {
 	var buf cell.Buffer
 	bw.ToBuffer(&buf)
 	var sc Scroll
-	sc.Init(&buf)
+	sc.InitPerformance(&buf)
 	sc.Resize(s.width, s.height)
 	sc.Draw(w)
 }

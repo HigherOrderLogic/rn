@@ -683,7 +683,7 @@ func TestMultipleFilesStartup(t *testing.T) {
 	mockBuf := testFileBuffer{}
 	workspace := testLoader{buf: &mockBuf}
 	b := newExForTestingWithWorkspace(t, &workspace, texttest.NopEditor(),
-		vte.Config{}, nopPublishEvent, opts...)
+		vte.DefaultConfig(), nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -831,7 +831,7 @@ func TestExKeySequence(t *testing.T) {
 		}
 		ex := new(ex)
 		require.NoError(t, ex.init(texttest.NopEditor(), &testLoader{}, document.NewInMemoryService(),
-			vte.Config{}, func(ev term.Event) bool {
+			vte.DefaultConfig(), func(ev term.Event) bool {
 				// do not confuse interrupt from list with sequence re-issue commands
 				if ev.Type == term.EventInterrupt {
 					return true
@@ -1034,7 +1034,7 @@ func newExForTestingWithWorkspace(
 }
 
 func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
-	return newExForTestingWithWorkspace(t, &testLoader{}, ed, vte.Config{},
+	return newExForTestingWithWorkspace(t, &testLoader{}, ed, vte.DefaultConfig(),
 		nopPublishEvent, opts...)
 }
 
@@ -1232,7 +1232,7 @@ func TestIntegrationEphemeralTerminal(t *testing.T) {
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingTerminal(t, workspace,
-		texttest.NopEditor(), vte.Config{}, nopPublishEvent, opts...)
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -1321,7 +1321,8 @@ func TestIntegrationCompanionTerminal(t *testing.T) {
 	defer fileScheme.Close()
 
 	// do not depend on host shell, which can vary across hosts
-	cfg := vte.Config{Shell: "sh"}
+	cfg := vte.DefaultConfig()
+	cfg.Shell = "sh"
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingTerminal(t, workspace,
 		texttest.NopEditor(), cfg, nopPublishEvent, opts...)
@@ -1374,7 +1375,7 @@ AAAAAAAAAAAAAAAAAAAA`,
 
 	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
 	b := newExForTestingWithWorkspace(t, workspace,
-		texttest.NopEditor(), vte.Config{}, nopPublishEvent, opts...)
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent, opts...)
 	defer b.Close()
 
 	testutil.TestHandlerSequence(t, b, 20, 10, cases)
@@ -1526,7 +1527,7 @@ reloadFile
 		touchTestFile(t, scheme, "daworg")
 		touchTestFile(t, scheme, "retalls")
 		b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
-			texttest.NopEditor(), vte.Config{}, nopPublishEvent, opts...)
+			texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent, opts...)
 		t.Cleanup(func() { _ = b.Close() })
 		return b
 	}
@@ -1563,13 +1564,20 @@ func TestTerminalOnFocus(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
-		testConfig := vte.Config{}
+		testConfig := vte.DefaultConfig()
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent)
 		tvte := newTestVte()
 		ex.newEmulatorHandler = func(initialCmd string, cfg vte.Config) (vteHandler, error) {
 			assert.Equal(t, "echo bla", initialCmd)
-			assert.Equal(t, testConfig, cfg)
+			assert.NotNil(t, cfg.ScheduleBell)
+			assert.NotNil(t, cfg.RingBell)
+			cfg.RingBell = nil
+			cfg.ScheduleBell = nil
+			expected := testConfig
+			expected.RingBell = nil
+			expected.ScheduleBell = nil
+			assert.Equal(t, expected, cfg)
 			return tvte, nil
 		}
 		t.Cleanup(func() { _ = ex.Close() })
@@ -1619,7 +1627,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
-		testConfig := vte.Config{}
+		testConfig := vte.DefaultConfig()
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent)
 		tvte := newTestVte()
@@ -1627,6 +1635,12 @@ func TestTerminalOnFocus(t *testing.T) {
 			testConfig := testConfig
 			testConfig.WidthHint = 80
 			testConfig.HeightHint = 80
+			assert.NotNil(t, cfg.ScheduleBell)
+			assert.NotNil(t, cfg.RingBell)
+			cfg.ScheduleBell = nil
+			cfg.RingBell = nil
+			testConfig.ScheduleBell = nil
+			testConfig.RingBell = nil
 			assert.Equal(t, testConfig, cfg)
 			return tvte, nil
 		}
@@ -1669,7 +1683,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		uri, err := workspaceapi.ParseURI("memory:///")
 		require.NoError(t, err)
 		scheme, _ := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
-		testConfig := vte.Config{}
+		testConfig := vte.DefaultConfig()
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent)
 		tvte := newTestVte()
@@ -1750,7 +1764,7 @@ type testVte struct {
 }
 
 func newTestVte() *testVte {
-	return newTestVteWithConfig("", vte.Config{})
+	return newTestVteWithConfig("", vte.DefaultConfig())
 }
 
 func newTestVteWithConfig(initialCmd string, cfg vte.Config) *testVte {

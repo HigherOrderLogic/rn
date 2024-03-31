@@ -138,8 +138,8 @@ func PublishBell() {
 }
 
 // ScheduleNextTick schedules running fn on the next event-loop iteration.
-func ScheduleNextTick(fn func()) {
-	PublishEvent(Event{Type: EventInterrupt, UserFunc: fn})
+func ScheduleNextTick(fn func()) bool {
+	return PublishEvent(Event{Type: EventInterrupt, UserFunc: fn})
 }
 
 // Poll gives access to the underlying tcell.Event channel.

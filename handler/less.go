@@ -36,7 +36,7 @@ func DefaultLessConfig() LessConfig {
 // Less is a clone of Unix' less program which implements
 // the Handler and Component interfaces.
 type Less struct {
-	scroll           component.Scroll
+	scroll           *component.Scroll
 	searchScroll     component.Scroll
 	searchScrollVirt component.Virtual
 	msg              component.Responsive
@@ -308,7 +308,7 @@ func (l *Less) Buffer() *cell.Buffer {
 // Scroll returns the internal scroll. Scroll's public properties
 // should not be updated. Use LessConfig instead.
 func (l *Less) Scroll() *component.Scroll {
-	return &l.scroll
+	return l.scroll
 }
 
 // Man : Handler
@@ -382,8 +382,26 @@ func (l *Less) Init(cfg LessConfig) {
 // InitWithBuffer initialzes this instance with the given Buffer and configuration.
 // If config is nil, the default one is used.
 func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
+	l.scroll = component.NewScroll(buf)
+	l.initWithBuffer(buf, cfg)
+}
+
+// InitWithScroll initialzes this instance with the given main Scroll and configuration.
+// If config is nil, the default one is used.
+func (l *Less) InitWithScroll(scroll *component.Scroll, cfg LessConfig) {
+	l.scroll = scroll
+	l.initWithBuffer(scroll.Buffer(), cfg)
+}
+
+// NewLess allocates storage and returns a new instance of Less.
+func NewLess(cfg LessConfig) *Less {
+	l := new(Less)
+	l.Init(cfg)
+	return l
+}
+
+func (l *Less) initWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	l.delEOF = false
-	l.scroll.Init(buf)
 	if cfg.ResAttr == (term.Attributes{}) {
 		cfg.ResAttr = DefaultLessConfig().ResAttr
 	}
@@ -396,16 +414,7 @@ func (l *Less) InitWithBuffer(buf *cell.Buffer, cfg LessConfig) {
 	l.setMessage("")
 
 	l.setupScroll(&l.searchScroll, l.config.BarAttr)
-	l.setupScroll(&l.scroll, l.config.Attributes)
+	l.setupScroll(l.scroll, l.config.Attributes)
 
 	l.SetNormalMode()
-
-	return
-}
-
-// NewLess allocates storage and returns a new instance of Less.
-func NewLess(cfg LessConfig) *Less {
-	l := new(Less)
-	l.Init(cfg)
-	return l
 }

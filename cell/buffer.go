@@ -73,28 +73,6 @@ func NewBuffer() (b *Buffer) {
 	return b
 }
 
-func (b *Buffer) initWithCells(c *rawCells) {
-	b.cells = c
-	b.editor = b.cells
-
-	// setup the root publisher as the deepest Editor
-	b.rootPub = newPublisher(b.editor)
-	b.undoer = newUndoer(b.rootPub)
-	b.editor = b.undoer
-	// setup the usage publisher at the shallowest Editor
-	b.usagePub = newPublisher(b.editor)
-	b.editor = b.usagePub
-	b.safew.editor = b.editor
-
-	b.setView(b.cells)
-}
-
-func (b *Buffer) setView(view View) {
-	b.view = view
-	b.safew.view = b.view
-	b.selector.view = b.view
-}
-
 // InitWithTabspaces initializes this Buffer with the given tabspaces.
 func (b *Buffer) InitWithTabspaces(tabspaces int) {
 	cells := new(rawCells)
@@ -108,10 +86,7 @@ func (b *Buffer) InitWithTabspaces(tabspaces int) {
 func (b *Buffer) InitPerformance(tabspaces int, rowCapacity, columnCapacity int) {
 	cells := new(rawCells)
 	cells.initWithCap(tabspaces, rowCapacity, columnCapacity)
-	b.cells = cells
-	b.editor = b.cells
-	b.safew.editor = b.editor
-	b.setView(b.cells)
+	b.initPerformanceWithCells(cells)
 }
 
 // ResetCapacity resets the capacity given to new rows.
@@ -659,4 +634,42 @@ func (b *Buffer) WithView(v View) (ret View) {
 	ret = b.view
 	b.setView(v)
 	return
+}
+
+// WithEditor installs a new Editor and returns this Buffer's previous Editor.
+// This should only be utilized for advanced use cases.
+func (b *Buffer) WithEditor(e Editor) (ret Editor) {
+	ret = b.editor
+	b.setEditor(e)
+	return
+}
+
+func (b *Buffer) setView(view View) {
+	b.view = view
+	b.safew.view = b.view
+	b.selector.view = b.view
+}
+
+func (b *Buffer) setEditor(ed Editor) {
+	b.editor = ed
+	b.safew.editor = ed
+}
+
+func (b *Buffer) initWithCells(cells *rawCells) {
+	b.cells = cells
+	// setup the root publisher as the deepest Editor
+	b.rootPub = newPublisher(b.cells)
+	b.undoer = newUndoer(b.rootPub)
+	// setup the usage publisher at the shallowest Editor
+	b.usagePub = newPublisher(b.undoer)
+
+	b.setEditor(b.usagePub)
+	b.setView(b.cells)
+}
+
+func (b *Buffer) initPerformanceWithCells(cells *rawCells) {
+	b.cells = cells
+
+	b.setEditor(b.cells)
+	b.setView(b.cells)
 }

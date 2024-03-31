@@ -16,6 +16,7 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/parser"
 	"unstable.build/go-tui/text"
@@ -35,12 +36,13 @@ type Component struct {
 	cancelCtx func()
 	uri       workspaceapi.URI
 
-	width, height int
-	parserHandler parserHandler
-	parser        parser.Parser
-	complete      bool
-	selectionAttr term.Attributes
-	defAttr       term.Attributes
+	width, height     int
+	parserHandler     parserHandler
+	waitParserHandler *waitParserHandler
+	parser            parser.Parser
+	complete          bool
+	selectionAttr     term.Attributes
+	defAttr           term.Attributes
 }
 
 // NOTE: this is an integrator implementation, it shouldn't really do much other
@@ -75,19 +77,20 @@ func (t *Component) Init(
 		return err
 	}
 
-	bell := cfg.Bell
-	if bell == nil {
-		bell = func() {}
+	if cfg.ScheduleBell == nil || cfg.RingBell == nil {
+		panic("nil bell function(s)")
 	}
 
 	t.parserHandler.init(&t.mu, t.pty, tm, t.clipboard,
-		bell, t.uri, cfg.NeedsAttentionAttributes)
+		cfg.ScheduleBell, t.uri, cfg.NeedsAttentionAttributes)
 	// start with pty slave file name as title
 	t.parserHandler.SetTitle(t.uri.Name())
 	var h parser.Handler = &t.parserHandler
 	if log.IsLevelEnabled(log.TraceLevel) {
 		h = parser.HandlerWithLogging("vte.parserHandler", h)
 	}
+	t.waitParserHandler = newWaitParserHandler(h)
+	h = t.waitParserHandler
 	t.parser.Init(h, new(parser.StdTimeout))
 	t.SetDefaultAttributes(t.defAttr)
 	return err
@@ -261,12 +264,22 @@ func (t *Component) CursorVisible() bool {
 		t.parserHandler.sync.buf.CursorAtScreen().Y < t.height
 }
 
-// CursorCoordinates returns the current coordinates of the cursor.
-func (t *Component) CursorCoordinates() term.Coordinates {
+// CursorAtScreen returns the current coordinates of the cursor,
+// relative to the screen.
+func (t *Component) CursorAtScreen() term.Coordinates {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	return t.parserHandler.sync.buf.CursorAtScreen()
+}
+
+// CursorAtScroll returns the current coordinates of the cursor,
+// relative to the underlying scroll.
+func (t *Component) CursorAtScroll() term.Coordinates {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	return t.cursorAtScroll()
 }
 
 // CursorStyle returns the term.CursorStyle that should be rendered
@@ -504,6 +517,19 @@ func (t *Component) OnFocusChange(inFocus bool) error {
 	return nil
 }
 
+// PrimaryScroll returns the primary buffer's underlying component.Scroll.
+func (t *Component) PrimaryScroll() *component.Scroll {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.parserHandler.sync.primBuf.Scroll()
+}
+
+// Locker returns the underlying sync.Locker used by this Component
+// to synchronize access to the internal state.
+func (t *Component) Locker() sync.Locker {
+	return &t.mu
+}
+
 // Close assumes lock has been acquired by caller
 func (t *Component) Close() (ret error) {
 	defer t.cancelCtx()
@@ -619,4 +645,13 @@ func (t *Component) drawSelection(w term.Writer) {
 			})
 		}
 	}
+}
+func (t *Component) cursorAtScroll() term.Coordinates {
+	return t.parserHandler.sync.buf.CursorAtScroll()
+}
+
+func (t *Component) scheduleBellCallback(
+	timeout time.Duration, callback func(),
+) (ok bool) {
+	return t.waitParserHandler.scheduleBellCallback(timeout, callback)
 }

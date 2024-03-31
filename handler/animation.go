@@ -55,7 +55,9 @@ func (p *player) cachePausedFrame(ctx context.Context) {
 	p.a.Draw(&bw)
 	bw.ToBuffer(&buf)
 
-	p.pausedFrame = component.NewScroll(&buf)
+	scroll := new(component.Scroll)
+	scroll.InitPerformance(&buf)
+	p.pausedFrame = scroll
 	p.pausedFrame.Resize(p.width, p.height)
 }
 

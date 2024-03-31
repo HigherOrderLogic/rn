@@ -9,6 +9,7 @@ import (
 	"unstable.build/go-tui"
 	textapi "unstable.build/go-tui/api/text"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -48,8 +49,10 @@ type viHandler interface {
 	moveToPrevLocation(ID string)
 	setLocationList(pri textapi.LocationPriority, ID string, l text.LocationList)
 	setCursorAtScroll(pos term.Coordinates) bool
+	setNormalMode() bool
 	cursorAtScroll() term.Coordinates
 	moveToBounds()
+	unselect() bool
 }
 
 // viHandlerImpl implements a basic vi-like text editor which satisfies tui.Handler
@@ -80,6 +83,7 @@ var defaultviHandlerImplConfig = viConfig{
 	},
 	clipboard:       clipboard.NewInMemory(),
 	defaultRegister: clipboard.DefaultRegisterID,
+	skipNulls:       true,
 }
 
 func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
@@ -94,6 +98,7 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 		ResAttr:    vi.config.resAttr,
 		BarAttr:    vi.config.barAttr,
 		Attributes: vi.config.attr,
+		NoBar:      vi.config.barHidden,
 	})
 	scroll := vi.less.Scroll()
 	scroll.Attributes = vi.config.attr
@@ -103,6 +108,28 @@ func (vi *viHandlerImpl) init(buf *cell.Buffer, opts ...Option) {
 
 	vi.free = vi.cursor.Mark()
 
+	vi.setMode(normalMode)
+}
+
+func (vi *viHandlerImpl) initWithScroll(scroll *component.Scroll, opts ...Option) {
+	vi.config = defaultviHandlerImplConfig
+	for _, o := range opts {
+		o(&vi.config)
+	}
+
+	vi.less.InitWithScroll(scroll, handler.LessConfig{
+		Wrap:       vi.config.wrap,
+		Debug:      vi.config.debug,
+		ResAttr:    vi.config.resAttr,
+		BarAttr:    vi.config.barAttr,
+		Attributes: vi.config.attr,
+		NoBar:      vi.config.barHidden,
+	})
+	// do not initialize repeater, as we don't know if scroll
+	// was initialized with subscription functionality.
+	// vi.repeater.Init(&vi.cursor, scroll.Buffer())
+	vi.cursor.InitPerformance(vi.less.Scroll())
+	vi.free = vi.cursor.Mark()
 	vi.setMode(normalMode)
 }
 
@@ -598,9 +625,10 @@ func (vi *viHandlerImpl) handleReplace(ev term.Event) (quit, handled bool) {
 		// do not delete column == len(row); it contains a newline
 		// and that would conflate the current row with the next
 		if vi.cursor.Column() < vi.less.Buffer().Columns(vi.cursor.Line()) {
-			vi.cursor.Delete()
+			vi.cursor.Replace(ev.Ch)
+		} else {
+			vi.cursor.Insert(ev.Ch)
 		}
-		vi.cursor.Insert(ev.Ch)
 	}
 	return
 }
@@ -775,10 +803,12 @@ func (vi *viHandlerImpl) doMoveToBounds(prev text.CursorMark) {
 	case normalMode, yankMode, searchMode, gMode, deleteMode:
 		if !vi.config.debug {
 			vi.cursor.MoveToBounds(0)
-			if after {
-				vi.cursor.MoveToPrevNonNull()
-			} else {
-				vi.cursor.MoveToNextNonNull()
+			if vi.config.skipNulls {
+				if after {
+					vi.cursor.MoveToPrevNonNull()
+				} else {
+					vi.cursor.MoveToNextNonNull()
+				}
 			}
 		}
 	case insertMode, replaceMode, replaceOneMode,
@@ -834,4 +864,8 @@ func (vi *viHandlerImpl) mode() viMode {
 		return searchMode
 	}
 	return vi.currMode
+}
+
+func (vi *viHandlerImpl) unselect() bool {
+	return vi.cursor.Unselect()
 }

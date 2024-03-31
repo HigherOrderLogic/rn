@@ -43,6 +43,14 @@ func (h *mockHandler) Resize(width, height int) {
 	h.h.Resize(width, height)
 }
 
+func (h *mockHandler) setNormalMode() bool {
+	return false
+}
+
+func (h *mockHandler) unselect() bool {
+	return false
+}
+
 func (h *mockHandler) Handle(ev term.Event) (bool, bool) {
 	h.received = append(h.received, ev)
 	switch ev.Ch {

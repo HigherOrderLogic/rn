@@ -455,6 +455,11 @@ func (b *AltBuffer) SelectionCoordinatesAtScreen() (
 	return
 }
 
+// Scroll returns this buffer's underlying component.Scroll.
+func (b *AltBuffer) Scroll() *component.Scroll {
+	return &b.scroll
+}
+
 // resetCellsAt erases all the cells from start to end, at the given line,
 // The start to end range is left inclusive, right exclusive.
 func (b *AltBuffer) resetCellsAt(y int, start, end int, with rune) {

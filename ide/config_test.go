@@ -198,12 +198,16 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 	require.NoError(t, err)
 
 	vteConfig := cfg.terminalConfig()
-	assert.NotNil(t, vteConfig.Bell)
-	vteConfig.Bell = nil
+	assert.NotNil(t, vteConfig.RingBell)
+	assert.NotNil(t, vteConfig.ScheduleBell)
+	vteConfig.ScheduleBell = nil
+	vteConfig.RingBell = nil
 	assert.Equal(t, vte.Config{
 		Clipboard:                reg,
 		SelectionAttributes:      selectAttr,
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink},
+		Modal:                    true,
+		ClipboardRegister:        clipboard.DefaultRegisterID,
 	}, vteConfig)
 	assert.Equal(t, command.DefaultConfig().ShowManualAfter, cfg.commandOverlayShowManualAfter())
 	assert.Equal(t, command.DefaultConfig().ManualAttr, cfg.commandOverlayManualAttr())
@@ -313,14 +317,18 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, term.Attributes{Bg: tcell.ColorWhite}, cfg.workspaceWallpaperBackgroundAttr())
 
 	vteConfig := cfg.terminalConfig()
-	assert.NotNil(t, vteConfig.Bell)
-	vteConfig.Bell = nil
+	assert.NotNil(t, vteConfig.ScheduleBell)
+	vteConfig.ScheduleBell = nil
+	assert.NotNil(t, vteConfig.RingBell)
+	vteConfig.RingBell = nil
 	expectedEmulatorConfig := vte.Config{
 		Shell:                    "sh",
 		Attributes:               term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorYellow},
 		Clipboard:                clipboard.NewInMemory(),
+		ClipboardRegister:        clipboard.DefaultRegisterID,
 		SelectionAttributes:      term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorTeal},
 		NeedsAttentionAttributes: term.Attributes{Attrs: tcell.AttrBlink, Fg: tcell.ColorRed},
+		Modal:                    true,
 	}
 	assert.Equal(t, expectedEmulatorConfig, vteConfig)
 
