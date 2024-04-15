@@ -94,7 +94,7 @@ func run(root Handler, lock sync.Locker, termw term.ContextWriter) (err error) {
 	signal.Notify(sigs, os.Interrupt)
 	defer signal.Stop(sigs)
 
-	var handled, exit bool
+	var exit bool
 	var lastSignalAt time.Time
 	var prevCursor term.CursorStyle
 	var i int64
@@ -142,11 +142,9 @@ loop:
 					lock.Unlock()
 				default:
 					lock.Lock()
-					exit, handled = root.Handle(ev)
+					exit, _ = root.Handle(ev)
 					lock.Unlock()
-					if ev.Key == term.KeyCtrlC && !handled {
-						handleInterruptSignal(&lastSignalAt, &exit, evs)
-					}
+					handleInterruptSignal(&lastSignalAt, &exit, evs)
 				}
 			}
 			if exit || len(evs) == 0 {
