@@ -181,23 +181,6 @@ extensions:
       # Ranges from -100 to 100, it indicates whether
       # contrast should be increased to provide clearer frames.
       contrast: 30
-  issues:
-    path: /usr/local/bin/extension_issues
-    config:
-      bluectl_config: ~/.bluectl/config
-      # Disables default commands 'issueCreate' and 'issueRefresh'
-      # disable_default_commands: false
-      # max_list_files_subject_len: 50
-      templates:
-        # you can add more templates here. The key of the object
-        # i.e. reportBug, is the name of the command to invoke this
-        # issue create template.
-        reportBug:
-          package: six
-          author: user@template
-          metadata:
-            bug: ""
-            milestones: v0.1.0
   # This extension is used as a general purpose syntax highlighter.
   # It's based off https://github.com/alecthomas/chroma.
   lexer:
