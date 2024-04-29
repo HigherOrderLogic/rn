@@ -99,7 +99,7 @@ func startWorkspaceServer() int {
 		}
 		log.SetOutput(f)
 		log.SetLevel(log.TraceLevel)
-		log.SetFormatter(&logging.LogrusFormatter{})
+		log.SetFormatter(logging.LogrusLogdFormatter{})
 		proto.EnableGRPCLogging(f, f, f)
 
 		defer f.Close()

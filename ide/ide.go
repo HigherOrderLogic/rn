@@ -95,8 +95,7 @@ func (i *IDE) init(
 
 		log.SetOutput(f)
 		log.SetLevel(level)
-		fmt := &logging.LogrusFormatter{}
-		log.SetFormatter(fmt)
+		log.SetFormatter(logging.LogrusLogdFormatter{})
 	} else {
 		log.SetOutput(ioutil.Discard)
 		log.SetLevel(log.PanicLevel)
