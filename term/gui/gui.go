@@ -30,6 +30,7 @@ import (
 	"sync"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
@@ -265,6 +266,32 @@ func (g *GUI) SetWindowPosition(x, y int) {
 // SetWindowSize panics if width or height is not a positive number.
 func (g *GUI) SetWindowSize(width, height int) {
 	ebiten.SetWindowSize(width, height)
+}
+
+// IncreaseFontSize increases the size of the rendered font,
+// making the interface appear bigger.
+func (g *GUI) IncreaseFontSize() error {
+	return g.fontManager.IncreaseSize()
+}
+
+// DecreaseFontSize increases the size of the rendered font,
+// making the interface appear bigger.
+func (g *GUI) DecreaseFontSize() error {
+	return g.fontManager.DecreaseSize()
+}
+
+// SetFont sets the font collection identified by the given family name.
+// If family is set to an empty string, the default system font is used.
+// If the family is set to 'builtin', the GUI's builtin fallback font
+// is used.
+func (g *GUI) SetFont(family string) error {
+	return g.fontManager.SetFontByFamilyName(family)
+}
+
+// AvailableFontFamilies returns an iterator with the available
+// font families on the system.
+func (g *GUI) AvailableFontFamilies() (iterator.Iterator[string], error) {
+	return g.fontManager.AvailableFontFamilies()
 }
 
 func (g *GUI) drawHandler(ctx context.Context) {

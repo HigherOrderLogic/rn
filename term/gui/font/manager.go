@@ -30,6 +30,7 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/fontinfo"
 	"golang.org/x/image/font"
@@ -233,6 +234,20 @@ func (m *Manager) BoldItalicFontFace() font.Face {
 		return m.BoldFontFace()
 	}
 	return m.boldItalicFace
+}
+
+// AvailableFontFamilies returns a list of available font families.
+func (m *Manager) AvailableFontFamilies() (iterator.Iterator[string], error) {
+	fonts, err := fontinfo.Match()
+	if err != nil {
+		return nil, fmt.Errorf("search fonts: %w", err)
+	}
+
+	var ret []string
+	for _, font := range fonts {
+		ret = append(ret, font.Family)
+	}
+	return iterator.FromSlice[string](ret), nil
 }
 
 func (m *Manager) ensureFontLoaded() {
