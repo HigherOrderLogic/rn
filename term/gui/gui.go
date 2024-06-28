@@ -209,15 +209,6 @@ func (g *GUI) Update() error {
 	return nil
 }
 
-func (g *GUI) drawHandler(ctx context.Context) {
-	g.writer.SetContext(ctx)
-	_ = g.writer.Clear(g.defaultAttr)
-	g.handler.Draw(g.writer)
-	g.cursor.pos, g.cursor.style, g.cursor.show = g.handler.Cursor()
-	g.needsDraw = false
-	g.needsRender = true
-}
-
 // Layout satisfies ebiten.Game. It provides the terminal gui size in pixels.
 func (g *GUI) Layout(width, height int) (int, int) {
 	s := g.fontManager.DeviceScale()
@@ -228,6 +219,61 @@ func (g *GUI) Layout(width, height int) (int, int) {
 	}
 
 	return int(float64(width) * s), int(float64(height) * s)
+}
+
+// MinimizeWindow minimizes the window.
+func (g *GUI) MinimizeWindow() {
+	ebiten.MinimizeWindow()
+}
+
+// MaximizeWindow maximizes the window.
+func (g *GUI) MaximizeWindow() {
+	ebiten.MaximizeWindow()
+}
+
+// RestoreWindow restores the window from its maximized or minimized state.
+func (g *GUI) RestoreWindow() {
+	ebiten.RestoreWindow()
+}
+
+// SetFullscreen changes the current mode to fullscreen or not.
+//
+// When on, the GUI screen is automatically enlarged
+// to fit with the monitor. The current scale value is ignored.
+//
+// On desktops, Ebitengine uses 'windowed' fullscreen mode, which doesn't change
+// your monitor's resolution.
+//
+// SetFullscreen does nothing on macOS when the window is fullscreened
+// natively by the macOS desktop instead of SetFullscreen(true).
+func (g *GUI) SetFullscreen(fullscreen bool) {
+	ebiten.SetFullscreen(fullscreen)
+}
+
+// SetWindowPosition sets the window position.
+// The position is an offset from the upper-left corner of the current monitor,
+// in device-independent pixels.
+// It sets the original window position in fullscreen mode.
+func (g *GUI) SetWindowPosition(x, y int) {
+	ebiten.SetWindowPosition(x, y)
+}
+
+// SetWindowSize sets the window size,
+// even if the application is in fullscreen mode,
+// it will set the original window size.
+//
+// SetWindowSize panics if width or height is not a positive number.
+func (g *GUI) SetWindowSize(width, height int) {
+	ebiten.SetWindowSize(width, height)
+}
+
+func (g *GUI) drawHandler(ctx context.Context) {
+	g.writer.SetContext(ctx)
+	_ = g.writer.Clear(g.defaultAttr)
+	g.handler.Draw(g.writer)
+	g.cursor.pos, g.cursor.style, g.cursor.show = g.handler.Cursor()
+	g.needsDraw = false
+	g.needsRender = true
 }
 
 func (g *GUI) resize(width, height int, deviceScale float64) {
