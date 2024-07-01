@@ -20,10 +20,31 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-//go:build !darwin
+//go:build darwin
 package font
 
-func defaultFamily() string {
-	// use builtin
-	return ""
+import (
+	"os/user"
+	"strings"
+)
+
+func defaultFont() string {
+	return "/System/Library/Fonts/Menlo.ttc"
+}
+
+func expandUser(path string) (expandedPath string) {
+	if strings.HasPrefix(path, "~") {
+		if u, err := user.Current(); err == nil {
+			return strings.Replace(path, "~", u.HomeDir, -1)
+		}
+	}
+	return path
+}
+
+func fontDirs() (paths []string) {
+	return []string{
+		expandUser("~/Library/Fonts/"),
+		"/Library/Fonts/",
+		"/System/Library/Fonts/",
+	}
 }

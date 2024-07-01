@@ -20,8 +20,41 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+//go:build unix && !darwin
+
 package font
 
-func defaultFamily() string {
-	return "Menlo"
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+)
+
+func defaultFont() string {
+	// use builtin
+	return ""
+}
+
+func fontDirs() (paths []string) {
+	directories := userFontDirs()
+	directories = append(directories, systemFontDirs()...)
+	return directories
+}
+
+func userFontDirs() (paths []string) {
+	if dataPath := os.Getenv("XDG_DATA_HOME"); dataPath != "" {
+		return []string{expandUser("~/.fonts/"), filepath.Join(expandUser(dataPath), "fonts")}
+	}
+	return []string{expandUser("~/.fonts/"), expandUser("~/.local/share/fonts/")}
+}
+
+func systemFontDirs() (paths []string) {
+	if dataPaths := os.Getenv("XDG_DATA_DIRS"); dataPaths != "" {
+		for _, dataPath := range filepath.SplitList(dataPaths) {
+			paths = append(paths, filepath.Join(expandUser(dataPath), "fonts"))
+		}
+		return paths
+	}
+	return []string{"/usr/local/share/fonts/", "/usr/share/fonts/"}
 }

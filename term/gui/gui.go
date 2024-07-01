@@ -30,7 +30,9 @@ import (
 	"sync"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
+	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
@@ -90,11 +92,15 @@ type GUI struct {
 // New allocates storage for a new GUI and initializes it with the given
 // tui.Handler and options.
 func New(handler tui.Handler, options ...Option) (*GUI, error) {
+	fontManager, err := font.NewManager()
+	if err != nil {
+		return nil, fmt.Errorf("font manager: %v", err)
+	}
 	ret := &GUI{
 		mu:               new(sync.Mutex),
 		handler:          handler,
 		updateChan:       make(chan term.Event, 50),
-		fontManager:      font.NewManager(),
+		fontManager:      fontManager,
 		activeHinter:     -1,
 		enableLigatures:  true,
 		cursorAttributes: term.Attributes{Bg: tcell.ColorRed},
@@ -319,6 +325,10 @@ func (g *GUI) resize(width, height int, deviceScale float64) {
 
 	cellsWidth := g.fontManager.CellsWidth(g.width)
 	cellsHeight := g.fontManager.CellsHeight(g.height)
+	g.log(log.DebugLevel, "resize: pixels width: %d, height: %d, "+
+		"device scale %f; cells width: %d, height: %d",
+		width, height, deviceScale, cellsWidth, cellsHeight)
+
 	g.handler.Resize(cellsWidth, cellsHeight)
 	g.mouse.resize(cellsWidth, cellsHeight)
 	g.writer = cell.NewBufferWriter(g.ctx, cellsWidth, cellsHeight)
@@ -347,4 +357,10 @@ func (g *GUI) consumeEvents() {
 		g.pendingEvents = append(g.pendingEvents, ev)
 		g.mu.Unlock()
 	}
+}
+
+func (p *GUI) log(level log.Level, msg string, args ...any) {
+	log.WithFields(log.Fields{
+		logging.KeyClass: "gui",
+	}).Logf(level, msg, args...)
 }

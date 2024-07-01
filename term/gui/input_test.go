@@ -317,7 +317,7 @@ func TestInputFireOnce(t *testing.T) {
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
-			mock, input := newTestInput()
+			mock, input := newTestInput(t)
 			for _, key := range test.pressedKeys {
 				mock.pressedKeys[key] = struct{}{}
 			}
@@ -510,7 +510,7 @@ func TestInputFireDelay(t *testing.T) {
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
-			mock, input := newTestInput()
+			mock, input := newTestInput(t)
 			if len(test.pressedKeys) != len(test.pressedChars) || len(test.pressedChars) != len(test.expectedEvents) {
 				t.Fatalf("incorrectly setup test case: pressedChars, pressedKeys " +
 					"and expectedEvents must be of the same length")
@@ -544,7 +544,7 @@ func TestInputFireDelay(t *testing.T) {
 
 func TestInputFireRepeatKey(t *testing.T) {
 	for _, key := range []ebiten.Key{ebiten.KeyA, ebiten.KeyMeta} {
-		mock, input := newTestInput()
+		mock, input := newTestInput(t)
 		input.keyPressDelay = 1 * time.Second
 		input.keyPressRepeat = 500 * time.Millisecond
 
@@ -577,9 +577,10 @@ func TestInputFireRepeatKey(t *testing.T) {
 	}
 }
 
-func newTestInput() (*mockInputManager, *input) {
+func newTestInput(t *testing.T) (*mockInputManager, *input) {
 	mock := &mockInputManager{pressedKeys: map[ebiten.Key]struct{}{}}
-	f := font.NewManager()
+	f, err := font.NewManager()
+	require.NoError(t, err)
 	f.SetFontByFamilyName("builtin")
 	f.SetDeviceScale(1)
 	ret := newInput(f)
