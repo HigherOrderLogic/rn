@@ -20,19 +20,22 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+//go:build windows
 package font
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"os"
+	"path/filepath"
 )
 
-func TestLoadDefaultFont(t *testing.T) {
-	m, err := NewManager()
-	require.NoError(t, err)
-	assert.NotPanics(t, func() {
-		assert.NotNil(t, m.RegularFontFace())
-	})
+func defaultFont() string {
+	// use builtin
+	return ""
+}
+
+func fontDirs() (paths []string) {
+	return []string{
+		filepath.Join(os.Getenv("windir"), "Fonts"),
+		filepath.Join(os.Getenv("localappdata"), "Microsoft", "Windows", "Fonts"),
+	}
 }

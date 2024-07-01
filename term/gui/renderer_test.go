@@ -44,7 +44,11 @@ func BenchmarkRenderLigatures4k(b *testing.B) {
 }
 
 func benchmarkRenderLigatures(b *testing.B, pixelsWidth, pixelsHeight int) {
-	manager := font.NewManager()
+	manager, err := font.NewManager()
+	if err != nil {
+		b.Logf("new manager: %v", err)
+		b.FailNow()
+	}
 	width := manager.CellsWidth(pixelsWidth)
 	height := manager.CellsHeight(pixelsHeight)
 

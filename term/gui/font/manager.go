@@ -23,21 +23,26 @@
 package font
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
 	"os"
+	"path/filepath"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	"github.com/unstablebuild/fontinfo"
+	"go.uber.org/multierr"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/font/sfnt"
 	"golang.org/x/image/math/fixed"
+	"unstable.build/go-tui/api/config"
+	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/term/gui/font/builtinfont"
+	"unstable.build/go-tui/workspace"
 )
 
 // Manager manages the underlying font.Face used to render
@@ -46,7 +51,8 @@ import (
 //
 // If SetFontByFamilyName is not called, a builtin font is used.
 type Manager struct {
-	family         string
+	findfont       findFont
+	paths          []string
 	regularFace    font.Face
 	boldFace       font.Face
 	italicFace     font.Face
@@ -67,11 +73,17 @@ type CharSize struct {
 
 // NewManager allocates storage for a new Manager and initializes it
 // with the default font and dpi.
-func NewManager() *Manager {
+func NewManager() (*Manager, error) {
 	ret := &Manager{
 		size: 16,
 		dpi:  72,
 	}
+	cwdURI, _ := workspaceapi.CurrentUserHostURI(".")
+	fs, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), cwdURI)
+	if err != nil {
+		return nil, fmt.Errorf("new file scheme: %v", err)
+	}
+	ret.findfont = systemFindFont{reader: fs}
 	// TODO use builtin glyphs for special characters that
 	// need specific offsets. This is how alacritty always
 	// gets pixel perfect frame borders.
@@ -81,7 +93,7 @@ func NewManager() *Manager {
 	// font's glyphs for the rest.
 	ret.offset.Y = fixed.Int26_6(float64(1.0) * (1 << 6))
 	// ret.offset.X = 58 // between 0.5 and 1.0
-	return ret
+	return ret, nil
 }
 
 // IncreaseSize increases the size of the font by 1.
@@ -110,7 +122,10 @@ func (m *Manager) SetDPI(dpi float64) error {
 		panic(errors.New("DPI must be >0"))
 	}
 	m.dpi = dpi
-	err := m.SetFontByFamilyName(m.family)
+	if m.paths == nil {
+		return m.loadDefaultFonts()
+	}
+	err := m.setFont(m.paths)
 	if err != nil {
 		return fmt.Errorf("reload font: %w", err)
 	}
@@ -122,8 +137,11 @@ func (m *Manager) SetDPI(dpi float64) error {
 // an error if there was a problem reloading the font.
 func (m *Manager) SetSize(size float64) error {
 	m.size = size
+	if m.paths == nil {
+		return m.loadDefaultFonts()
+	}
 	// effectively reload fonts at new size
-	if err := m.SetFontByFamilyName(m.family); err != nil {
+	if err := m.setFont(m.paths); err != nil {
 		return fmt.Errorf("reload font: %w", err)
 	}
 	return nil
@@ -133,7 +151,8 @@ func (m *Manager) SetSize(size float64) error {
 // sets it as the configured font, or returns an error if there was
 // a problem loading the given font.
 func (m *Manager) SetFontByFamilyName(name string) error {
-	m.family = name
+	m.resetFonts()
+
 	if name == "" {
 		return m.loadDefaultFonts()
 	}
@@ -141,7 +160,11 @@ func (m *Manager) SetFontByFamilyName(name string) error {
 		return m.loadFallbackFont()
 	}
 
-	return m.findAndLoadFont(name)
+	paths, err := m.findAndLoadFont(name)
+	if err == nil {
+		m.paths = paths
+	}
+	return err
 }
 
 // SetDeviceScale forces the device scale to the given value.
@@ -236,18 +259,23 @@ func (m *Manager) BoldItalicFontFace() font.Face {
 	return m.boldItalicFace
 }
 
-// AvailableFontFamilies returns a list of available font families.
+// AvailableFontFamilies returns a list of available font families, by family name.
 func (m *Manager) AvailableFontFamilies() (iterator.Iterator[string], error) {
-	fonts, err := fontinfo.Match()
+	fonts, err := m.findfont.list()
 	if err != nil {
-		return nil, fmt.Errorf("search fonts: %w", err)
+		return nil, fmt.Errorf("list fonts: %w", err)
 	}
-
-	var ret []string
-	for _, font := range fonts {
-		ret = append(ret, font.Family)
-	}
-	return iterator.FromSlice[string](ret), nil
+	seen := make(map[string]struct{})
+	return iterator.Filter(iterator.Map[metadata, string](fonts, func(f metadata) string {
+		return f.family
+	}), func(family string) bool {
+		_, ok := seen[family]
+		if ok {
+			return false
+		}
+		seen[family] = struct{}{}
+		return true
+	}), nil
 }
 
 func (m *Manager) ensureFontLoaded() {
@@ -268,13 +296,21 @@ func (m *Manager) cellsHeight(height int) float64 {
 }
 
 func (m *Manager) loadDefaultFonts() error {
-	err := m.findAndLoadFont(defaultFamily())
+	defaultFont := defaultFont()
+	if defaultFont == "" {
+		return m.loadFallbackFont()
+	}
+	err := m.loadFontFace(defaultFont)
 	if err != nil {
 		if lerr := m.loadFallbackFont(); lerr != nil {
 			return multierror.Append(err, lerr)
 		}
+		return nil
 	}
-	return nil
+	if m.regularFace == nil {
+		return errors.New("could not find regular style for default font family")
+	}
+	return m.calcMetrics()
 }
 
 func (m *Manager) loadFallbackFont() error {
@@ -322,16 +358,31 @@ func (m *Manager) loadFontFace(path string) (err error) {
 	if err != nil {
 		return fmt.Errorf("open %q: %w", path, err)
 	}
-	col, err := opentype.ParseCollectionReaderAt(f)
-	if err != nil {
-		return fmt.Errorf("opentype parse collection: %w", err)
-	}
-	var buf sfnt.Buffer
-	for i := 0; i < col.NumFonts(); i++ {
-		font, err := col.Font(i)
+
+	var fonts []*sfnt.Font
+	switch filepath.Ext(path) {
+	case ".ttc", ".otc":
+		col, err := opentype.ParseCollectionReaderAt(f)
 		if err != nil {
-			return fmt.Errorf("font %d: %w", i, err)
+			return fmt.Errorf("opentype parse collection: %w", err)
 		}
+		for i := 0; i < col.NumFonts(); i++ {
+			font, err := col.Font(i)
+			if err != nil {
+				return fmt.Errorf("font %d: %w", i, err)
+			}
+			fonts = append(fonts, font)
+		}
+	case ".ttf", ".otf":
+		font, serr := opentype.ParseReaderAt(f)
+		if serr != nil {
+			return multierr.Append(err, fmt.Errorf("opentype parse font: %w", serr))
+		}
+		fonts = append(fonts, font)
+	}
+
+	var buf sfnt.Buffer
+	for i, font := range fonts {
 		face, err := m.createFace(font)
 		if err != nil {
 			return fmt.Errorf("create %d opentype face: %w", i, err)
@@ -356,27 +407,56 @@ func (m *Manager) loadFontFace(path string) (err error) {
 	return nil
 }
 
-func (m *Manager) findAndLoadFont(name string) error {
-	fonts, err := fontinfo.Match(fontinfo.MatchFamily(name))
-	if err != nil {
-		return fmt.Errorf("find font with family '%s': %w", name, err)
+func (m *Manager) resetFonts() {
+	m.regularFace = nil
+	m.boldFace = nil
+	m.italicFace = nil
+	m.boldItalicFace = nil
+}
+
+func (m *Manager) setFont(paths []string) (ret error) {
+	m.resetFonts()
+	for _, path := range paths {
+		if err := m.loadFontFace(path); err != nil {
+			ret = multierr.Append(ret, err)
+		}
 	}
-	if len(fonts) == 0 {
-		return fmt.Errorf("could not find font with family '%s'", name)
+	if ret != nil {
+		return
+	}
+	if err := m.calcMetrics(); err != nil {
+		ret = multierr.Append(ret, err)
+	}
+	return
+}
+
+func (m *Manager) findAndLoadFont(name string) (paths []string, err error) {
+	fonts, err := m.findfont.findByFamily(name)
+	if err != nil {
+		return nil, fmt.Errorf("find font with family '%s': %w", name, err)
 	}
 
-	for _, fontMeta := range fonts {
-		err := m.loadFontFace(fontMeta.Path)
-		if err != nil {
-			return err
+	for {
+		font, ok := fonts.Next()
+		if !ok {
+			if err := fonts.Err(); err != nil {
+				return nil, fmt.Errorf("fonts iterator: %v", err)
+			}
+			break
 		}
+		err = m.loadFontFace(font.path)
+		if err != nil {
+			return
+		}
+		paths = append(paths, font.path)
 	}
 
 	if m.regularFace == nil {
-		return fmt.Errorf("could not find regular style for font family '%s'", name)
+		return nil, fmt.Errorf("could not find regular style for font family '%s'", name)
 	}
 
-	return m.calcMetrics()
+	err = m.calcMetrics()
+	return
 }
 
 func (m *Manager) createFace(f *sfnt.Font) (font.Face, error) {
@@ -398,6 +478,9 @@ func (m *Manager) calcMetrics() error {
 	m.charSize.X = math.Max(0, float64((advance-bounds.Min.X+m.offset.X)/(1<<6)))
 	m.charSize.Y = math.Max(0, float64((bounds.Max.Sub(bounds.Min).Y+m.offset.Y)/(1<<6)))
 	m.cellOffsetY = float64(-bounds.Min.Y / (1 << 6))
+
+	m.log(log.DebugLevel, "calculated font char size: %+v and offset: %f",
+		m.charSize, m.cellOffsetY)
 	return nil
 }
 

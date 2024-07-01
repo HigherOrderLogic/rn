@@ -20,10 +20,19 @@
 // THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
-//go:build !darwin
+
+//go:build darwin
+
 package font
 
-func defaultFamily() string {
-	// use builtin
-	return ""
+func defaultFont() string {
+	return "/System/Library/Fonts/Menlo.ttc"
+}
+
+func fontDirs() (paths []string) {
+	return []string{
+		expandUser("~/Library/Fonts/"),
+		"/Library/Fonts/",
+		"/System/Library/Fonts/",
+	}
 }

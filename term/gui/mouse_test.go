@@ -28,6 +28,7 @@ import (
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/gui/font"
 )
@@ -152,7 +153,7 @@ func TestMouseEvents(t *testing.T) {
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
-			mock, mouse := newTestMouse()
+			mock, mouse := newTestMouse(t)
 			if len(test.pressedButtons) != len(test.cursorPosition) || len(test.cursorPosition) != len(test.wheel) ||
 				len(test.wheel) != len(test.expectedEvents) {
 				t.Fatalf("incorrectly setup test case: pressedButtons, cursorPosition, wheel " +
@@ -178,9 +179,10 @@ func TestMouseEvents(t *testing.T) {
 	}
 }
 
-func newTestMouse() (*mockMouseManager, *mouse) {
+func newTestMouse(t *testing.T) (*mockMouseManager, *mouse) {
 	mock := &mockMouseManager{pressedButtons: map[ebiten.MouseButton]struct{}{}}
-	f := font.NewManager()
+	f, err := font.NewManager()
+	require.NoError(t, err)
 	f.SetFontByFamilyName("builtin")
 	f.SetDeviceScale(1)
 	ret := newMouse(f)
