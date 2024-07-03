@@ -121,4 +121,4 @@ require (
 
 replace github.com/hashicorp/go-plugin => github.com/ernestrc/go-plugin v1.5.4
 
-replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v2.7.5-ub.2
+replace github.com/hajimehoshi/ebiten/v2 => github.com/unstablebuild/ebiten/v2 v2.7.5-ub.4
