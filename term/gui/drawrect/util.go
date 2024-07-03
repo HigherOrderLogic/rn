@@ -44,7 +44,10 @@ func init() {
 	whiteImage.WritePixels(pix)
 }
 
-func drawVerticesForUtil(dst *ebiten.Image, vs []ebiten.Vertex, is []uint16, clr color.Color, antialias bool) {
+func drawVerticesForUtil(
+	dst *ebiten.Image, vs []ebiten.Vertex,
+	is []uint16, clr color.RGBA, antialias bool,
+) {
 	r, g, b, a := clr.RGBA()
 	for i := range vs {
 		vs[i].SrcX = 1
@@ -64,7 +67,10 @@ func drawVerticesForUtil(dst *ebiten.Image, vs []ebiten.Vertex, is []uint16, clr
 // StrokeLine strokes a line (x0, y0)-(x1, y1) with the specified width and color.
 //
 // clr has be to be a solid (non-transparent) color.
-func DrawStroke(dst *ebiten.Image, x0, y0, x1, y1 float32, strokeWidth float32, clr color.Color, antialias bool) {
+func DrawStroke(
+	dst *ebiten.Image, x0, y0, x1, y1 float32,
+	strokeWidth float32, clr color.RGBA, antialias bool,
+) {
 	var path Path
 	path.MoveTo(x0, y0)
 	path.LineTo(x1, y1)
@@ -78,7 +84,7 @@ func DrawStroke(dst *ebiten.Image, x0, y0, x1, y1 float32, strokeWidth float32, 
 // DrawFilledRect fills a rectangle with the specified width and color.
 func DrawRect(
 	path *Path, vs []ebiten.Vertex, is []uint16, dst *ebiten.Image,
-	x, y, width, height float32, clr color.Color, antialias bool,
+	x, y, width, height float32, clr color.RGBA, antialias bool,
 ) ([]ebiten.Vertex, []uint16) {
 	path.Reset()
 	path.MoveTo(x, y)

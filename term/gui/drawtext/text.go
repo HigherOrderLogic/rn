@@ -155,11 +155,17 @@ func getGlyphImage(face *faceWithCache, r rune, offset fixed.Point26_6) *ebiten.
 // This is a known issue (#498).
 //
 // Draw is concurrent-safe.
-func Draw(dst *ebiten.Image, text string, face font.Face, x, y int, clr color.Color) {
-	op := &ebiten.DrawImageOptions{}
+func Draw(dst *ebiten.Image, text string, face font.Face, x, y int, clr color.RGBA) {
+	var op ebiten.DrawImageOptions
 	op.GeoM.Translate(float64(x), float64(y))
-	op.ColorScale.ScaleWithColor(clr)
-	DrawWithOptions(dst, text, face, op)
+	cr, cg, cb, ca := clr.RGBA()
+	op.ColorScale.Scale(
+		float32(cr)/0xffff,
+		float32(cg)/0xffff,
+		float32(cb)/0xffff,
+		float32(ca)/0xffff,
+	)
+	DrawWithOptions(dst, text, face, &op)
 }
 
 // DrawWithOptions draws a given text on a given destination image dst.
