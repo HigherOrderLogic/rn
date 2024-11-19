@@ -31,6 +31,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
@@ -68,6 +69,19 @@ type Config struct {
 	FrameCharSet component.FrameCharSet
 	// Interrupt is needed to asynchronously update the UI. This is optional.
 	Interrupter term.Interrupter
+
+	// ColorInfo determines the style of the progress bar for info notifications.
+	// By default, the default color along with a bold foreground is used.
+	ColorInfo term.Attributes
+	// ColorSuccess determines the style of the progress bar for success notifications.
+	// By default, tcell.ColorGreen is used.
+	ColorSuccess term.Attributes
+	// ColorWarning determines the style of the progress bar for warning notifications.
+	// By default, tcell.ColorYellow is used.
+	ColorWarning term.Attributes
+	// ColorError determines the style of the progress bar for error notifications.
+	// By default, tcell.ColorRed is used.
+	ColorError term.Attributes
 }
 
 // Container renders an inner tui.Component and overlays any notifications that were
@@ -104,6 +118,25 @@ func (n *Container) Init(inner tui.Component, cfg Config) {
 	}
 	if cfg.FrameCharSet == (component.FrameCharSet{}) {
 		cfg.FrameCharSet = component.FrameCharSetDefault()
+	}
+	if cfg.ColorInfo == (term.Attributes{}) {
+		cfg.ColorInfo.Attrs = cfg.BackgroundAttributes.Attrs
+		cfg.ColorInfo.Attrs |= tcell.AttrBold
+	}
+	if cfg.ColorSuccess == (term.Attributes{}) {
+		cfg.ColorSuccess.Attrs = cfg.BackgroundAttributes.Attrs
+		cfg.ColorSuccess.Attrs |= tcell.AttrBold
+		cfg.ColorSuccess.Fg = tcell.ColorGreen
+	}
+	if cfg.ColorWarning == (term.Attributes{}) {
+		cfg.ColorWarning.Attrs = cfg.BackgroundAttributes.Attrs
+		cfg.ColorWarning.Attrs |= tcell.AttrBold
+		cfg.ColorWarning.Fg = tcell.ColorYellow
+	}
+	if cfg.ColorError == (term.Attributes{}) {
+		cfg.ColorError.Attrs = cfg.BackgroundAttributes.Attrs
+		cfg.ColorError.Attrs |= tcell.AttrBold
+		cfg.ColorError.Fg = tcell.ColorRed
 	}
 	n.inner = inner
 	n.cfg = cfg

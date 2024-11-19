@@ -26,7 +26,6 @@ package notifications
 import (
 	"time"
 
-	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/term"
 )
@@ -67,21 +66,25 @@ func newNotification(
 ) *notificationComp {
 
 	var progressCell term.Cell
-	progressCell.Attributes = cfg.BackgroundAttributes
+	progressCell.Ch = cfg.FrameCharSet.HorizontalBottom
 
 	switch level {
 	case LevelInfo:
-		progressCell.Ch = '═'
-		progressCell.Fg = tcell.ColorDefault
-	case LevelWarn:
-		progressCell.Ch = '━'
-		progressCell.Fg = tcell.ColorYellow
-	case LevelError:
-		progressCell.Ch = '━'
-		progressCell.Fg = tcell.ColorRed
+		progressCell.Attrs = cfg.ColorInfo.Attrs
+		progressCell.Fg = cfg.ColorInfo.Fg
+		progressCell.Bg = cfg.ColorInfo.Bg
 	case LevelSuccess:
-		progressCell.Ch = '━'
-		progressCell.Fg = tcell.ColorGreen
+		progressCell.Attrs = cfg.ColorSuccess.Attrs
+		progressCell.Fg = cfg.ColorSuccess.Fg
+		progressCell.Bg = cfg.ColorSuccess.Bg
+	case LevelWarn:
+		progressCell.Attrs = cfg.ColorWarning.Attrs
+		progressCell.Fg = cfg.ColorWarning.Fg
+		progressCell.Bg = cfg.ColorWarning.Bg
+	case LevelError:
+		progressCell.Attrs = cfg.ColorError.Attrs
+		progressCell.Fg = cfg.ColorError.Fg
+		progressCell.Bg = cfg.ColorError.Bg
 	default:
 		panic("unknown level")
 	}
