@@ -340,7 +340,7 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 	var barFocusIdx int
 	for i, w := range h.workspaces {
 		if w != nil {
-			idx := h.bar.Add(0, h.makeWorkspaceTabName(i, w))
+			idx := h.bar.Add(rune(byte(49+i)), h.makeWorkspaceTabName(i, w))
 			if i == h.focus {
 				barFocusIdx = idx
 				if !drawBar {

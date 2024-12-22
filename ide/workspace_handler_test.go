@@ -386,7 +386,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 ├──────────────────┤
-│1  3              │
+│1 1  3            │
 └──────────────────┘`},
 		{":cwo>",
 			`┌──────────────────┐
@@ -441,7 +441,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 ├──────────────────┤
-│1  2              │
+│1 1  2 2          │
 └──────────────────┘`},
 		{"1234567890",
 			`┌──────────────────┐
@@ -452,7 +452,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 ├──────────────────┤
-│1  10             │
+│1 1  10           │
 └──────────────────┘`},
 		{"2:aw>", // uses tmp dir as workspace in the absence of a uri
 			`┌──────────────────┐
@@ -463,7 +463,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 ├──────────────────┤
-│1  2              │
+│1 1  2 2          │
 └──────────────────┘`},
 		{"2:swWo>",
 			`┌──────────────────┐
@@ -474,7 +474,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │workspace number  │
 └──────────────────┘
 ├──────────────────┤
-│1  2              │
+│1 1  2            │
 └──────────────────┘`},
 		{":swWo 3>:addBlaBla>",
 			`┌──────────────────┐
@@ -485,7 +485,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 ├──────────────────┤
-│1  3              │
+│1 1  3 3          │
 └──────────────────┘`},
 		{":swWo 4>:addWorkspace memory\\:///>", // can give path as arg to addWorkspace
 			`┌──────────────────┐
@@ -496,7 +496,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │                  │
 ├──────────────────┤
-│1  4              │
+│1 1  4 4          │
 └──────────────────┘`},
 		{":swWo 4>:addWorkspace memory\\:///tmp2>:edit memory\\:///tmp2/12>:reloadWorkspace>", // reloads non-primary workspace
 			`┌──────────────────┐
@@ -507,7 +507,7 @@ func TestWorkspaceManagerHandlerDraw(t *testing.T) {
 │                  │
 │            NORMAL│
 ├──────────────────┤
-│1  4              │
+│1 1  4 4          │
 └──────────────────┘`},
 	}
 	handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
