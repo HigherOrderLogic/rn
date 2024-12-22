@@ -300,7 +300,7 @@ func (i *IDE) init(
 			return reloadConfig(cfgfilename,
 				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
 		}, op.workspaceConfig, op.tabBarOffset,
-		op.tabBarHeight, op.workspacesBarHeight,
+		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
 		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback, &i.root)
 	if err != nil {
 		return fmt.Errorf("new workspace manager: %w", err)

@@ -194,6 +194,14 @@ func WithWorkspacesBarOffset(xoffset int) Option {
 	}
 }
 
+// WithWorkspacesIcon defines the icon to use as the first workspace.
+// Subsequent workspaces use subsequent icons.
+func WithWorkspacesIcon(icon rune) Option {
+	return func(opts *options) {
+		opts.workspacesIcon = icon
+	}
+}
+
 // WithTabsClickCallback sets a callback to be called every time the top tabs bar
 // is clicked.
 func WithTabsClickCallback(fn func(int) bool) Option {
@@ -210,6 +218,7 @@ type options struct {
 	tabBarHeight        int
 	workspacesBarFrame  bool
 	workspacesBarHeight int
+	workspacesIcon      rune
 	workspacesBarOffset int
 	locker              sync.Locker
 	extensions          map[string]Extension
@@ -239,6 +248,7 @@ func defaultOptions() options {
 		bell:               term.RingBell,
 		scheduleFn:         term.ScheduleNextTick,
 		workspacesBarFrame: true,
+		workspacesIcon:     '1',
 	}
 }
 

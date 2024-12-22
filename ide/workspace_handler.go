@@ -88,6 +88,7 @@ type workspaceManagerHandler struct {
 	userHome                string
 	history                 *history
 	workspacesBarHeight     int
+	workspacesIcon          rune
 	externalCommands        map[string]externalCommand
 	// NOTE: if user changes frame config, then mouse calculations
 	// for resize might be off.
@@ -117,7 +118,7 @@ func newWorkspaceManagerHandler(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset, tabBarHeight int,
+	tabBarOffset, tabBarHeight int, workspacesIcon rune,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 	tabsClickCallback func(int) bool,
 	shaderRunner *shaderRunner,
@@ -128,7 +129,7 @@ func newWorkspaceManagerHandler(
 		cfg, recfilename, filenames, sixDir,
 		publishEvent, extensionRunner, locker, builtinExtensions,
 		reloadConfig, workspaceConfigFilename,
-		tabBarOffset, tabBarHeight,
+		tabBarOffset, tabBarHeight, workspacesIcon,
 		workspacesBarHeight, workspacesBarOffset, workspacesBarFrame, tabsClickCallback,
 		shaderRunner)
 	if err != nil {
@@ -175,7 +176,7 @@ func (h *workspaceManagerHandler) init(
 	extensionRunner ExtensionsRunner, locker sync.Locker,
 	builtinExtensions map[string]Extension,
 	reloadConfig func() (ideConfig, error), workspaceConfigFilename string,
-	tabBarOffset, tabBarHeight int,
+	tabBarOffset, tabBarHeight int, workspacesIcon rune,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 	tabsClickCallback func(int) bool, shaderRunner *shaderRunner,
 ) (err error) {
@@ -200,6 +201,7 @@ func (h *workspaceManagerHandler) init(
 	}
 	h.storage = storage
 
+	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
 	h.tabBarHeight = tabBarHeight
 	globalOpts := h.textOpts(cfg)
@@ -340,7 +342,7 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 	var barFocusIdx int
 	for i, w := range h.workspaces {
 		if w != nil {
-			idx := h.bar.Add(rune(byte(49+i)), h.makeWorkspaceTabName(i, w))
+			idx := h.bar.Add(rune(int(h.workspacesIcon)+i), h.makeWorkspaceTabName(i, w))
 			if i == h.focus {
 				barFocusIdx = idx
 				if !drawBar {
