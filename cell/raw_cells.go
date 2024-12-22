@@ -31,7 +31,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/rivo/uniseg"
+	"unstable.build/go-tui/cell/graphemecluster"
 	"unstable.build/go-tui/term"
 )
 
@@ -253,11 +253,10 @@ func (c *rawCells) insert(at term.Coordinates, str string) (
 	next := to
 	state := -1
 	var cluster string
-	var boundaries int
+	var width int
 	for len(str) > 0 {
-		cluster, str, boundaries, state = uniseg.StepString(str, state)
+		cluster, str, width, state = graphemecluster.StepString(str, state)
 		to = next
-		width := boundaries >> uniseg.ShiftWidth
 		next = c.insertAt(next, []rune(cluster), width)
 		if padding := next.X - to.X - 1; padding > 0 {
 			to.X += padding
@@ -477,14 +476,13 @@ func (c *rawCells) ReadFrom(r io.Reader) (int64, error) {
 		str, err := reader.ReadString('\n')
 		state := -1
 		var cluster string
-		var boundaries int
+		var width int
 		n += int64(len([]byte(str)))
 		for len(str) > 0 {
 			// NOTE: this is significantly slower than, just ignoring grapheme clusters
 			// but it should be ok as it's done once per file, and because calculating the width
 			// is front loaded, it should amortize over long interactions on a particular file.
-			cluster, str, boundaries, state = uniseg.StepString(str, state)
-			width := boundaries >> uniseg.ShiftWidth
+			cluster, str, width, state = graphemecluster.StepString(str, state)
 			r := []rune(cluster)
 			switch r[0] {
 			case '\n':

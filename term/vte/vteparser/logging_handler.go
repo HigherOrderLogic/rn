@@ -24,9 +24,9 @@
 package vteparser
 
 import (
-	"github.com/rivo/uniseg"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"unstable.build/go-tui/cell/graphemecluster"
 )
 
 // HandlerWithLogging wraps a Handler and adds trace logging.
@@ -57,7 +57,7 @@ func (h loggingHandler) SetCursorShape(shape CursorShape) {
 }
 
 func (h loggingHandler) Input(c rune) {
-	h.log("Input '%c', width=%d", c, uniseg.StringWidth(string(c)))
+	h.log("Input '%c', width=%d", c, graphemecluster.StringWidth(string(c)))
 	h.h.Input(c)
 
 }
