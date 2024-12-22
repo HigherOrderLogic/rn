@@ -89,6 +89,8 @@ var (
 	defaultDirtyAttr      = term.Attributes{Fg: tcell.ColorYellow}
 )
 
+const defaultDirtyIcon = "[+]"
+
 type fileInfo struct {
 	dirty bool
 }
@@ -105,6 +107,7 @@ type fileBarEditorHandler struct {
 	backgroundAttributes    term.Attributes
 	showDirty               bool
 	tracker                 extutil.ResourceTracker
+	dirtyIcon               string
 
 	bar struct {
 		sync.Mutex
@@ -128,6 +131,14 @@ func newFileBarEditorHandler(
 			log.Warningf("failed to get 'filename_attr' from config: %v", err)
 		}
 		ret.filenameAttributes = defaultScrollAttr
+	}
+
+	ret.dirtyIcon, err = pconfig.GetString("dirty_icon")
+	if err != nil {
+		if err != config.ErrNotFound {
+			log.Warningf("failed to get 'dirty_icon' from config: %v", err)
+		}
+		ret.dirtyIcon = defaultDirtyIcon
 	}
 
 	ret.backgroundAttributes, err = config.GetAttributes(pconfig, "background_attr")
@@ -293,7 +304,7 @@ func (h *fileBarEditorHandler) refreshBarContent(ev textapi.Event) {
 
 	if h.showDirty && res.Metadata.(*fileInfo).dirty {
 		h.bar.filename.Attributes = h.filenameDirtyAttributes
-		h.bar.filename.Buffer().WriteString("[+]")
+		h.bar.filename.Buffer().WriteString(h.dirtyIcon)
 	} else {
 		h.bar.filename.Attributes = h.filenameAttributes
 	}
