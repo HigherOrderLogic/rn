@@ -266,23 +266,36 @@ var (
 		},
 		"newTerminalTab": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new terminal emulator tab and attaches it to the current " +
+				Summary: "Opens a new terminal emulator in a new tab and attaches it to the current " +
 					"active window. If 'shell' is not set in " +
 					"terminal config, then the default system shell defined via SHELL " +
 					"environment variable is used.",
 			},
 			handler: (*ex).newTerminalTab,
 		},
-		"newTerminalTabOrSplit": {
+		"newTerminal": {
 			man: textapi.CommandManual{
-				Summary: "Opens a new terminal emulator tab and attaches it to the " +
-					"current active window if empty, or creates a new split window if " +
-					"window is not empty. " +
-					"If 'shell' is not set in " +
+				Summary: "Opens a new terminal emulator and attaches it to the current " +
+					"active window. The terminal created by this command is automatically " +
+					"closed when the content of the window is updated for example by " +
+					"'nextTab' or 'previousTab'. If 'shell' is not set in " +
 					"terminal config, then the default system shell defined via SHELL " +
 					"environment variable is used.",
 			},
-			handler: (*ex).newTerminalTabOrSplit,
+			handler: (*ex).newTerminalTab,
+		},
+		"newTerminalOrSplit": {
+			man: textapi.CommandManual{
+				Summary: "Opens a new terminal emulator and attaches it to the " +
+					"current active window if empty, or creates a new split window if " +
+					"the window is not empty. The terminal created by this " +
+					"command is automatically closed when the content of the " +
+					"window is updated for example by " +
+					"'nextTab' or 'previousTab'. If 'shell' is not set in " +
+					"terminal config, then the default system shell defined via SHELL " +
+					"environment variable is used.",
+			},
+			handler: (*ex).newTerminalOrSplit,
 		},
 		cmdEdit: {
 			man: textapi.CommandManual{
@@ -309,7 +322,7 @@ var (
 		"!": {
 			man: textapi.CommandManual{
 				Summary: "Opens a new terminal emulator with the given executable " +
-					"and arguments on a new floating window. " +
+					"and arguments in a new floating window. " +
 					"The stdout and stderr of the execution " +
 					"are printed on the window along with stats and a progress sign until " +
 					"user closes the window or hits the ESC key. \n\n" +

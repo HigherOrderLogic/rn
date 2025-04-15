@@ -1044,12 +1044,12 @@ func (e *ex) newTerminalTab(args ...string) error {
 	return nil
 }
 
-func (e *ex) newTerminalTabOrSplit(args ...string) error {
+func (e *ex) newTerminalOrSplit(args ...string) error {
 	var initialCmd string
 	if len(args) > 0 {
 		initialCmd = args[0]
 	}
-	t, err := e.newEmulatorTab(initialCmd)
+	t, err := e.newEmulatorHandler(initialCmd, e.emulatorConfig)
 	if err != nil {
 		return err
 	}
