@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -35,6 +36,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/ai/llm"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
@@ -48,7 +50,6 @@ import (
 	workspaceapi "unstable.build/go-tui/api/workspace"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/clipboard/sysclip"
-	"github.com/unstablebuild/blue/ai/llm"
 	aiDialogue "unstable.build/go-tui/cmd/extension_ai/dialogue"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
@@ -476,9 +477,10 @@ func (h *aiEditorHandler) handleChat(cmd textapi.Command) error {
 		h.openChats.Delete(d.ID)
 		return nil
 	})
-	uri, err := workspaceapi.ParseURI(fmt.Sprintf("assistant://%s/%s", model, d.ID))
+	uriStr := fmt.Sprintf("assistant://%s/%s", url.PathEscape(model), d.ID)
+	uri, err := workspaceapi.ParseURI(uriStr)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	const icon = '󱫆'
 	tab, err := h.wm.Tab(uri, icon, uri.String(), bhandler)
