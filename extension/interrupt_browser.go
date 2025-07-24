@@ -120,8 +120,8 @@ func (s *interruptBrowser) SetContent(srv browserrpc.WindowManager_SetContentSer
 	return err
 }
 
-// Close satisfies browserrpc.BrowserServer
-func (s *interruptBrowser) Close(
+// CloseWindow satisfies browserrpc.BrowserServer
+func (s *interruptBrowser) CloseWindow(
 	ctx context.Context, req *browserrpc.WindowCloseRequest,
 ) (*browserrpc.WindowCloseResponse, error) {
 	res, err := s.browserServer.CloseWindow(ctx, req)
