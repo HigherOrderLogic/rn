@@ -241,6 +241,7 @@ func (c *commandClientStream) log(level log.Level, msg string, args ...interface
 type clientStream interface {
 	RecvMsg(any) error
 	Send(*ClientCommandMessage) error
+	CloseSend() error
 }
 
 type commandServerStream struct {
@@ -285,7 +286,11 @@ func (s *commandServerStream) sendMessages() {
 
 func (s *commandServerStream) receiveMessages() {
 	go s.sendMessages()
-	defer s.cancelCtx()
+	defer func() {
+		s.cancelCtx()
+		// ensure that client doesn't block in case of panic
+		_ = s.stream.CloseSend()
+	}()
 	for {
 		var reqMsg ServerCommandMessage
 		err := s.stream.RecvMsg(&reqMsg)

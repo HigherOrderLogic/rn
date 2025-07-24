@@ -377,16 +377,21 @@ func (s *ClientStream[T]) Close() error {
 		return err
 	}
 
-	s.locker.Unlock()
-	defer s.locker.Lock()
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		err = fmt.Errorf("receive close message: %w", err)
+	// Close might be called while Handle is still being processed
+	// by ServerStream. This enables stream to gracefully close
+	// at the same time we don't need to implement a multi-goroutine
+	// stream client or server. Keeps things simple at the expense
+	// of assuming that no other methods will be called by host
+	// during the processing of some other method. A small price to pay.
+	go func() {
+		recvMsg := s.newT()
+		err := s.stream.RecvMsg(recvMsg)
+		if err != nil {
+			err = fmt.Errorf("receive close message: %w", err)
+		}
 		s.closeStream(err)
-		return err
-	}
-	s.closeStream(nil)
+	}()
+
 	return nil
 }
 

@@ -74,6 +74,7 @@ func NewServerStream[T StreamMessage](
 // and responds accordingly.
 func (c *ServerStream[T]) ReceiveMessages() {
 	defer func() {
+		// ensure that client doesn't block in case of panic
 		err := c.stream.CloseSend()
 		c.log(log.TraceLevel, "closing connection send: %v", err)
 	}()
