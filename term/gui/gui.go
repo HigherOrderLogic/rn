@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"image"
 	"sync"
-	"sync/atomic"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -82,7 +81,7 @@ type GUI struct {
 	cursorAttributes  term.Attributes
 	defaultAttr       term.Attributes
 	renderer          *renderer
-	interruptPending  atomic.Bool
+	interruptPending  bool
 
 	originalColorValues map[tcell.Color]int32
 	originalValuesColor map[int32]tcell.Color
@@ -248,7 +247,6 @@ func (g *GUI) Update() error {
 			}
 			needsDraw = false
 			drawnWithPayload = true
-			g.interruptPending.Store(false)
 			g.drawHandler(payloadCtx)
 		case term.EventError, term.EventResize:
 			/* not dispatched by GUI */
@@ -262,10 +260,10 @@ func (g *GUI) Update() error {
 	}
 
 	if needsDraw {
-		g.interruptPending.Store(false)
 		g.drawHandler(ctx)
 	}
 
+	g.interruptPending = false
 	g.pendingEvents = g.pendingEvents[:0]
 	g.iteration++
 	return nil
@@ -480,17 +478,24 @@ func (g *GUI) consumeEvents() {
 		if !ok {
 			return
 		}
-		if ev.Type == term.EventInterrupt && ev.Raw == nil &&
-			ev.UserFunc == nil && !g.interruptPending.CompareAndSwap(false, true) {
-			continue
-		}
-		g.mu.Lock()
-		g.pendingEvents = append(g.pendingEvents, ev)
-		g.mu.Unlock()
+		g.processEvent(ev)
 	}
 }
 
-func (p *GUI) log(level log.Level, msg string, args ...any) {
+func (g *GUI) processEvent(ev term.Event) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	if ev.Type == term.EventInterrupt && ev.Raw == nil && ev.UserFunc == nil {
+		if g.interruptPending {
+			return
+		}
+		g.interruptPending = true
+	}
+	g.pendingEvents = append(g.pendingEvents, ev)
+}
+
+func (g *GUI) log(level log.Level, msg string, args ...any) {
 	if !log.IsLevelEnabled(level) {
 		return
 	}

@@ -256,6 +256,22 @@ func TestUpdate(t *testing.T) {
 		require.NoError(t, gui.Update())
 		require.Equal(t, 1, drawCalled)
 		assert.Equal(t, 1, userFnCalled)
+
+		// test that interrupts continue to work work after a UserFunc interrupt
+		go gui.consumeEvents()
+		gui.updateChan <- term.Event{
+			Type: term.EventInterrupt,
+		}
+		for { // wait until event has been queued
+			gui.mu.Lock()
+			lenPendingEvents := len(gui.pendingEvents)
+			gui.mu.Unlock()
+			if lenPendingEvents == 1 {
+				break
+			}
+		}
+		require.NoError(t, gui.Update())
+		require.Equal(t, 2, drawCalled)
 	})
 
 	t.Run("returns ErrHandlerExited if handler exits", func(t *testing.T) {
