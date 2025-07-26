@@ -480,11 +480,12 @@ func (g *GUI) consumeEvents() {
 		if !ok {
 			return
 		}
+		g.mu.Lock()
 		if ev.Type == term.EventInterrupt && ev.Raw == nil &&
 			ev.UserFunc == nil && !g.interruptPending.CompareAndSwap(false, true) {
+			g.mu.Unlock()
 			continue
 		}
-		g.mu.Lock()
 		g.pendingEvents = append(g.pendingEvents, ev)
 		g.mu.Unlock()
 	}
