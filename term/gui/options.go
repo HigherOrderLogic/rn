@@ -60,7 +60,7 @@ func WithBackgroundBlur(radius int) Option {
 	}
 }
 
-// WithSize sets the initial width and height of the window.
+// WithSize sets the initial width and height of the window in pixels.
 func WithSize(width, height int) Option {
 	return func(g *GUI) error {
 		g.defaultWidth = width

@@ -437,6 +437,11 @@ func (g *GUI) AvailableFontFamilies() (iterator.Iterator[string], error) {
 	return g.fontManager.AvailableFontFamilies()
 }
 
+// Size returns the current window width and height in pixels.
+func (g *GUI) Size() (width, height int) {
+	return ebiten.WindowSize()
+}
+
 func (g *GUI) drawHandler(ctx context.Context) {
 	g.writer.SetContext(ctx)
 	_ = g.writer.Clear(g.defaultAttr)
