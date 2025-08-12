@@ -27,12 +27,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -103,7 +105,7 @@ type workspaceManagerHandler struct {
 	focus            int
 	homeWorkspace    workspace.Workspace
 	empty            *ex
-	homeRunner       extension.Runner
+	homeRunner       atomic.Value
 	openPrevFiles    []file
 	openPrevFilesEx  *ex
 	openPrevFilesWin browser.Window
@@ -218,12 +220,17 @@ func (h *workspaceManagerHandler) init(
 	if err = h.subscribeAllCommands(h.empty); err != nil {
 		return err
 	}
-	runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
-	if err != nil {
-		return err
-	}
-	h.initExtensions(runner, cfg)
-	h.homeRunner = runner
+
+	// speed up initialization
+	go func() {
+		runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
+		if err != nil {
+			log.Errorf("build home workspace extensions: %v", err)
+			return
+		}
+		h.initExtensions(runner, cfg)
+		h.homeRunner.Store(runner)
+	}()
 
 	h.bar.Init()
 	h.bar.OnClick = h.switchToWorkspace
@@ -594,11 +601,21 @@ func (h *workspaceManagerHandler) addWorkspace(
 		return err
 	}
 
-	runner, err := h.buildExtensions(cfg, uri, cwd, ex)
-	if err != nil {
-		return err
+	wh := &workspaceHandler{
+		uri: uri,
+		ex:  ex,
 	}
-	h.initExtensions(runner, cfg)
+
+	// load async to speed up workspace initialization
+	go func() {
+		runner, err := h.buildExtensions(cfg, uri, cwd, ex)
+		if err != nil {
+			log.Errorf("build extensions for workspace %s: %v", uri.String(), err)
+			return
+		}
+		wh.Extensions.Store(runner)
+		h.initExtensions(runner, cfg)
+	}()
 
 	if i == -1 {
 		var ok bool
@@ -608,11 +625,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 		}
 	}
 
-	wh := &workspaceHandler{
-		uri:        uri,
-		ex:         ex,
-		Extensions: runner,
-	}
 	h.workspaces[i] = wh
 	h.workspaceCount++
 	h.switchToWorkspace(i)
@@ -847,8 +859,10 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 	if err := h.empty.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
-	if err := h.homeRunner.Close(); err != nil {
-		ret = multierror.Append(ret, err)
+	if runner := h.homeRunner.Load(); runner != nil {
+		if err := runner.(io.Closer).Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	if err := h.storage.Close(); err != nil {
 		ret = multierror.Append(ret, err)
@@ -859,15 +873,17 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 type workspaceHandler struct {
 	*ex
 	uri        workspaceapi.URI
-	Extensions extension.Runner
+	Extensions atomic.Value
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
 	if err := hm.ex.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
-	if err := hm.Extensions.Close(); err != nil {
-		ret = multierror.Append(ret, err)
+	if runner := hm.Extensions.Load(); runner != nil {
+		if err := runner.(io.Closer).Close(); err != nil {
+			ret = multierror.Append(ret, err)
+		}
 	}
 	return
 }

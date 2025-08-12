@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	_ "net/http/pprof"
@@ -204,19 +205,19 @@ func TestWorkspaceExtensions(t *testing.T) {
 
 		// extension.Runner.Run is called asynchronously
 		var called string
-		var n int
+		var n atomic.Int32
 
 		runner := FuncExtensionsRunner(
 			func(_uri workspaceapi.URI,
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
 				s string, noti browser.Notifications,
 			) (extension.Runner, error) {
-				if n == 1 { // first is the home directory used as "empty" workspace
+				if n.Load() == 1 { // first is the home directory used as "empty" workspace
 					assert.Equal(t, uri, _uri)
 				} else {
 					assert.Equal(t, "memory:///home", _uri.String())
 				}
-				n++
+				n.Add(1)
 				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
 					called = extensionID
 					assert.Equal(t, "myPath", path)
@@ -255,18 +256,18 @@ func TestWorkspaceExtensions(t *testing.T) {
 
 		// extension.Runner.Run is called asynchronously
 		var called string
-		var n int
+		var n atomic.Int32
 
 		runner := FuncExtensionsRunner(
 			func(_uri workspaceapi.URI,
 				res map[extensionapi.Permission]extension.ResourceRegistrar,
 				s string, noti browser.Notifications) (extension.Runner, error) {
-				if n == 1 { // first is the home directory used as "empty" workspace
+				if n.Load() == 1 { // first is the home directory used as "empty" workspace
 					assert.Equal(t, uri, _uri)
 				} else {
 					assert.Equal(t, "memory:///home", _uri.String())
 				}
-				n++
+				n.Add(1)
 				return fnRunner{fn: func(extensionID, path string, cfg config.Config) error {
 					called = extensionID
 					assert.Equal(t, "myPath2", path)
@@ -911,6 +912,14 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m.Close())
 			})
 
+			// do not re-use config across runners,
+			// as they're loaded async and causes a data race
+			newCfg := func() ideConfig {
+				cfg := defaultConfigWithWrap(wrap)
+				cfg.cfg["workspace"].(map[string]interface{})["auto_restore"] = true
+				return cfg
+			}
+
 			t.Run("position is restored on close and open again", func(t *testing.T) {
 				dir, err := os.MkdirTemp("", "")
 				require.NoError(t, err)
@@ -919,12 +928,10 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 					workspace.NewMemoryScheme))
 				uri, err := workspaceapi.ParseURI(fmt.Sprintf("memory:///%s", dir))
 				require.NoError(t, err)
-				cfg := defaultConfigWithWrap(wrap)
-				cfg.cfg["workspace"].(map[string]interface{})["auto_restore"] = true
 				runner := FuncExtensionsRunner(testRunnerFn)
 
 				m1 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, cfg, runner, nil, nil, dir, nil, nopShutdownShaderConfig())
+					&uri, newCfg(), runner, nil, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
 					{":edit 1234>ih3ll0\nw1rld <:write>:edit 4567>ihello\nworld <:write>:notificationsCloseAll>",
@@ -943,7 +950,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m1.Close())
 
 				m2 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, cfg, runner, nil, nil, dir, nil, nopShutdownShaderConfig())
+					&uri, newCfg(), runner, nil, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases = []handlertest.SequenceTestCase{
 					{"",
@@ -973,7 +980,7 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 				require.NoError(t, m2.Close())
 
 				m3 := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-					&uri, cfg, runner, nil, nil, dir, nil, nopShutdownShaderConfig())
+					&uri, newCfg(), runner, nil, nil, dir, nil, nopShutdownShaderConfig())
 
 				cases = []handlertest.SequenceTestCase{
 					{"",
