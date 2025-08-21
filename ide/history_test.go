@@ -31,8 +31,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
+	"go.uber.org/mock/gomock"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
 
@@ -158,6 +161,32 @@ func TestHistory(t *testing.T) {
 			h.recordAddWorkspace(uri, ed, true)
 			ed.Edit(testuri, cell.NewBuffer())
 		})
+	})
+
+	t.Run("does not assume file is open when EventTypeFlush is received", func(t *testing.T) {
+		uri, err := workspaceapi.ParseURI("memory:///tmp")
+		require.NoError(t, err)
+		svc := document.NewInMemoryService()
+
+		ctrl := gomock.NewController(t)
+		ed := texttest.NewMockEditor(ctrl)
+		h := newHistory(svc)
+
+		var workspaceHandler text.EventHandler
+		ed.EXPECT().SubscribeEvents(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(evs []textapi.EventType, sub text.EventHandler) bool {
+				workspaceHandler = sub
+				return false
+			}).Times(2)
+		h.recordAddWorkspace(uri, ed, true)
+
+		workspaceHandler.Handle(context.Background(), textapi.Event{
+			Type:    textapi.EventTypeFlush,
+			URI:     testuri,
+			Content: "abvc",
+		})
+		h.recordCloseWorkspace(uri)
+		assert.Len(t, h.recordAddWorkspace(uri, ed, true), 0)
 	})
 }
 

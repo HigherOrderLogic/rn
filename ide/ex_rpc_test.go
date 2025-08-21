@@ -66,8 +66,8 @@ func (h *groupEventHandler) Handle(ev term.Event) (handled bool) {
 
 // used to emulate term event loop synchronization
 type safeHandler struct {
-	mu      *sync.Mutex
-	Handler *ex
+	mu      sync.Locker
+	Handler browserapi.Handler
 }
 
 func (h *safeHandler) Resize(width, height int) {
@@ -85,7 +85,9 @@ func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
 	defer h.mu.Unlock()
 	exit, handled = h.Handler.Handle(ev)
 	// workaround search.List non-determinism
-	h.Handler.Wait()
+	if w, ok := h.Handler.(interface{ Wait() }); ok {
+		w.Wait()
+	}
 	return
 }
 func (h *safeHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {

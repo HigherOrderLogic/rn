@@ -49,6 +49,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
@@ -199,6 +200,8 @@ func (h *workspaceManagerHandler) init(
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
 	h.tabBarHeight = tabBarHeight
+	// don't install a fs watcher for the home workspace, to prevent unecessary
+	// resource consumption and so we also don't disable the internal flush dispatching
 	globalOpts := h.textOpts(cfg)
 	ed, err := h.newEditor(cfg)
 	if err != nil {
@@ -561,9 +564,10 @@ func (h *workspaceManagerHandler) addWorkspace(
 			return nil
 		}
 	}
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	cwd, err := h.workspace.AddWorkspace(ctx, uri)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("create new workspace for %q: %w", uri, err)
 	}
 
@@ -577,6 +581,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if recfilename != "" {
 		recFile, err := cwd.URI(recfilename)
 		if err != nil {
+			cancel()
 			return fmt.Errorf("cwd make uri for recovery file: %w", err)
 		}
 		textOpts = append(textOpts, text.WithRecoveryFile(recFile))
@@ -588,23 +593,53 @@ func (h *workspaceManagerHandler) addWorkspace(
 
 	ed, err := h.newEditor(cfg)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("new editor: %w", err)
 	}
+
+	// to preserve the order of events we don't want to spawn
+	// multiple workers so make the buffer sufficiently large
+	// so we don't block the fs subsystem, even in large
+	// monorepos with large git operations
+	ch := make(chan workspaceapi.EventInfo, 8192)
+	watchPath := filepath.Join(uri.Path(), "...")
+	watchID, err := cwd.Watch(watchPath, ch,
+		workspaceapi.Create, workspaceapi.Write,
+		workspaceapi.Remove, workspaceapi.Rename)
+	if err != nil {
+		log.Warnf("create FS event watcher: %v, "+
+			"using internal dispatching which doesn't monitor non open files", err)
+	} else {
+		textOpts = append(textOpts,
+			text.WithDisableDispatchFlush(),
+		)
+	}
+
+	// drain events until ready. This is only relevant for non-buffering
+	// scheme event dispatching implementations (i.e. memory scheme)
+	ready := make(chan struct{})
+	go drainFileSystemEvents(ch, ready)
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, cfg.terminalConfig(),
 		h.publishEvent, cfg.clipboard(), textOpts...)
 	if err != nil {
+		cancel()
 		return fmt.Errorf("new multi workspace: %w", err)
 	}
 	if err := h.subscribeAllCommands(ex); err != nil {
+		cancel()
 		return err
 	}
 
+	close(ready)
+	go dispatchFilesystemEvents(ctx, h.mu, cwd, watchID, ch, ex)
+
 	wh := &workspaceHandler{
-		uri: uri,
-		ex:  ex,
+		cancelCtx: cancel,
+		uri:       uri,
+		ex:        ex,
 	}
 
 	// load async to speed up workspace initialization
@@ -622,6 +657,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		var ok bool
 		i, ok = h.nextAvailableWorkspace()
 		if !ok {
+			cancel()
 			return fmt.Errorf("no available workspaces")
 		}
 	}
@@ -873,6 +909,7 @@ func (h *workspaceManagerHandler) Close() (ret error) {
 
 type workspaceHandler struct {
 	*ex
+	cancelCtx  func()
 	uri        workspaceapi.URI
 	Extensions atomic.Value
 }
@@ -886,6 +923,10 @@ func (hm *workspaceHandler) Close() (ret error) {
 			ret = multierror.Append(ret, err)
 		}
 	}
+	// cancel at the end, so fs event processing is not
+	// vacated before everything else is still potentially
+	// sending events (i.e. mem scheme)
+	hm.cancelCtx()
 	return
 }
 
@@ -1067,4 +1108,75 @@ func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {
 
 	panic("unknown focus handler")
 
+}
+
+func drainFileSystemEvents(ch chan workspaceapi.EventInfo, ready chan struct{}) {
+	for {
+		select {
+		case <-ch:
+		case <-ready:
+			return
+		}
+	}
+}
+
+func dispatchFilesystemEvents(
+	ctx context.Context, mu sync.Locker, cwd workspace.Workspace,
+	watchID int, ch chan workspaceapi.EventInfo,
+	ex *ex,
+) {
+	defer cwd.StopWatch(watchID) //nolint:errcheck
+
+	ignores, err := vctrl.LoadGitignore(cwd)
+	if err != nil {
+		ex.log(log.ErrorLevel, "load excludes for filesystem event matching: %v", err)
+		ignores = vctrl.NopMatcher()
+	}
+	for {
+		select {
+		case fsev := <-ch:
+			uri := fsev.URI()
+			flag := fsev.Event()
+			ex.log(log.ErrorLevel, "received filesystem event %s for %s", flag, uri)
+
+			isDir, _ := fsev.IsDir()
+			if ignores.Match(uri, isDir) {
+				continue
+			}
+			ex.log(log.DebugLevel, "dispatching filesystem event %s for %s", flag, uri)
+			ev := textapi.Event{
+				URI:     uri,
+				Content: fsev.Content(),
+			}
+			mu.Lock()
+			switch flag {
+			case workspaceapi.Create:
+				fallthrough
+			case workspaceapi.Write:
+				ev.Type = textapi.EventTypeFlush
+				// best effort, it might not be an open resource
+				browserHandler, ok := ex.comp.Resource(fsev.URI())
+				if ok {
+					ev.Resource, _ = browserHandler.(textapi.Handler)
+				}
+			case workspaceapi.Rename:
+				_, err := cwd.Stat(fsev.URI().Name())
+				if err != nil {
+					ev.Type = textapi.EventTypeRemove
+				} else {
+					ev.Type = textapi.EventTypeFlush
+					browserHandler, ok := ex.comp.Resource(fsev.URI())
+					if ok {
+						ev.Resource, _ = browserHandler.(textapi.Handler)
+					}
+				}
+			case workspaceapi.Remove:
+				ev.Type = textapi.EventTypeRemove
+			}
+			ex.comp.DispatchEvent(ev)
+			mu.Unlock()
+		case <-ctx.Done():
+			return
+		}
+	}
 }

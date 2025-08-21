@@ -184,7 +184,7 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 	}
 
 	evUriStr := ev.URI.String()
-	prev := workspaceCache.Files[evUriStr]
+	prev, ok := workspaceCache.Files[evUriStr]
 
 	switch ev.Type {
 	case textapi.EventTypeOpen:
@@ -195,9 +195,15 @@ func (h *workspaceHistory) Handle(ctx context.Context, ev textapi.Event) bool {
 		delete(workspaceCache.Files, evUriStr)
 		persistUpdateCache(h.svc, h.uri, workspaceCache)
 	case textapi.EventTypeFlush:
-		workspaceCache.Files[evUriStr] = makeFile(
-			evUriStr, prev.Cursor, false, prev.OpenAt)
-		persistUpdateCache(h.svc, h.uri, workspaceCache)
+		// EventTypeFlush might or might not be from an open file.
+		// When change is out-of-band, do not persist
+		// otherwise next session files might include files
+		// that were never open.
+		if ok {
+			workspaceCache.Files[evUriStr] = makeFile(
+				evUriStr, prev.Cursor, false, prev.OpenAt)
+			persistUpdateCache(h.svc, h.uri, workspaceCache)
+		}
 	case textapi.EventTypeCursor:
 		workspaceCache.Files[evUriStr] = makeFile(
 			evUriStr, ev.From, prev.Dirty, prev.OpenAt)

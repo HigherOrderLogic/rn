@@ -445,7 +445,7 @@ func (p *fileScheme) Watch(
 		}
 		notifyEvents = append(notifyEvents, nev)
 	}
-	ch := make(chan notify.EventInfo, 128)
+	ch := make(chan notify.EventInfo, 8192)
 	go func() {
 		for {
 			select {
