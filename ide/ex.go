@@ -114,14 +114,15 @@ type ex struct {
 	syncCommandPrompt    bool
 	// use floating windows functionality without having to work around focus commands
 	// and how to se cmd.Window correctly.
-	cmdBrowser   browser.Component
-	cmdV         handler.Virtual
-	cmdWin       browser.Window
-	fullscreenID uint64
-	exit         bool
-	forceExit    bool
-	height       int
-	width        int
+	cmdBrowser       browser.Component
+	cmdV             handler.Virtual
+	cmdWin           browser.Window
+	fullscreenID     uint64
+	exit             bool
+	forceExit        bool
+	height           int
+	width            int
+	isPromptDispatch bool
 
 	companionTerminal    vteHandler
 	companionTerminalWin browser.Window
@@ -336,10 +337,12 @@ func (e *ex) Complete(ctx context.Context, args []string) (
 
 // Dispatch satisfies command.Dispatcher for command.Handler.
 func (e *ex) Dispatch(command string, args ...string) bool {
+	e.isPromptDispatch = true
 	quit, err := e.runCommand(command, args)
 	if err != nil {
 		e.setError(err)
 	}
+	e.isPromptDispatch = false
 	return quit
 }
 
@@ -833,7 +836,7 @@ func (e *ex) resumeNotifications(args ...string) error {
 }
 
 func (e *ex) pasteFromClipboard(args ...string) error {
-	var handler tui.Handler = e.comp.Browser()
+	handler := e.focusHandler()
 	data, err := e.clip.Paste(clipboard.DefaultRegisterID)
 	if err != nil {
 		return fmt.Errorf("clipboard paste: %w", err)
@@ -861,7 +864,7 @@ func (e *ex) pasteFromClipboard(args ...string) error {
 }
 
 func (e *ex) copyToClipboard(args ...string) error {
-	var handler tui.Handler = e.comp.Browser()
+	handler := e.focusHandler()
 	data, ok := handler.Selection()
 	if !ok {
 		_ = e.Browser().Notify(notifications.LevelInfo, "nothing to copy")
@@ -1456,7 +1459,7 @@ func (e *ex) cleanPartialReissueState() {
 }
 
 func (e *ex) focusHandler() tui.Handler {
-	if e.cmd != nil {
+	if e.cmd != nil && !e.isPromptDispatch {
 		return &e.cmdV
 	}
 	return e.comp.Browser()
