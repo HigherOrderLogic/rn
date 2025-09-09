@@ -30,6 +30,7 @@ import (
 
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 )
 
@@ -116,7 +117,7 @@ func (g *glslHelper) shadeGLSL(
 func (g *glslHelper) initWorkers() {
 	ch := make(chan shadeRequest)
 	for i := 0; i < g.workers; i++ {
-		go func() {
+		go debug.CapturePanicReport(func() {
 			for {
 				req, ok := <-ch
 				if !ok {
@@ -126,7 +127,7 @@ func (g *glslHelper) initWorkers() {
 					req.row, req.time, req.frame, req.total,
 					req.fps, req.in, req.shader)
 			}
-		}()
+		})
 	}
 
 	// cleanup workers when helper/shader is no longer in use

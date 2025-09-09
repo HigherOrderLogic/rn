@@ -34,6 +34,7 @@ import (
 	"github.com/junegunn/fzf/src/util"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 )
 
@@ -173,7 +174,9 @@ func (l *List) Push(ctx context.Context) chan<- []byte {
 	ctx, l.cancelPush = context.WithCancel(l.waitPushCtx)
 
 	datachan := make(chan []byte)
-	go l.consumeAsyncElements(ctx, cancelWait, datachan, l.quitChan)
+	go debug.CapturePanicReport(func() {
+		l.consumeAsyncElements(ctx, cancelWait, datachan, l.quitChan)
+	})
 	return datachan
 }
 
@@ -522,7 +525,7 @@ func (l *List) consumeAsyncElements(
 	}()
 
 	var dirty bool
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer t.Stop()
 		for {
 			select {
@@ -548,7 +551,7 @@ func (l *List) consumeAsyncElements(
 				return
 			}
 		}
-	}()
+	})
 
 	slab := makeSlab()
 	for i := 0; ; i++ {
@@ -663,7 +666,9 @@ func (l *List) asyncSearch(ctx context.Context) {
 	// is managed by the goroutine below, and the new items are
 	// managed by the Push goroutine
 	l.list.Reset()
-	go l.handleSearch(ctx, cancelWait, input, searchInput)
+	go debug.CapturePanicReport(func() {
+		l.handleSearch(ctx, cancelWait, input, searchInput)
+	})
 }
 
 func (l *List) resize(width, height int) {

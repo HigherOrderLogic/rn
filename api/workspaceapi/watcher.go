@@ -29,6 +29,7 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui/debug"
 )
 
 // ChanProcessWatcher returns a ProcessWatcher that simply returns
@@ -58,7 +59,7 @@ type multiWatcher struct {
 
 func newMultiWatcher(watchers []ProcessWatcher) ProcessWatcher {
 	ret := &multiWatcher{ch: make(chan error)}
-	go func() {
+	go debug.CapturePanicReport(func() {
 		const watcherWaitTimeout = 30 * time.Second
 		err := <-ret.ch
 		ctx, cancel := context.WithTimeout(context.Background(),
@@ -72,7 +73,7 @@ func newMultiWatcher(watchers []ProcessWatcher) ProcessWatcher {
 				continue
 			}
 			wg.Add(1)
-			go func() {
+			go debug.CapturePanicReport(func() {
 				defer wg.Done()
 				select {
 				case ch <- err:
@@ -80,10 +81,10 @@ func newMultiWatcher(watchers []ProcessWatcher) ProcessWatcher {
 					log.Warnf("could not deliver error to watcher chan: " +
 						"watcher not ready for too long")
 				}
-			}()
+			})
 		}
 		wg.Wait()
-	}()
+	})
 	return ret
 }
 

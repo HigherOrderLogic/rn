@@ -47,6 +47,7 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/vctrl"
@@ -225,7 +226,7 @@ func (h *workspaceManagerHandler) init(
 	}
 
 	// speed up initialization
-	go func() {
+	go debug.CapturePanicReport(func() {
 		runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
 		if err != nil {
 			log.Errorf("build home workspace extensions: %v", err)
@@ -233,7 +234,7 @@ func (h *workspaceManagerHandler) init(
 		}
 		h.initExtensions(runner, cfg)
 		h.homeRunner.Store(runner)
-	}()
+	})
 
 	h.bar.Init()
 	h.bar.OnClick = h.switchToWorkspace
@@ -466,13 +467,15 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 		if pconfig == nil {
 			pconfig = config.MapConfig(make(map[string]interface{}))
 		}
-		go func(id, path string, config config.Config) {
+		path := p.Path
+		id := id
+		go debug.CapturePanicReport(func() {
 			defer wg.Done()
 			err := manager.Run(id, path, pconfig)
 			if err != nil {
 				log.Errorf("failed to run built-in extension with id %q: %v", id, err)
 			}
-		}(id, p.Path, pconfig)
+		})
 	}
 
 	for id, p := range userExtensions {
@@ -481,13 +484,14 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 		if !ok {
 			pconfig = config.MapConfig(make(map[string]interface{}))
 		}
-		go func(id, path string, config config.Config) {
+		id := id
+		go debug.CapturePanicReport(func() {
 			defer wg.Done()
 			err := manager.Run(id, path, pconfig)
 			if err != nil {
 				log.Errorf("failed to run extension with id %q: %v", id, err)
 			}
-		}(id, path, pconfig)
+		})
 	}
 
 	wg.Wait()
@@ -614,7 +618,9 @@ func (h *workspaceManagerHandler) addWorkspace(
 	// drain events until ready. This is only relevant for non-buffering
 	// scheme event dispatching implementations (i.e. memory scheme)
 	ready := make(chan struct{})
-	go drainFileSystemEvents(ch, ready)
+	go debug.CapturePanicReport(func() {
+		drainFileSystemEvents(ch, ready)
+	})
 
 	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
@@ -630,7 +636,9 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	close(ready)
-	go dispatchFilesystemEvents(ctx, h.mu, cwd, watchID, ch, ex)
+	go debug.CapturePanicReport(func() {
+		dispatchFilesystemEvents(ctx, h.mu, cwd, watchID, ch, ex)
+	})
 
 	wh := &workspaceHandler{
 		cancelCtx: cancel,
@@ -639,7 +647,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	}
 
 	// load async to speed up workspace initialization
-	go func() {
+	go debug.CapturePanicReport(func() {
 		runner, err := h.buildExtensions(cfg, uri, cwd, ex)
 		if err != nil {
 			log.Errorf("build extensions for workspace %s: %v", uri.String(), err)
@@ -647,7 +655,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		}
 		wh.Extensions.Store(runner)
 		h.initExtensions(runner, cfg)
-	}()
+	})
 
 	if i == -1 {
 		var ok bool

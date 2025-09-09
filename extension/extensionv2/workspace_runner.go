@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/workspace"
 )
@@ -142,7 +143,7 @@ func (m *workspaceRunner) makeCommand(
 	ctx context.Context, extensionID, path string, config config.Config,
 ) (ret workspaceapi.Cmd, err error) {
 	waitCh := make(chan error)
-	go func() {
+	go debug.CapturePanicReport(func() {
 		select {
 		case err := <-waitCh:
 			if err != nil {
@@ -150,7 +151,7 @@ func (m *workspaceRunner) makeCommand(
 			}
 		case <-m.ctx.Done():
 		}
-	}()
+	})
 	// allow args to be passed to extensions
 	argv := strings.Split(path, " ")
 	ret = workspaceapi.Cmd{

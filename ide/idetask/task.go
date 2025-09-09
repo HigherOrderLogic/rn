@@ -40,6 +40,7 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term"
@@ -319,7 +320,7 @@ func (t *Task) init(
 	t.win = win
 
 	// process exit errors
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer close(t.doneWaitCh)
 		for {
 			select {
@@ -340,7 +341,7 @@ func (t *Task) init(
 				return
 			}
 		}
-	}()
+	})
 
 	t.tryRunning(b, scheme)
 	t.minimize()

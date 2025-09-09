@@ -47,6 +47,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 const (
@@ -319,7 +320,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	}
 
 	pid := workspaceapi.Pid(stdcmd.Process.Pid)
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer cancelFn()
 		defer func() {
 			p.cmds.Delete(pid)
@@ -350,7 +351,7 @@ func (p *fileScheme) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 					"watcher not ready for too long")
 			}
 		}
-	}()
+	})
 
 	p.log(log.DebugLevel, "exec.Command: (%#v, pid=%d)", cmd, stdcmd.Process.Pid)
 
@@ -446,7 +447,7 @@ func (p *fileScheme) Watch(
 		notifyEvents = append(notifyEvents, nev)
 	}
 	ch := make(chan notify.EventInfo, 8192)
-	go func() {
+	go debug.CapturePanicReport(func() {
 		for {
 			select {
 			case <-p.ctx.Done():
@@ -468,7 +469,7 @@ func (p *fileScheme) Watch(
 				}
 			}
 		}
-	}()
+	})
 	w, err := notify.Watch(path, ch, notifyEvents...)
 	if err != nil {
 		return 0, fmt.Errorf("notify: %v", err)
@@ -535,9 +536,9 @@ func tryUnwrapFileReader(f io.Reader) io.Reader {
 }
 
 type eventInfo struct {
-	uri     workspaceapi.URI
-	e       workspaceapi.Event
-	d       bool
+	uri workspaceapi.URI
+	e   workspaceapi.Event
+	d   bool
 }
 
 func (e eventInfo) Event() workspaceapi.Event {
@@ -567,8 +568,8 @@ func newEventInfo(ei notify.EventInfo, uri workspaceapi.URI) eventInfo {
 	// this can be an error only in windows
 	isDir, _ := ei.IsDir()
 	return eventInfo{
-		d:       isDir,
-		uri:     uri,
-		e:       nev,
+		d:   isDir,
+		uri: uri,
+		e:   nev,
 	}
 }

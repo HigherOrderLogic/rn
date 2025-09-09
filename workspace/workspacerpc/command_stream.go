@@ -37,6 +37,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 var readBufferSize = 1024 * 64
@@ -169,10 +170,10 @@ func (s *serverCommandStreamer) receiveCommandData() {
 	// propagate context cancel to context passed
 	// to command Start; either because client is closing
 	// stream, or client context passed to Start canceled.
-	go func() {
+	go debug.CapturePanicReport(func() {
 		<-s.stream.Context().Done()
 		s.cancelCtx()
-	}()
+	})
 
 	if s.stdinFd != 0 {
 		s.log(log.DebugLevel, "not reading from stdin goroutine: remote file mode")
@@ -440,7 +441,7 @@ func (s *clientCommandStreamer) streamCommandData(cancelFn func()) {
 	defer close(s.quitCh)
 	defer cancelFn()
 
-	go s.streamStdin()
+	go debug.CapturePanicReport(s.streamStdin)
 
 	var err error
 	for {

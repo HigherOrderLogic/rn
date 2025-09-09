@@ -50,8 +50,10 @@ import (
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -116,7 +118,10 @@ func (r *runner) WorkspaceExtensionsRunner(
 	socket := listener.Addr().String()
 
 	var cert, key []byte
-	var opts []grpc.ServerOption
+	opts := []grpc.ServerOption{
+		grpc.ChainStreamInterceptor(rpc.StreamReportRecoveryInterceptor()),
+		grpc.ChainUnaryInterceptor(rpc.UnaryReportRecoveryInterceptor()),
+	}
 	if r.cfg.insecureTransport && !r.cfg.insecureAuth {
 		opts = append(opts, grpcauth.GRPCServerWithInsecureOauth2(r.keys, r.authorizer)...)
 	} else if !r.cfg.insecureTransport {
@@ -162,7 +167,9 @@ func (r *runner) WorkspaceExtensionsRunner(
 		}
 	}
 
-	go ret.srv.Serve(listener) //nolint:errcheck
+	go debug.CapturePanicReport(func() {
+		_ = ret.srv.Serve(listener)
+	})
 
 	ret.Runner = newWorkspaceRunner(r.executor, r.grantor, uri,
 		socket, r.dataDir, cert, r.keys, r.opts...)

@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
@@ -130,7 +131,7 @@ func (e *Handler) Init(
 
 	e.updateCh = make(chan struct{}, 1)
 	e.sema = make(chan struct{})
-	go func() {
+	go debug.CapturePanicReport(func() {
 		logErr := e.comp.Run(e.updateCh)
 		e.exit.Store(true)
 		_ = e.publisher.PublishEvent(term.Event{Type: term.EventNone})
@@ -142,9 +143,9 @@ func (e *Handler) Init(
 			e.log(log.ErrorLevel, "terminal run: %v", logErr)
 			_ = e.notifications.Notify(notifications.LevelError, "terminal run: %v", logErr)
 		}
-	}()
+	})
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		for {
 			select {
 			case <-e.sema:
@@ -158,7 +159,7 @@ func (e *Handler) Init(
 				e.log(log.ErrorLevel, "interrupt: %s", err)
 			}
 		}
-	}()
+	})
 
 	return nil
 }

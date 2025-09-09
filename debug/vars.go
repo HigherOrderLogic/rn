@@ -23,49 +23,15 @@
 
 package debug
 
-import (
-	"fmt"
-	"os"
-
-	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/debug"
-	"gopkg.in/yaml.v3"
+var (
+	// Tag is a compile-time variable
+	Tag = "development"
+	// Package is a compile-time variable
+	Package = "gotui"
+	// Commit is a compile-time variable
+	Commit = "HEAD"
+	// ReportsDir is a compile-time variable.
+	// If left empty, debug helpers will use the return
+	// of os.TempDir.
+	ReportsDir = ""
 )
-
-// CapturePanicReportWith captures a panic in fn and writes to disk
-// a yaml report. The boolean value returned indicates if fn run with no panics.
-// If the value is false, the returned string indicates the fs location of the report.
-// An error is returned if there was a panic but the report couldn't be stored.
-func CapturePanicReportWith(dir, pkg, version string, run func()) (bool, string, error) {
-	ok, report := debug.CapturePanic(log.StandardLogger(), pkg, version, run)
-	if ok {
-		return ok, "", nil
-	}
-	data, err := yaml.Marshal(report)
-	if err != nil {
-		return false, "", fmt.Errorf("%w: marshal %v", err, report)
-	}
-	f, err := os.CreateTemp(ReportsDir, fmt.Sprintf("%s_crash_report_", Package))
-	if err != nil {
-		return false, "", fmt.Errorf("%w: temp file %v", err, report)
-	}
-	if _, err := f.Write(data); err != nil {
-		return false, "", fmt.Errorf("%w: write %v", err, report)
-	}
-	return false, f.Name(), nil
-}
-
-// CapturePanicReport captures a panic with CapturePanicReportWith,
-// and exits or simply returns if there was no panic in fn. It uses
-// the compile-time variables Tag, Package and ReportsDir, so make
-// sure they're injected at compile-time when using this helper.
-func CapturePanicReport(fn func()) {
-	ok, path, err := CapturePanicReportWith(ReportsDir, Package, Tag, fn)
-	if ok {
-		return
-	}
-	if err != nil {
-		log.Fatalf("failed to capture crash report: %v", err)
-	}
-	log.Fatalf("saved crash report file://%v", path)
-}

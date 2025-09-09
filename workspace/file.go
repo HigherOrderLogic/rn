@@ -39,6 +39,7 @@ import (
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 )
 
@@ -333,7 +334,8 @@ func (f *file) setupCopySwapWorker() {
 	// we are going to copyFlushSwap at least one final time
 	f.ch = make(chan struct{}, 1)
 
-	go func(ch chan struct{}) {
+	ch := f.ch
+	go debug.CapturePanicReport(func() {
 		for range ch {
 			f.mu.Lock()
 			str := f.content
@@ -341,7 +343,7 @@ func (f *file) setupCopySwapWorker() {
 			f.copyFlushSwapFile(str)
 			f.wg.Done()
 		}
-	}(f.ch)
+	})
 }
 
 // init instantiates opens the file at filePath and initializes

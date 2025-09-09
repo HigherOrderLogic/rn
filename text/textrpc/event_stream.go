@@ -36,6 +36,7 @@ import (
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 	"unstable.build/go-tui/api/textapi"
+	"unstable.build/go-tui/debug"
 )
 
 var _ textapi.EventHandler = (*eventStreamClient)(nil)
@@ -63,7 +64,9 @@ func newEventStreamClient(
 		cancelCtx: cancel,
 		ch:        ch,
 	}
-	go ret.sendMessages(ctx)
+	go debug.CapturePanicReport(func() {
+		ret.sendMessages(ctx)
+	})
 	return ret
 }
 

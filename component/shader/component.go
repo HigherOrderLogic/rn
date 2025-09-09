@@ -30,6 +30,7 @@ import (
 
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 )
 
@@ -71,7 +72,9 @@ func New(
 		cancelCtx:   cancel,
 	}
 
-	go ret.interrupt(ctx)
+	go debug.CapturePanicReport(func() {
+		ret.interrupt(ctx)
+	})
 
 	return ret
 }

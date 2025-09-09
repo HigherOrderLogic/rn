@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser/browserrpc"
+	"unstable.build/go-tui/debug"
 	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
@@ -270,7 +271,7 @@ func (s *commandServerStream) sendMessages() {
 }
 
 func (s *commandServerStream) receiveMessages() {
-	go s.sendMessages()
+	go debug.CapturePanicReport(s.sendMessages)
 	defer s.cancelCtx()
 	for {
 		var reqMsg ServerCommandMessage
@@ -358,7 +359,8 @@ func (s *commandServerStream) handleComplete(req *CompleteCommandRequest) error 
 		return err
 	}
 
-	go func(id int64) {
+	id := req.Id
+	go debug.CapturePanicReport(func() {
 		var resp CompleteCommandDone
 		err := s.streamValues(id, completer)
 		if err != nil {
@@ -373,7 +375,7 @@ func (s *commandServerStream) handleComplete(req *CompleteCommandRequest) error 
 		case <-s.ctx.Done():
 		case s.sendChan <- msg:
 		}
-	}(req.Id)
+	})
 
 	return nil
 }

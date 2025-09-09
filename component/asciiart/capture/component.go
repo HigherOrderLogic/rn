@@ -35,6 +35,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 )
 
@@ -94,7 +95,9 @@ func (c *Component) Init(
 	}
 
 	cadence := time.Duration(int(time.Second) / fps)
-	go c.consumeVideoSource(cadence)
+	go debug.CapturePanicReport(func() {
+		c.consumeVideoSource(cadence)
+	})
 }
 
 // Draw satisfies tui.Component.

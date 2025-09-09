@@ -35,6 +35,7 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 // Reader abstracts the ability to read directory contents.
@@ -79,8 +80,10 @@ func ListFiles(
 	iterator.closeWaitCh = closeWaitCh
 
 	for i := 0; i < defaultWorkers; i++ {
-		go traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
-			workspaceURI.Path(), &iterator.mu, &allErrors[i])
+		go debug.CapturePanicReport(func() {
+			traverseDirWorker(ctx, w, &wg, iterCh, workerCh,
+				workspaceURI.Path(), &iterator.mu, &allErrors[i])
+		})
 	}
 
 	for {
@@ -97,7 +100,7 @@ func ListFiles(
 	wg.Add(1)
 	workerCh <- root
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer close(closeWaitCh)
 		defer close(iterCh)
 		defer close(workerCh)
@@ -110,7 +113,7 @@ func ListFiles(
 				iterator.err = multierr.Append(iterator.err, err)
 			}
 		}
-	}()
+	})
 
 	return iterator, nil
 }

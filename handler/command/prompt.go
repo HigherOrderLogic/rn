@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/term"
@@ -762,7 +763,9 @@ func (h *Prompt) setCompletionList(
 	} else {
 		ch := h.list.Push(ctx)
 		h.list.DataReset()
-		go h.pushCompletionList(ctx, ch, cancel, cmdAndArgs, it)
+		go debug.CapturePanicReport(func() {
+			h.pushCompletionList(ctx, ch, cancel, cmdAndArgs, it)
+		})
 	}
 }
 
@@ -1072,7 +1075,7 @@ func (h *Prompt) startManualTimer() {
 	h.log(log.DebugLevel, "showing manual for commands after %s",
 		h.config.ShowManualAfter)
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		ctx := context.Background()
 		defer timer.Stop()
 		for {
@@ -1095,7 +1098,7 @@ func (h *Prompt) startManualTimer() {
 				return
 			}
 		}
-	}()
+	})
 }
 
 func (h *Prompt) buildManualComponent(bufString string) component.Responsive {

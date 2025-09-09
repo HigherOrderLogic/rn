@@ -37,6 +37,7 @@ import (
 	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/termrpc"
 )
@@ -137,7 +138,9 @@ func NewClientStream[T StreamMessage](
 // ReceiveMessages blocks until all messages have been received and the stream
 // is ready to be closed.
 func (s *ClientStream[T]) ReceiveMessages() error {
-	go s.closeStream(s.receiveMessages())
+	go debug.CapturePanicReport(func() {
+		s.closeStream(s.receiveMessages())
+	})
 
 	select {
 	case err := <-s.closeChan:

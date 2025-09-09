@@ -42,6 +42,7 @@ import (
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
@@ -310,7 +311,7 @@ func (s *scheme) connectScheme(
 		return nil, err
 	}
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer remote.Close()
 		err := <-ch
 		if err != nil {
@@ -326,7 +327,7 @@ func (s *scheme) connectScheme(
 		for _, closer := range closers {
 			_ = closer.Close()
 		}
-	}()
+	})
 
 	return workspacerpc.NewClient(s.ctx, conn), nil
 }

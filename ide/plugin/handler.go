@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
@@ -297,8 +298,10 @@ func (e *Handler) initEmulator(
 	e.emulator = vteh
 	e.liveHandler = e.newUnion(e.emulator)
 
-	go term.InterruptAt(ctx, interrupter, 1)
-	go func() {
+	go debug.CapturePanicReport(func() {
+		term.InterruptAt(ctx, interrupter, 1)
+	})
+	go debug.CapturePanicReport(func() {
 		defer cancel()
 		select {
 		case err := <-ch:
@@ -310,7 +313,7 @@ func (e *Handler) initEmulator(
 		case <-ctx.Done():
 			return
 		}
-	}()
+	})
 	return nil
 }
 

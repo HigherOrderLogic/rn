@@ -29,6 +29,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term/vte/vteparser"
 )
 
@@ -49,7 +50,9 @@ func newWaitParserHandler(ctx context.Context, h vteparser.Handler) *waitParserH
 		ch:      make(chan func(), 50),
 		Handler: h,
 	}
-	go ret.monitorStarvation(ctx)
+	go debug.CapturePanicReport(func() {
+		ret.monitorStarvation(ctx)
+	})
 	return ret
 }
 func (w *waitParserHandler) useTrigger(trigger func()) {

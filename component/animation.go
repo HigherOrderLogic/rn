@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 )
 
@@ -209,7 +210,9 @@ func (a *Animation) InitWithComponents(
 
 	// do not use the given context for lifecycle monitoring
 	a.ctx, a.cancelCtx = context.WithCancel(context.Background())
-	go a.interrupt(ctx)
+	go debug.CapturePanicReport(func() {
+		a.interrupt(ctx)
+	})
 }
 
 // Resize satisfies tui.Component.

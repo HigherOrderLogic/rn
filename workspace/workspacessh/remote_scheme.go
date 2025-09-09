@@ -40,6 +40,7 @@ import (
 	"github.com/unstablebuild/blue/retry"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 var (
@@ -164,7 +165,9 @@ func newRemoteScheme(
 	// to connect at least once.
 	var sema sync.Mutex
 	sema.Lock()
-	go ret.maintainConnection(connect, uri, ret.closeChan, &sema)
+	go debug.CapturePanicReport(func() {
+		ret.maintainConnection(connect, uri, ret.closeChan, &sema)
+	})
 	sema.Lock()
 	defer sema.Unlock()
 	return ret
@@ -390,7 +393,7 @@ func newWrapWatcher(watcher workspaceapi.ProcessWatcher, cancelFn func()) wrapWa
 		watcher: watcher,
 		ch:      make(chan error),
 	}
-	go func() {
+	go debug.CapturePanicReport(func() {
 		err := <-ret.ch
 		cancelFn()
 		if ret.watcher != nil && ret.watcher.WatchProcess() != nil {
@@ -400,7 +403,7 @@ func newWrapWatcher(watcher workspaceapi.ProcessWatcher, cancelFn func()) wrapWa
 			case <-t:
 			}
 		}
-	}()
+	})
 	return ret
 }
 

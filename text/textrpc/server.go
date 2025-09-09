@@ -36,6 +36,7 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 )
@@ -178,7 +179,7 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 		return err
 	}
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		for {
 			select {
 			case errMsg := <-clientStream.handleCommand:
@@ -195,7 +196,7 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 				return
 			}
 		}
-	}()
+	})
 
 	resp := SubscribeCommandResponse{}
 	respMsg := ServerCommandMessage{Type: ServerCommandMessage_Response, Response: &resp}

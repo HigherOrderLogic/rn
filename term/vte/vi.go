@@ -40,6 +40,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/text/vi"
@@ -170,13 +171,13 @@ func (v *viHandler) systemCanDispatchBell(callback func(error)) {
 		}
 	})
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer cancel()
 		<-ctx.Done()
 		if called.CompareAndSwap(false, true) {
 			callback(fmt.Errorf("timeout waiting for bell: %w", ctx.Err()))
 		}
-	}()
+	})
 }
 
 func (v *viHandler) Resize(width, height int) {

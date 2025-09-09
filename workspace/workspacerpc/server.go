@@ -39,6 +39,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 var (
@@ -110,7 +111,7 @@ func (s *Server) StartCommand(stream Executor_StartCommandServer) error {
 		s.log(log.WarnLevel, "start command error: %v", err)
 		return fmt.Errorf("start command: %v", err)
 	}
-	go streamer.receiveCommandData()
+	go debug.CapturePanicReport(streamer.receiveCommandData)
 	err = streamer.sendCommandData(pid)
 	s.log(log.DebugLevel, "send command data: err=%v", err)
 	return err
@@ -572,9 +573,9 @@ func (s *Server) Watch(
 			msg := WatchMessage{
 				Type: WatchMessage_TypeData,
 				Data: &WatchData{
-					Uri:     ev.URI().String(),
-					Event:   protoEv,
-					IsDir:   isDir,
+					Uri:   ev.URI().String(),
+					Event: protoEv,
+					IsDir: isDir,
 				}}
 			if err := stream.Send(&msg); err != nil {
 				return err

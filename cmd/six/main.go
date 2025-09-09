@@ -79,12 +79,7 @@ const (
 )
 
 var (
-	// Tag is a compile-time variable
-	Tag = "development"
-	// Commit is a compile-time variable
-	Commit = "HEAD"
-	// Version is the version of this executable.
-	Version string
+	version string
 
 	defaultConfigPath string
 	flagConfigPath    *string
@@ -110,7 +105,7 @@ func init() {
 	defaultDataPath = path.Join(home, ".six")
 	flagDataPath = flag.String("d", defaultDataPath, "data directory path")
 
-	Version = fmt.Sprintf("%s (HEAD is %s)", Tag, Commit)
+	version = fmt.Sprintf("%s (HEAD is %s)", debug.Tag, debug.Commit)
 }
 
 func cwdURI() workspaceapi.URI {
@@ -158,10 +153,10 @@ func startWorkspaceServer() int {
 	quitch := make(chan struct{})
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(
-			rpc.UnaryLoggingRecoveryInterceptor(),
+			rpc.UnaryReportRecoveryInterceptor(),
 		),
 		grpc.ChainStreamInterceptor(
-			rpc.StreamLoggingRecoveryInterceptor(),
+			rpc.StreamReportRecoveryInterceptor(),
 		),
 	)
 	signal.Notify(ch)
@@ -235,9 +230,10 @@ func main() {
 	}
 
 	var code int
-	ok, path, err := debug.CapturePanicReportDir(*flagDataPath, "six", Tag, func() {
-		code = run()
-	})
+	ok, path, err := debug.CapturePanicReportWith(
+		debug.ReportsDir, debug.Package, debug.Tag, func() {
+			code = run()
+		})
 	if ok {
 		os.Exit(code)
 	}
@@ -252,7 +248,7 @@ func run() int {
 	ctx := context.Background()
 
 	if *flagVersion {
-		fmt.Printf("Six %s\n", Version)
+		fmt.Printf("Six %s\n", version)
 		return 0
 	}
 
@@ -287,8 +283,8 @@ func run() int {
 
 	grantor := extension.GrantAll()
 	extensionOpts := []extensionv2.Option{
-		extensionv2.WithPackageName("six"),
-		extensionv2.WithPackageVersion(Tag),
+		extensionv2.WithPackageName(debug.Package),
+		extensionv2.WithPackageVersion(debug.Tag),
 	}
 	runner, err := extensionv2.NewRunner(ctx, &eventLoopMutex,
 		grantor, *flagDataPath, extensionOpts...)

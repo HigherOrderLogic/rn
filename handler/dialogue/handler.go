@@ -30,6 +30,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
@@ -65,7 +66,7 @@ func Handler(
 		tx:            ch1,
 		mu:            locker,
 	}
-	go sh.consumeIncoming()
+	go debug.CapturePanicReport(sh.consumeIncoming)
 
 	return sh, ch2, ch1
 }

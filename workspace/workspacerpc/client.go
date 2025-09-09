@@ -38,6 +38,7 @@ import (
 	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 )
 
 const defaultTimeout = 5 * time.Second
@@ -297,7 +298,7 @@ func (c *Client) StartCommand(
 	defer cancel()
 
 	ch := make(chan result)
-	go func() {
+	go debug.CapturePanicReport(func() {
 		// do not worry about closing stream here something else
 		// should take care of closing the connection if deemed appropiate.
 		if err := stream.Send(&req); err != nil {
@@ -322,7 +323,7 @@ func (c *Client) StartCommand(
 		case ch <- result{pid: pid}:
 		case <-handshakeCtx.Done():
 		}
-	}()
+	})
 
 	select {
 	case res := <-ch:
@@ -330,7 +331,9 @@ func (c *Client) StartCommand(
 			cancelFn()
 			return 0, res.err
 		}
-		go streamer.streamCommandData(cancelFn)
+		go debug.CapturePanicReport(func() {
+			streamer.streamCommandData(cancelFn)
+		})
 		return res.pid, nil
 	case <-handshakeCtx.Done():
 		cancelFn()
@@ -425,7 +428,7 @@ func (c *Client) Watch(
 		return 0, errors.New("received incorrect watch message response")
 	}
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer close(ch)
 		for {
 			msg, err := stream.Recv()
@@ -457,9 +460,9 @@ func (c *Client) Watch(
 				ev = workspaceapi.Remove
 			}
 			fi := watchFileInfo{
-				event:   ev,
-				uri:     uri,
-				isDir:   data.GetIsDir(),
+				event: ev,
+				uri:   uri,
+				isDir: data.GetIsDir(),
 			}
 			select {
 			case ch <- fi:
@@ -467,7 +470,7 @@ func (c *Client) Watch(
 				return
 			}
 		}
-	}()
+	})
 
 	return int(msg.GetResponse().GetId()), nil
 }
@@ -595,9 +598,9 @@ func tryUnwrapFile(ifc interface{}) (uint32, string) {
 }
 
 type watchFileInfo struct {
-	event   workspaceapi.Event
-	uri     workspaceapi.URI
-	isDir   bool
+	event workspaceapi.Event
+	uri   workspaceapi.URI
+	isDir bool
 }
 
 func (w watchFileInfo) Event() workspaceapi.Event {

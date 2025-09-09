@@ -46,6 +46,7 @@ import (
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idetask"
@@ -1255,14 +1256,16 @@ func (e *ex) handleEvent(ev term.Event) (
 			e.ctxPartialReissue, e.cancelPartialReissue = context.WithTimeout(ctx,
 				e.config.SequencerTimeout+reissuePadding)
 			e.reissueEvent = ev
-			go func(ctx context.Context, ev term.Event) {
-				<-ctx.Done()
-				if ctx.Err() == context.DeadlineExceeded {
+			waitCtx := e.ctxPartialReissue
+			reissueEvent := e.reissueEvent
+			go debug.CapturePanicReport(func() {
+				<-waitCtx.Done()
+				if waitCtx.Err() == context.DeadlineExceeded {
 					// timer expired, reissue event because
 					// user didn't send a matching key combination.
-					e.publishEvent(ev)
+					e.publishEvent(reissueEvent)
 				}
-			}(e.ctxPartialReissue, e.reissueEvent)
+			})
 			return
 		}
 		// this is a re-issue so continue processing

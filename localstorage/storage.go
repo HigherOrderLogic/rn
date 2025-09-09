@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/blue/document/firstmover"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/localstorage/schemedoc"
 	"unstable.build/go-tui/workspace"
 )
@@ -45,7 +46,7 @@ import (
 func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) document.Service {
 	ret := new(delayedLoadingService)
 	ret.mu.Lock()
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer ret.mu.Unlock()
 
 		storageDir := filepath.Join(dir, ".db")
@@ -83,7 +84,7 @@ func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) docume
 		svc := firstmover.New(storage, lockPath, cfg)
 
 		ret.service = svc
-	}()
+	})
 	return ret
 }
 

@@ -136,13 +136,13 @@ func serveWorkspaceExtension(
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go func() {
+	go debug.CapturePanicReport(func() {
 		workspace, err := NewWorkspace(ctx, req)
 		if err != nil {
 			errchan <- err
 			return
 		}
-		ok, reportname, captureErr := debug.CapturePanicReportDir(req.DataDir,
+		ok, reportname, captureErr := debug.CapturePanicReportWith(req.DataDir,
 			meta.ExtensionID, meta.ExtensionVersion, func() {
 				errchan <- extension.ExtendWorkspace(ctx, workspace, cfg)
 			})
@@ -157,7 +157,7 @@ func serveWorkspaceExtension(
 		// ensure log is delivered
 		_ = os.Stderr.Sync()
 		errchan <- panicErr
-	}()
+	})
 
 	for {
 		select {

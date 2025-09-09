@@ -36,6 +36,7 @@ import (
 	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/termrpc"
 )
@@ -305,14 +306,14 @@ func (s *SyncClientStream[T]) Close() error {
 	// stream client or server. Keeps things simple at the expense
 	// of assuming that no other methods will be called by host
 	// during the processing of some other method. A small price to pay.
-	go func() {
+	go debug.CapturePanicReport(func() {
 		recvMsg := s.newT()
 		err := s.stream.RecvMsg(recvMsg)
 		if err != nil {
 			err = fmt.Errorf("receive close message: %w", err)
 		}
 		s.closeStream(err)
-	}()
+	})
 
 	return nil
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/unstablebuild/blue/bluectx"
 	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacerpc"
@@ -144,7 +145,7 @@ func newWrapWatcher(watcher workspaceapi.ProcessWatcher, cancelFn func()) wrapWa
 		watcher: watcher,
 		ch:      make(chan error),
 	}
-	go func() {
+	go debug.CapturePanicReport(func() {
 		err := <-ret.ch
 		cancelFn()
 		if ret.watcher != nil && ret.watcher.WatchProcess() != nil {
@@ -154,7 +155,7 @@ func newWrapWatcher(watcher workspaceapi.ProcessWatcher, cancelFn func()) wrapWa
 			case <-t:
 			}
 		}
-	}()
+	})
 	return ret
 }
 

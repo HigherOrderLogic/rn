@@ -34,6 +34,7 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 )
 
@@ -322,7 +323,7 @@ func (n *Container) startAutoClose(
 	ctx context.Context, cancel func(),
 	el component.ListNode, msg string,
 ) {
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer cancel()
 
 		<-ctx.Done()
@@ -340,14 +341,16 @@ func (n *Container) startAutoClose(
 		if n.cfg.Interrupter != nil {
 			_ = n.cfg.Interrupter.Interrupt(ctx)
 		}
-	}()
+	})
 
 	if !n.cfg.ProgressBar {
 		return
 	}
 
 	if n.cfg.Interrupter != nil {
-		go term.InterruptAt(ctx, n.cfg.Interrupter, 10)
+		go debug.CapturePanicReport(func() {
+			term.InterruptAt(ctx, n.cfg.Interrupter, 10)
+		})
 	}
 }
 

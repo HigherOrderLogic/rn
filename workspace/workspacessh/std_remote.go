@@ -40,6 +40,7 @@ import (
 	"golang.org/x/term"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -141,7 +142,7 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 	ctx = bluectx.First(s.parentCtx, ctx)
 
 	// wait and dispatch error to watcher
-	go func() {
+	go debug.CapturePanicReport(func() {
 		defer cancel()
 
 		err := s.ses.Wait()
@@ -156,16 +157,16 @@ func (s *goSshSession) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
 			case cmd.Watcher.WatchProcess() <- err:
 			}
 		}
-	}()
+	})
 
 	// kill command if context is done
-	go func() {
+	go debug.CapturePanicReport(func() {
 		select {
 		case <-ctx.Done():
 			s.ses.Close()
 		case <-s.quitCh:
 		}
-	}()
+	})
 
 	return workspaceapi.Pid(s.pid), nil
 }

@@ -41,6 +41,7 @@ import (
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/text"
@@ -129,7 +130,7 @@ func (t *Component) Run(updateChan chan struct{}) error {
 	// buffer to 1, so we publish one last interrupt after
 	// maxInterruptPerSecond since last interrupt
 	ch := make(chan struct{}, 1)
-	go func() {
+	go debug.CapturePanicReport(func() {
 		maxInterruptPerSecond := time.Duration(int(time.Second) / 30)
 		timer := time.NewTimer(maxInterruptPerSecond)
 		defer timer.Stop()
@@ -152,7 +153,7 @@ func (t *Component) Run(updateChan chan struct{}) error {
 				return
 			}
 		}
-	}()
+	})
 
 	return t.run(ch)
 }

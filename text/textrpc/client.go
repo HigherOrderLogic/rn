@@ -27,16 +27,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"runtime/debug"
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	grpc "google.golang.org/grpc"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/cell"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
 	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
@@ -168,23 +166,9 @@ func (c *Client) SubscribeEvents(
 	}
 
 	handler := newEventStreamServer(c.clientCtx, stream, h)
-	go capturePanics(handler.receiveEvents)
+	go debug.CapturePanicReport(handler.receiveEvents)
 
 	return nil
-}
-
-func capturePanics(fn func()) {
-	defer func() {
-		r := recover()
-		if r == nil {
-			return
-		}
-		stack := string(debug.Stack())
-		log.Errorf("captured panic: %v, stack: %s", r, stack)
-		os.Stderr.Sync()
-		panic(r)
-	}()
-	fn()
 }
 
 // SubscribeCommand requests the editor server to register cmd with h.
@@ -212,7 +196,7 @@ func (c *Client) SubscribeCommand(man textapi.CommandManual, h textapi.CommandHa
 	}
 
 	srvStream := newCommandServerStream(c.clientCtx, stream, h)
-	go capturePanics(srvStream.receiveMessages)
+	go debug.CapturePanicReport(srvStream.receiveMessages)
 
 	return nil
 }
