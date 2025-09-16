@@ -50,6 +50,7 @@ const (
 	colorSuccess    = tcell.ColorGreen
 	colorRunning    = tcell.ColorGray
 	colorError      = tcell.ColorRed
+	colorPaused     = tcell.ColorYellow
 	minimizePadding = 0
 )
 
@@ -102,6 +103,7 @@ type Task struct {
 	minHeight       int
 	height          int
 	running         bool
+	paused          bool
 	lastExit        error
 	lastStart       time.Time
 	lastDuration    time.Duration
@@ -148,7 +150,7 @@ func (t *Task) Info() TaskInfo {
 // Handle satisfies tui.Handler.
 func (t *Task) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Ch == 'c' && ev.Mod == term.ModCtrl {
-		t.minimize()
+		t.pause()
 		return
 	}
 	_, handled = t.handler.Handle(ev)
@@ -327,6 +329,7 @@ func (t *Task) init(
 			case err := <-t.donech:
 				t.mu.Lock()
 				stale := t.stale // do not skip state changes
+				paused := t.paused
 				t.mu.Unlock()
 				if err != nil {
 					t.setError(err)
@@ -335,6 +338,8 @@ func (t *Task) init(
 				}
 				if stale {
 					t.tryRunning(b, scheme)
+				} else if paused {
+					t.setPause()
 				}
 			case <-t.ctx.Done():
 				t.setError(t.ctx.Err())
@@ -384,6 +389,7 @@ func (t *Task) setRunning(h browser.ScrollableFloating) {
 	t.lastStart = time.Now()
 	t.running = true
 	t.stale = false
+	t.paused = false
 	t.handler = h
 	t.handler.Resize(t.width, t.height)
 	t.barColor = colorRunning
@@ -434,6 +440,23 @@ func (t *Task) setSuccess() {
 	t.lastExit = nil
 	t.running = false
 	t.barColor = colorSuccess
+	t.setBarColor(t.barColor)
+	t.interrupt()
+}
+
+func (t *Task) pause() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	_ = t.handler.Close()
+	t.paused = true
+}
+
+func (t *Task) setPause() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	t.barColor = colorPaused
 	t.setBarColor(t.barColor)
 	t.interrupt()
 }

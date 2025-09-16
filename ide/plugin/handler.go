@@ -302,16 +302,22 @@ func (e *Handler) initEmulator(
 		term.InterruptAt(ctx, interrupter, 1)
 	})
 	go debug.CapturePanicReport(func() {
-		defer cancel()
-		select {
-		case err := <-ch:
+		var err error
+
+		defer func() {
 			e.bar.mu.Lock()
 			defer e.bar.mu.Unlock()
+
 			e.bar.done = true
 			e.bar.doneErr = err
 			e.bar.doneTime = time.Now()
+			cancel()
+		}()
+
+		select {
+		case err = <-ch:
 		case <-ctx.Done():
-			return
+			err = ctx.Err()
 		}
 	})
 	return nil
