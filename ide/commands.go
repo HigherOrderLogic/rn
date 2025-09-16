@@ -487,7 +487,7 @@ var (
 				return iterator.FromSlice[string](nil), "", nil
 			},
 		},
-		"taskstop": {
+		"taskclose": {
 			man: textapi.CommandManual{
 				Summary:  "Stop a task previously created via tasknew.",
 				Synopsis: "<name>",

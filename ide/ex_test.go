@@ -2489,7 +2489,7 @@ func TestRunStopTasks(t *testing.T) {
 │││                        │││
 │││                        │││
 └└└────────────────────────┘┘┘`},
-			{":taskstop ",
+			{":taskclose",
 				`┌────────────────────────────┐
 │                            │
 ├┌┌────────────────────────┐┐┤
@@ -2498,14 +2498,14 @@ func TestRunStopTasks(t *testing.T) {
 │││                        │││
 │││                        │││
 ┌────────────────────────────┐
-│taskstop ▐                  │
+│taskclose ▐                 │
 │assets                      │
 │build                       │
 │test                        │
 │validateAssets              │
 └────────────────────────────┘
 └└└────────────────────────┘┘┘`},
-			{" assets>:taskstop test>:taskstop ",
+			{" assets>:taskclose test>:taskclose ",
 				`┌────────────────────────────┐
 │                            │
 ├┌──────────────────────────┐┤
@@ -2514,7 +2514,7 @@ func TestRunStopTasks(t *testing.T) {
 ││                          ││
 ││                          ││
 ┌────────────────────────────┐
-│taskstop ▐                  │
+│taskclose ▐                 │
 │build                       │
 │validateAssets              │
 └────────────────────────────┘
