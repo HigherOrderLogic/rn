@@ -1364,6 +1364,86 @@ func TestExternalCommands(t *testing.T) {
 	})
 }
 
+func TestExternalEvents(t *testing.T) {
+	t.Run("happy path", func(t *testing.T) {
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		dir2, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			os.RemoveAll(dir)
+			os.RemoveAll(dir2)
+		})
+
+		var i atomic.Int64
+		m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(false), nil, dir,
+			nopShutdownShaderConfig())
+		err = m.subscribeEventHandler([]textapi.EventType{textapi.EventTypeOpen},
+			text.FuncEventHandler(func(context.Context, textapi.Event) bool {
+				i.Add(1)
+				return false
+			}))
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{":edit a>", // existing workspace
+				`┌────────────────────────────┐
+│o a                         │
+├────────────────────────────┤
+│▐                           │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+└────────────────────────────┘`},
+			{fmt.Sprintf(":workspacenew %s>:edit b>", dir2), // new workspace
+				`┌────────────────────────────┐
+│o b                         │
+├────────────────────────────┤
+│▐                           │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2                    │
+└────────────────────────────┘`},
+			{":wofo 8>:edit c>", // empty workspace
+				`┌────────────────────────────┐
+│o c                         │
+├────────────────────────────┤
+│▐                           │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+│                      NORMAL│
+├────────────────────────────┤
+│1 1  2 2  8                 │
+└────────────────────────────┘`},
+		}
+		h := newSafeHandler(m)
+		handlertest.TestHandlerSequence(t, h, 30, 15, cases)
+
+		assert.Equal(t, 3, int(i.Load()))
+
+		require.NoError(t, m.Close())
+	})
+}
+
 func TestComponentOnTabsClickIntegration(t *testing.T) {
 	// setup
 	dir, err := os.MkdirTemp("", "")
@@ -1584,6 +1664,8 @@ func newTestWorkspaceManagerHandlerWithDir(
 	manager := workspace.NewManager(config.NopConfig())
 	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 		workspace.NewMemoryScheme))
+	require.NoError(t, manager.RegisterScheme(workspace.FileScheme,
+		workspace.NewFileScheme))
 
 	var uri *workspaceapi.URI
 	if dir != "" {

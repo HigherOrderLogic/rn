@@ -136,6 +136,17 @@ func (c *IDE) SubscribeCommand(
 	return c.workspaceHandler.subscribeCommand(cmd, handler)
 }
 
+// SubscribeEvents subscribes the given handler to all the given events,
+// or returns an error if there's an error while subscribing it.
+//
+// The command will be automatically installed to all active
+// and future workspaces.
+func (c *IDE) SubscribeEvents(
+	events []textapi.EventType, handler text.EventHandler,
+) error {
+	return c.workspaceHandler.subscribeEventHandler(events, handler)
+}
+
 // DefaultAttributes return the default attributes to be used to fill the screen.
 func (i *IDE) DefaultAttributes() term.Attributes {
 	return i.root.defAttr

@@ -96,6 +96,7 @@ type workspaceManagerHandler struct {
 	workspacesBarHeight     int
 	workspacesIcon          rune
 	externalCommands        map[string]externalCommand
+	externalEvents          []externalEvents
 	// NOTE: if user changes frame config, then mouse calculations
 	// for resize might be off.
 	frame        bool
@@ -206,6 +207,9 @@ func (h *workspaceManagerHandler) init(
 		return fmt.Errorf("new ex: %w", err)
 	}
 	if err = h.subscribeAllCommands(h.empty); err != nil {
+		return err
+	}
+	if err = h.subscribeAllEvents(h.empty); err != nil {
 		return err
 	}
 
@@ -588,6 +592,10 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cancel()
 		return err
 	}
+	if err = h.subscribeAllEvents(ex); err != nil {
+		cancel()
+		return err
+	}
 
 	go debug.CapturePanicReport(func() {
 		start := time.Now()
@@ -788,6 +796,8 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 
 	uri, parseErr := workspaceapi.ParseURI(path)
 	if parseErr == nil {
+		log.Debugf("using path %q as a path of file:// scheme: "+
+			"could not parse as uri: %v", path, parseErr)
 		return h.addOrCreateWorkspace(uri)
 	}
 
@@ -1083,6 +1093,54 @@ func (h *workspaceManagerHandler) subscribeCommand(
 
 	// store for future workspaces
 	h.externalCommands[cmd.Name] = extCmd
+	return nil
+}
+
+type externalEvents struct {
+	events  []textapi.EventType
+	handler text.EventHandler
+}
+
+func (h *workspaceManagerHandler) subscribeExternalEvents(
+	ex *ex, evs ...externalEvents,
+) (ret error) {
+	for _, cmd := range evs {
+		err := ex.comp.SubscribeEvents(cmd.events, cmd.handler)
+		if err != nil {
+			ret = multierror.Append(ret, fmt.Errorf("subscribe events: %w", err))
+		}
+	}
+	return ret
+}
+
+func (h *workspaceManagerHandler) subscribeAllEvents(ex *ex) error {
+	return h.subscribeExternalEvents(ex, h.externalEvents...)
+}
+
+func (h *workspaceManagerHandler) subscribeEventHandler(
+	events []textapi.EventType, handler text.EventHandler,
+) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	extEvt := externalEvents{events: events, handler: handler}
+
+	// subscribe in current workspaces
+	ret := h.subscribeExternalEvents(h.empty, extEvt)
+	for _, w := range h.workspaces {
+		if w == nil {
+			continue
+		}
+		if err := h.subscribeExternalEvents(w.ex, extEvt); err != nil {
+			ret = multierror.Append(ret, err)
+		}
+	}
+	if ret != nil {
+		return ret
+	}
+
+	// store for future workspaces
+	h.externalEvents = append(h.externalEvents, extEvt)
 	return nil
 }
 
