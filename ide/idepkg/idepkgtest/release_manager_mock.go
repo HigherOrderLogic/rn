@@ -116,12 +116,13 @@ func (t *ReleaseManager) Get(
 	version release.Version, writer release.ProgressWriter,
 ) (release.Bundle, error) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
 	if t.err != nil {
+		t.mu.Unlock()
 		return release.Bundle{}, t.err
 	}
 	bundles, ok := t.versions[pkgID]
 	if !ok {
+		t.mu.Unlock()
 		return release.Bundle{}, errors.New("not found")
 	}
 
@@ -134,6 +135,7 @@ func (t *ReleaseManager) Get(
 		}
 	}
 	if found == nil {
+		t.mu.Unlock()
 		return release.Bundle{}, errors.New("version not found")
 	}
 
@@ -141,27 +143,41 @@ func (t *ReleaseManager) Get(
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
+		if t.missProgressComplete {
+			return
+		}
 		const n = 100
 		for i := int64(0); i < n-1; i++ {
+			t.mu.Lock()
 			writer.Progress(i, n, t.progressUnits)
+			t.mu.Unlock()
 		}
 	}()
 
 	var err error
 	go func() {
 		defer wg.Done()
+		t.mu.Lock()
+		defer t.mu.Unlock()
 		switch pkgID {
 		case "go":
 			_, err = writer.Write(goTar)
 		case "testpkg":
 			_, err = writer.Write(testPkgTar)
+		case "six":
+			_, err = writer.Write(testPkgTar)
 		}
 	}()
 
+	t.mu.Unlock()
 	wg.Wait()
 	if err != nil {
 		return release.Bundle{}, err
 	}
+
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	if !t.missProgressComplete {
 		writer.Progress(1, 1, t.progressUnits)
 	}

@@ -222,7 +222,7 @@ func TestIDEInitializationIntegration(t *testing.T) {
 	t.Run("init shader is run when passed WithInitShader option", func(t *testing.T) {
 		initShader := new(mockShader)
 		i := new(IDE)
-		err := i.init("", "", "", "", []string{""},
+		err := i.init("", "", "", "datadir", []string{""},
 			WithInitShader(
 				func(_ term.Attributes) shader.Shader {
 					return initShader
@@ -248,7 +248,7 @@ func TestOpen(t *testing.T) {
 	}
 
 	t.Run("empty workspace", func(t *testing.T) {
-		i, err := New("", "", "", nil)
+		i, err := New("", "", "datadir", nil)
 		require.NoError(t, err)
 		file, _ := makeTestFiles(t)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())
@@ -259,7 +259,7 @@ func TestOpen(t *testing.T) {
 	})
 
 	t.Run("a workspace", func(t *testing.T) {
-		i, err := New(os.TempDir(), "", "", nil)
+		i, err := New(os.TempDir(), "", "datadir", nil)
 		require.NoError(t, err)
 		file, _ := makeTestFiles(t)
 		uri, err := workspaceapi.CurrentUserHostURI(file.Name())

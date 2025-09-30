@@ -42,6 +42,7 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
@@ -74,6 +75,7 @@ var (
 
 type workspaceManagerHandler struct {
 	mu                 sync.Locker
+	pkgmanager         *pkgManager
 	exitPromptOpen     bool
 	confirmedForceExit bool
 	notifications      *workspaceNotifications
@@ -156,6 +158,7 @@ func (h *workspaceManagerHandler) init(
 	tabBarOffset, tabBarHeight int, workspacesIcon rune,
 	workspacesBarHeight, workspacesBarOffset int, workspacesBarFrame bool,
 	tabsClickCallback func(int) bool,
+	releaseManager release.Manager,
 	shaderRunner *shaderRunner,
 ) (err error) {
 	ctx := context.Background()
@@ -186,6 +189,9 @@ func (h *workspaceManagerHandler) init(
 	if err != nil {
 		return fmt.Errorf("new editor: %v", err)
 	}
+
+	pkgStorage := document.WithPartition(h.storage, "idepkg")
+	h.pkgmanager = newPackageManager(h.notifications, releaseManager, pkgStorage, sixDir)
 
 	homeWorkspace, err := h.workspace.AddWorkspace(ctx, homeDirUri)
 	if err != nil {
@@ -576,7 +582,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(), textOpts...)
 	if err != nil {
 		cancel()
-		return fmt.Errorf("new multi workspace: %w", err)
+		return fmt.Errorf("new ex: %w", err)
 	}
 	if err := h.subscribeAllCommands(ex); err != nil {
 		cancel()
@@ -937,6 +943,10 @@ func (h *workspaceManagerHandler) subscribeAllCommands(ex *ex) error {
 	err = h.subscribeAllExternalCommands(ex)
 	if err != nil {
 		return fmt.Errorf("subscribe external commands: %w", err)
+	}
+	err = h.pkgmanager.subscribeCommands(ex)
+	if err != nil {
+		return fmt.Errorf("subscribe idepkg commands: %w", err)
 	}
 	return nil
 }

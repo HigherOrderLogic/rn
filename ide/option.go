@@ -28,6 +28,9 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/blue/release"
+	"github.com/unstablebuild/blue/release/docrelease"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/extensionapi"
@@ -70,6 +73,13 @@ func WithLocker(locker sync.Locker) Option {
 func WithPublishEvent(p EventPublisher) Option {
 	return func(opts *options) {
 		opts.publishEvent = p
+	}
+}
+
+// WithReleaseManager sets the release.Manager of the IDE.
+func WithReleaseManager(m release.Manager) Option {
+	return func(opts *options) {
+		opts.releaseManager = m
 	}
 }
 
@@ -214,6 +224,7 @@ func WithTabsClickCallback(fn func(int) bool) Option {
 type options struct {
 	publishEvent        EventPublisher
 	extensionRunner     ExtensionsRunner
+	releaseManager      release.Manager
 	tabBarOffset        int
 	tabsClickCallback   func(int) bool
 	tabBarHeight        int
@@ -250,6 +261,7 @@ func defaultOptions() options {
 		scheduleFn:         term.ScheduleNextTick,
 		workspacesBarFrame: true,
 		workspacesIcon:     '1',
+		releaseManager:     docrelease.NewManager(document.NewInMemoryService()),
 	}
 }
 

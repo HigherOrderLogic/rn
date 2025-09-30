@@ -38,7 +38,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/blue/release/docrelease"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/extensionapi"
@@ -113,6 +115,9 @@ func TestWorkspaceConfig(t *testing.T) {
 
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 
 		runner := FuncExtensionsRunner(testRunnerFn)
 
@@ -120,6 +125,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		m.workspaceManagerHandler = new(workspaceManagerHandler)
 		n := notifications.New(m, notificationsConfig())
 
+		releaseManager := docrelease.NewManager(document.NewInMemoryService())
 		shRunner := new(shaderRunner)
 		shRunner.init(
 			handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
@@ -129,7 +135,7 @@ func TestWorkspaceConfig(t *testing.T) {
 				return true
 			}, runner, new(sync.Mutex), nil,
 			func() (ideConfig, error) { return cfg, errors.New("boom") },
-			".sixrc", 0, 0, '1', 0, 0, true, nil, shRunner)
+			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner)
 		require.NoError(t, err)
 		defer m.Close()
 
@@ -228,6 +234,9 @@ func TestWorkspaceExtensions(t *testing.T) {
 			})
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 		wg.Add(2)
 		m := newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 			&uri, cfg, runner, nil, nil, dir, nil, nopShutdownShaderConfig())
@@ -240,6 +249,9 @@ func TestWorkspaceExtensions(t *testing.T) {
 	t.Run("calls extension runner with built-in extensions", func(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 		cfg := ideConfig{cfg: map[string]interface{}{}}
 		manager := workspace.NewManager(cfg.workspace())
 
@@ -649,6 +661,9 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 	t.Run("prompts on quit if files are dirty, user continues", func(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 		filenames := []string{"1234", "4567"}
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir,
 			nopShutdownShaderConfig())
@@ -692,6 +707,9 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 	t.Run("prompts on quit if files are dirty, user backs down", func(t *testing.T) {
 		dir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)
+		t.Cleanup(func() {
+			_ = os.RemoveAll(dir)
+		})
 		filenames := []string{"1234", "4567"}
 		m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir,
 			nopShutdownShaderConfig())
@@ -742,6 +760,9 @@ func TestWorkspaceManagerClosePromptIntegration(t *testing.T) {
 		t.Run(fmt.Sprintf("does not prompt on %s", cmd), func(t *testing.T) {
 			dir, err := os.MkdirTemp("", "")
 			require.NoError(t, err)
+			t.Cleanup(func() {
+				_ = os.RemoveAll(dir)
+			})
 			filenames := []string{"1234", "4567"}
 			m := newTestWorkspaceManagerHandlerWithDir(t, defaultCfg(), filenames, dir,
 				nopShutdownShaderConfig())
@@ -854,6 +875,9 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 	// re-use storage
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(dir)
+	})
 
 	for _, wrap := range []bool{false, true} {
 
@@ -950,6 +974,9 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			t.Run("position is restored on close and open again", func(t *testing.T) {
 				dir, err := os.MkdirTemp("", "")
 				require.NoError(t, err)
+				t.Cleanup(func() {
+					_ = os.RemoveAll(dir)
+				})
 				manager := workspace.NewManager(config.NopConfig())
 				require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
 					workspace.NewMemoryScheme))
@@ -1032,6 +1059,9 @@ func TestWorkspaceManagerHandlerDrawWithInitialFiles(t *testing.T) {
 			t.Run("position is restored on workspacereload", func(t *testing.T) {
 				dir, err := os.MkdirTemp("", "")
 				require.NoError(t, err)
+				t.Cleanup(func() {
+					_ = os.RemoveAll(dir)
+				})
 				m := newTestWorkspaceManagerHandlerWithDir(t, defaultConfigWithWrap(wrap), nil, dir, nopShutdownShaderConfig())
 
 				cases := []handlertest.SequenceTestCase{
@@ -1507,6 +1537,9 @@ func newTestWorkspaceManagerHandlerWithManager(
 ) *testWorkspaceManagerHandler {
 	dir, err := os.MkdirTemp("", "")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.RemoveAll(dir)
+	})
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
 		&uri, cfg, FuncExtensionsRunner(testRunnerFn), nil, filenames, dir, nil,
 		nopShutdownShaderConfig())
@@ -1532,12 +1565,13 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	shRunner.init(handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
 		shutdownShaderCfg)
 
+	releaseManager := docrelease.NewManager(document.NewInMemoryService())
 	err = m.workspaceManagerHandler.init(uri, homeURI, manager, n, cfg, "", files,
 		dir, func(term.Event) bool {
 			return true
 		}, runner, new(sync.Mutex), extensions,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, shRunner)
+		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner)
 
 	require.NoError(t, err)
 	return m
@@ -1558,9 +1592,18 @@ func newTestWorkspaceManagerHandlerWithDir(
 		*uri, err = workspaceapi.ParseURI(fmt.Sprintf("memory://%s", dir))
 		require.NoError(t, err)
 	}
+	dataDir := dir
+	if dataDir == "" {
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			os.RemoveAll(dir)
+		})
+		dataDir = dir
+	}
 	runner := FuncExtensionsRunner(testRunnerFn)
 	return newTestWorkspaceManagerHandlerWithManagerAndExtensions(t, manager,
-		uri, cc, runner, nil, filenames, dir, nil, shutdownShaderCfg)
+		uri, cc, runner, nil, filenames, dataDir, nil, shutdownShaderCfg)
 }
 
 func newTestWorkspaceManagerHandler(
