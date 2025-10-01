@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui"
+	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -211,6 +212,12 @@ func (i *IDE) Open(file workspaceapi.URI) error {
 // This should be called before Run or Handler are called for the first time.
 func (i *IDE) SetReleaseManager(m release.Manager) {
 	i.workspaceHandler.setReleaseManager(m)
+}
+
+// Notifications returns an cross-workspace, goroutine-safe implementation
+// of browserapi.Notifications.
+func (i *IDE) Notifications() browserapi.Notifications {
+	return i.workspaceHandler.notifications
 }
 
 // Close satisfies io.Closer by closing this all ide's resources, including
