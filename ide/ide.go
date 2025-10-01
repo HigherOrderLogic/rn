@@ -36,6 +36,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/blue/release"
 	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/api/textapi"
@@ -204,6 +205,12 @@ func (i *IDE) Open(file workspaceapi.URI) error {
 		return err
 	}
 	return err
+}
+
+// SetReleaseManager sets the release.Manager of the IDE.
+// This should be called before Run or Handler are called for the first time.
+func (i *IDE) SetReleaseManager(m release.Manager) {
+	i.workspaceHandler.setReleaseManager(m)
 }
 
 // Close satisfies io.Closer by closing this all ide's resources, including
