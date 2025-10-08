@@ -251,7 +251,8 @@ func (t *tree) edit(ev textapi.Event) {
 		return
 	}
 	// use old cells to convert coordinates
-	edit, ok := textapiEditToTreeSitterEdit(t.cells, ev)
+	newCells, _ := t.view.RawCells()
+	edit, ok := textapiEditTotreeSitterEdit(t.cells, newCells, ev)
 	if !ok {
 		t.log(log.WarnLevel, "convert edit to tree-sitter coordinates failed, "+
 			"re-parsing enabled: %t", t.config.ReparseOnErrors)
@@ -383,15 +384,15 @@ func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
 	return
 }
 
-func textapiEditToTreeSitterEdit(cells [][]term.Cell, ev textapi.Event) (tree_sitter.InputEdit, bool) {
-	startByte, sok := cell.ConvertCoordinatesToByteOffset(cells, ev.Start)
-	oldEndByte, eok := cell.ConvertCoordinatesToByteOffset(cells, ev.End)
+func textapiEditTotreeSitterEdit(before, after [][]term.Cell, ev textapi.Event) (tree_sitter.InputEdit, bool) {
+	startByte, sok := cell.ConvertCoordinatesToByteOffset(before, ev.Start)
+	oldEndByte, eok := cell.ConvertCoordinatesToByteOffset(before, ev.End)
 
-	x, y, spok := cell.ConvertCoordinatesToRunePos(cells, ev.Start)
+	x, y, spok := cell.ConvertCoordinatesToRunePos(before, ev.Start)
 	startPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
-	x, y, epok := cell.ConvertCoordinatesToRunePos(cells, ev.End)
+	x, y, epok := cell.ConvertCoordinatesToRunePos(before, ev.End)
 	oldEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
-	x, y, tpok := cell.ConvertCoordinatesToRunePos(cells, ev.To)
+	x, y, tpok := cell.ConvertCoordinatesToRunePos(after, ev.To)
 	newEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
 
 	if !sok || !eok || !spok || !epok || !tpok {

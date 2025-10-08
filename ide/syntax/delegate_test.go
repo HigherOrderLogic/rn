@@ -21,7 +21,7 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package syntax
+package syntax_test
 
 import (
 	"context"
@@ -38,6 +38,7 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler/handlertest"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/vi"
@@ -57,7 +58,7 @@ func TestDelegateIntegration(t *testing.T) {
 
 	wg.Add(1)
 	mu.Lock()
-	ed := newEditFile(t, comp, fileContent)
+	ed, _ := newEditFile(t, comp, fileContent)
 	mu.Unlock()
 	wg.Wait()
 
@@ -391,11 +392,32 @@ func TestDelegateIntegration(t *testing.T) {
 	}
 	handlertest.TestHandlerSequenceWriter(t, w, comp.Browser(), width, height, sequenceCases)
 
+	sequenceCases = []handlertest.SequenceTestCase{
+		{
+			"Gofunc helloWorld(){\n\tfmt.Println(\"hello world\")\n}", `┌────────────────────────────┐
+│o #####                     │
+├────────────────────────────┤
+│##### fileContent = ########│
+│    ############+           │
+│    ###########+            │
+│    ####+                   │
+│    ########################│
+│    ###                     │
+│                            │
+│#### helloWorld(){          │
+│    fmt.Println(############│
+│}▐                          │
+│                      INSERT│
+└────────────────────────────┘`,
+		},
+	}
+	handlertest.TestHandlerSequenceWriter(t, w, comp.Browser(), width, height, sequenceCases)
+
 	cleanup()
 	goleak.VerifyNone(t)
 }
 
-func newInstalledPkgManager(t *testing.T) PkgManager {
+func newInstalledPkgManager(t *testing.T) syntax.PkgManager {
 	wd, err := os.Getwd()
 	require.NoError(t, err)
 	return mockPkgManager{
@@ -416,7 +438,9 @@ func (m mockPkgManager) LibDir(ctx context.Context, pkg string) (iterator.Iterat
 
 var i int
 
-func newEditFile(t *testing.T, comp *text.Component, content string) text.CellEditor {
+func newEditFile(t *testing.T, comp *text.Component, content string) (
+	text.CellEditor, text.CellView,
+) {
 	i++
 	uri, err := workspaceapi.ParseURI("memory:///" + strconv.Itoa(i) + ".go")
 	require.NoError(t, err)
@@ -429,6 +453,7 @@ func newEditFile(t *testing.T, comp *text.Component, content string) text.CellEd
 
 	start := term.Coordinates{}
 	ed := comp.CellEditor(h)
+	view := comp.CellView(h)
 	_, _, _, err = ed.Edit(context.Background(), start, start, content)
 	require.NoError(t, err)
 
@@ -437,7 +462,7 @@ func newEditFile(t *testing.T, comp *text.Component, content string) text.CellEd
 	err = comp.Browser().Focus().SetContent(tab)
 	require.NoError(t, err)
 
-	return ed
+	return ed, view
 }
 
 func newWriter(width, height int) *term.StringWriter {
@@ -448,7 +473,7 @@ func newWriter(width, height int) *term.StringWriter {
 
 func installDelegate(
 	t *testing.T,
-	pkgs PkgManager, width, height int,
+	pkgs syntax.PkgManager, width, height int,
 	interrupt func(context.Context) error,
 ) (*sync.Mutex, *text.Component, func()) {
 	tmpDir, err := os.MkdirTemp("", "")
@@ -470,14 +495,14 @@ func installDelegate(
 	i := term.FuncInterrupter(interrupt)
 
 	mu := new(sync.Mutex)
-	cfg := DefaultConfig()
+	cfg := syntax.DefaultConfig()
 	cfg.ScheduleNextTick = func(fn func()) bool {
 		mu.Lock()
 		defer mu.Unlock()
 		fn()
 		return true
 	}
-	d, evs := NewDelegate(pkgs, nopNotifications{t: t}, comp, i, cfg)
+	d, evs := syntax.NewDelegate(pkgs, nopNotifications{t: t}, comp, i, cfg)
 	require.NoError(t, comp.SubscribeEvents(evs, d))
 
 	t.Cleanup(func() {
