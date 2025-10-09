@@ -24,11 +24,15 @@
 package syntax
 
 import (
+	"context"
+
+	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
+	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/term"
 )
 
-// Config configures a TreeManager.
+// Config configures a tree parser.
 type Config struct {
 	// CaptureNamesAttributes maps the capture names
 	// of a highlights.scm tree-sitter file, into term.Attributes.
@@ -44,7 +48,23 @@ type Config struct {
 	ReparseOnErrors bool
 }
 
-// DefaultConfig returns a sane configuration for a TreeManager.
+// PkgManager abstracts a subset of idepkg.Manager for a tree parser.
+type PkgManager interface {
+	LibDir(ctx context.Context, pkgID string) (iterator.Iterator[string], error)
+}
+
+// LocationSetter abstracts the ability to visualize locations.
+type LocationSetter interface {
+	SetLocationList(textapi.LocationList) error
+}
+
+// FuncLocationSetter returns a LocationSetter that uses the given fn to
+// set locations.
+func FuncLocationSetter(fn func(textapi.LocationList) error) LocationSetter {
+	return fnLocationList{fn: fn}
+}
+
+// DefaultConfig returns a sane configuration for a tree parser.
 func DefaultConfig() Config {
 	return Config{
 		CaptureNamesAttributes: defaultCaptureNamesAttributes,
@@ -67,4 +87,12 @@ var defaultCaptureNamesAttributes = map[string]term.Attributes{
 	"number":           {Fg: tcell.ColorRed},
 	"constant.builtin": {},
 	"comment":          {Fg: tcell.ColorBlue},
+}
+
+type fnLocationList struct {
+	fn func(textapi.LocationList) error
+}
+
+func (f fnLocationList) SetLocationList(list textapi.LocationList) error {
+	return f.fn(list)
 }

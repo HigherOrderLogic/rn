@@ -33,6 +33,7 @@ import (
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 )
 
@@ -59,6 +60,8 @@ type Config struct {
 	SequencerTimeout        time.Duration
 	DirtyTabAttr            term.Attributes
 	Icons                   IconSet
+	Syntax                  syntax.Config
+	PkgManager              syntax.PkgManager
 
 	EventPublisher func(term.Event) bool
 
@@ -140,6 +143,21 @@ func WithRecoveryFile(swapFilePath workspaceapi.URI) Option {
 func WithFile(file workspaceapi.URI) Option {
 	return func(cfg *Config) {
 		cfg.Filepaths = append(cfg.Filepaths, file)
+	}
+}
+
+// WithSyntaxConfig returns an Option that sets syntax configuration.
+func WithSyntaxConfig(syntax syntax.Config) Option {
+	return func(cfg *Config) {
+		cfg.Syntax = syntax
+	}
+}
+
+// WithPackageManager returns an Option that sets the package manager
+// for the syntax tree parser.
+func WithPackageManager(pkg syntax.PkgManager) Option {
+	return func(cfg *Config) {
+		cfg.PkgManager = pkg
 	}
 }
 

@@ -45,7 +45,7 @@ import (
 	"unstable.build/go-tui/workspace"
 )
 
-func TestDelegateIntegration(t *testing.T) {
+func TestTreeIntegration(t *testing.T) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
 		wg.Done()
@@ -53,7 +53,7 @@ func TestDelegateIntegration(t *testing.T) {
 	}
 	const width, height = 30, 15
 	pkgs := newInstalledPkgManager(t)
-	mu, comp, cleanup := installDelegate(t, pkgs, width, height, ready)
+	mu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
 	w := newWriter(width, height)
 
 	wg.Add(1)
@@ -471,7 +471,7 @@ func newWriter(width, height int) *term.StringWriter {
 	return writer
 }
 
-func installDelegate(
+func newTestCase(
 	t *testing.T,
 	pkgs syntax.PkgManager, width, height int,
 	interrupt func(context.Context) error,
@@ -485,15 +485,6 @@ func installDelegate(
 	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 	require.NoError(t, err)
 
-	ed := vi.Editor()
-	w := workspace.NewSchemeWorkspace(uri, scheme)
-	comp, err := text.NewComponent(ed, w, text.DefaultConfig())
-	require.NoError(t, err)
-
-	comp.Browser().Resize(width, height)
-
-	i := term.FuncInterrupter(interrupt)
-
 	mu := new(sync.Mutex)
 	cfg := syntax.DefaultConfig()
 	cfg.ScheduleNextTick = func(fn func()) bool {
@@ -502,8 +493,20 @@ func installDelegate(
 		fn()
 		return true
 	}
-	d, evs := syntax.NewDelegate(pkgs, nopNotifications{t: t}, comp, i, cfg)
-	require.NoError(t, comp.SubscribeEvents(evs, d))
+
+	ed := vi.Editor()
+	w := workspace.NewSchemeWorkspace(uri, scheme)
+	tcfg := text.DefaultConfig()
+	tcfg.Syntax = cfg
+	tcfg.PkgManager = pkgs
+	tcfg.EventPublisher = func(ev term.Event) bool {
+		interrupt(context.Background())
+		return true
+	}
+	comp, err := text.NewComponent(ed, w, tcfg)
+	require.NoError(t, err)
+
+	comp.Browser().Resize(width, height)
 
 	t.Cleanup(func() {
 		_ = os.RemoveAll(tmpDir)
@@ -511,7 +514,6 @@ func installDelegate(
 
 	return mu, comp, func() {
 		_ = comp.Close()
-		_ = d.Close()
 		_ = scheme.Close()
 	}
 }

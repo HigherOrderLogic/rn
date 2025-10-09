@@ -30,9 +30,11 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
+	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
@@ -43,8 +45,9 @@ import (
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component/notifications"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 const (
@@ -52,25 +55,87 @@ const (
 	highlightsFilename = "highlights.scm"
 )
 
+// WithTree installs a tree parser into the given buffer via cell.Buffer.WithEditor,
+// and wraps the given FlusherCloser to provide re-parse on reload and flush.
+func WithTree(
+	ctx context.Context,
+	n browserapi.Notifications, interrupter term.Interrupter,
+	pkg PkgManager, loc LocationSetter,
+	uri workspaceapi.URI, buf *cell.Buffer,
+	fc workspace.FlusherCloser,
+	config Config,
+) workspace.FlusherCloser {
+	if config.ScheduleNextTick == nil {
+		panic("invalid config")
+	}
+	ret := new(tree)
+	ret.config = config
+	ret.buf = buf
+	ret.uri = uri
+	ret.ced = ret.buf.WithEditor(ret)
+	ret.n = n
+	ret.interrupter = interrupter
+	ret.pkg = pkg
+	ret.loc = loc
+	ret.fc = fc
+
+	go debug.CapturePanicReport(func() {
+		ret.downloadFiles(ctx)
+	})
+	return ret
+}
+
+func (t *tree) Edit(ctx context.Context, start, end term.Coordinates, str string) (
+	from, to term.Coordinates, old string,
+) {
+	from, to, old = t.ced.Edit(ctx, start, end, str)
+	t.edit(start, end, from, to, str)
+	return
+}
+
+func (t *tree) Flush() error {
+	ret := t.fc.Flush()
+	t.reparse()
+	return ret
+}
+
+func (t *tree) Reload() error {
+	ret := t.fc.Reload()
+	t.reparse()
+	return ret
+}
+
+func (t *tree) ForceFlush() error {
+	ret := t.fc.ForceFlush()
+	t.reparse()
+	return ret
+}
+
+func (t *tree) LastFlush() time.Time {
+	return t.fc.LastFlush()
+}
+
 // tree represents a file's syntax tree powered by tree-sitter.
 type tree struct {
-	notifications browserapi.Notifications
-	interrupter   term.Interrupter
-	config        Config
-	uri           workspaceapi.URI
-	view          textapi.CellView
-	handler       text.Handler
-	ed            text.Editor
-	ready         bool
-	closed        bool
-	lib           uintptr
-	pkg           PkgManager
-	mu            sync.RWMutex
-	cells         [][]term.Cell
-	content       []byte
-	parser        *tree_sitter.Parser
-	tree          *tree_sitter.Tree
-	highlights    *tree_sitter.Query
+	n           browserapi.Notifications
+	interrupter term.Interrupter
+	pkg         PkgManager
+	loc         LocationSetter
+	config      Config
+	fc          workspace.FlusherCloser
+	uri         workspaceapi.URI
+	buf         *cell.Buffer
+	ced         cell.Editor
+
+	ready      bool
+	closed     bool
+	lib        uintptr
+	mu         sync.RWMutex
+	cells      [][]term.Cell
+	content    []byte
+	parser     *tree_sitter.Parser
+	tree       *tree_sitter.Tree
+	highlights *tree_sitter.Query
 }
 
 func (t *tree) downloadFiles(ctx context.Context) {
@@ -105,14 +170,14 @@ func (t *tree) downloadFiles(ctx context.Context) {
 	// access to text.Editor is unsynchronized,
 	// schedule calls on the next tick iteration
 	if !t.config.ScheduleNextTick(func() {
-		t.initLanguageFromFiles(ctx, ext, id, allFiles)
+		t.initParserFromFiles(ctx, ext, id, allFiles)
 	}) {
 		t.log(log.ErrorLevel, "could not schedule language %q initialization through event-loop", id)
 		t.notifyNotAvail(ext)
 	}
 }
 
-func (t *tree) initLanguageFromFiles(
+func (t *tree) initParserFromFiles(
 	ctx context.Context, ext, langID string, allFiles []string,
 ) {
 	var langfile, highlightsfile string
@@ -122,10 +187,12 @@ func (t *tree) initLanguageFromFiles(
 			if highlightsfile == "" {
 				continue
 			}
-			err := t.initLanguage(ctx, langID, langfile, highlightsfile)
+			err := t.initParser(ctx, langID, langfile, highlightsfile)
 			if err != nil {
 				t.log(log.ErrorLevel, "initialize language %s: %v", langID, err)
 				t.notifyNotAvail(ext)
+			} else {
+				t.log(log.DebugLevel, "successfully initialized parser")
 			}
 			return
 		}
@@ -134,10 +201,12 @@ func (t *tree) initLanguageFromFiles(
 			if langfile == "" {
 				continue
 			}
-			err := t.initLanguage(ctx, langID, langfile, highlightsfile)
+			err := t.initParser(ctx, langID, langfile, highlightsfile)
 			if err != nil {
 				t.log(log.ErrorLevel, "initialize language %s: %v", langID, err)
 				t.notifyNotAvail(ext)
+			} else {
+				t.log(log.DebugLevel, "successfully initialized parser")
 			}
 			return
 		}
@@ -149,7 +218,7 @@ func (t *tree) initLanguageFromFiles(
 	t.notifyNotAvail(ext)
 }
 
-func (t *tree) initLanguage(
+func (t *tree) initParser(
 	ctx context.Context, langID, langfile, highlightsfile string,
 ) error {
 	t.mu.Lock()
@@ -218,23 +287,23 @@ func (t *tree) initLanguage(
 }
 
 func (t *tree) notifyNotAvail(ext string) {
-	_, _ = t.notifications.Notify(notifications.LevelWarn,
+	_, _ = t.n.Notify(notifications.LevelWarn,
 		"syntax tree parser for language (%q) is not available", ext)
 	if err := t.interrupter.Interrupt(context.Background()); err != nil {
 		t.log(log.WarnLevel, "interrupt: %v", err)
 	}
 }
 
-func (t *tree) flush() {
+func (t *tree) reparse() {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if !t.ready {
 		return
 	}
-	t.doFlush()
+	t.doReparse()
 }
 
-func (t *tree) doFlush() {
+func (t *tree) doReparse() {
 	t.log(log.TraceLevel, "reparsing tree after flush")
 	t.tree.Close() // dealloc previous tree
 	t.persistCells()
@@ -244,25 +313,25 @@ func (t *tree) doFlush() {
 	}
 }
 
-func (t *tree) edit(ev textapi.Event) {
+func (t *tree) edit(start, end, from, to term.Coordinates, content string) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if !t.ready {
 		return
 	}
 	// use old cells to convert coordinates
-	newCells, _ := t.view.RawCells()
-	edit, ok := textapiEditTotreeSitterEdit(t.cells, newCells, ev)
+	newCells := t.buf.RawCells()
+	edit, ok := textapiEditTotreeSitterEdit(t.cells, newCells, start, end, from, to, content)
 	if !ok {
 		t.log(log.WarnLevel, "convert edit to tree-sitter coordinates failed, "+
 			"re-parsing enabled: %t", t.config.ReparseOnErrors)
 		if t.config.ReparseOnErrors {
-			t.doFlush()
+			t.doReparse()
 		}
 		return
 	}
 	t.log(log.TraceLevel, "converted edit(start=%v,end=%v,from=%v,to=%v,content=%s)  "+
-		"into tree sitter edit: %+v", ev.Start, ev.End, ev.From, ev.To, ev.Content, edit)
+		"into tree sitter edit: %+v", start, end, from, to, content, edit)
 
 	t.tree.Edit(&edit)
 
@@ -275,7 +344,7 @@ func (t *tree) edit(ev textapi.Event) {
 }
 
 func (t *tree) persistCells() {
-	t.cells, _ = t.view.RawCells()
+	t.cells = t.buf.RawCells()
 	t.cells = cell.CloneCells(t.cells)
 	t.content = []byte(cell.CellsToString(t.cells))
 }
@@ -287,10 +356,11 @@ func (t *tree) highlight() error {
 	}
 
 	ll := textapi.LocationSlice(highlights)
-	err = t.ed.SetLocationList(t.handler, textapi.LocationPriorityInfo, "stree", ll)
-	if err != nil {
+	if err := t.loc.SetLocationList(ll); err != nil {
 		return fmt.Errorf("set location list: %w", err)
 	}
+
+	t.log(log.TraceLevel, "set %d highlights", len(highlights))
 
 	return nil
 }
@@ -318,7 +388,7 @@ func (t *tree) getHighlights(cells [][]term.Cell, content []byte) (
 				t.log(log.WarnLevel, "get highlights: %v", err)
 				continue
 			}
-			t.log(log.TraceLevel, "mapped range %v into coords: %v, %v", rng, from, to)
+			/*t.log(log.TraceLevel, "mapped range %v into coords: %v, %v", rng, from, to)*/
 			if int(cap.Index) >= len(captureNames) {
 				t.log(log.WarnLevel, "index %d does not belong capture names %v",
 					cap.Index, captureNames)
@@ -349,20 +419,26 @@ func (t *tree) log(level log.Level, msg string, args ...any) {
 	}).Logf(level, msg, args...)
 }
 
-func (t *tree) Close() {
+func (t *tree) Close() (ret error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {
-		return
+		return nil
 	}
 	t.closed = true
+	if err := t.fc.Close(); err != nil {
+		ret = multierror.Append(ret, err)
+	}
 	if !t.ready {
-		return
+		return nil
 	}
 	t.tree.Close()
 	t.parser.Close()
 	t.highlights.Close()
-	_ = purego.Dlclose(t.lib)
+	if err := purego.Dlclose(t.lib); err != nil {
+		ret = multierror.Append(ret, err)
+	}
+	return
 }
 
 func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
@@ -384,15 +460,17 @@ func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
 	return
 }
 
-func textapiEditTotreeSitterEdit(before, after [][]term.Cell, ev textapi.Event) (tree_sitter.InputEdit, bool) {
-	startByte, sok := cell.ConvertCoordinatesToByteOffset(before, ev.Start)
-	oldEndByte, eok := cell.ConvertCoordinatesToByteOffset(before, ev.End)
+func textapiEditTotreeSitterEdit(
+	before, after [][]term.Cell, start, end, from, to term.Coordinates, content string,
+) (tree_sitter.InputEdit, bool) {
+	startByte, sok := cell.ConvertCoordinatesToByteOffset(before, start)
+	oldEndByte, eok := cell.ConvertCoordinatesToByteOffset(before, end)
 
-	x, y, spok := cell.ConvertCoordinatesToRunePos(before, ev.Start)
+	x, y, spok := cell.ConvertCoordinatesToRunePos(before, start)
 	startPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
-	x, y, epok := cell.ConvertCoordinatesToRunePos(before, ev.End)
+	x, y, epok := cell.ConvertCoordinatesToRunePos(before, end)
 	oldEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
-	x, y, tpok := cell.ConvertCoordinatesToRunePos(after, ev.To)
+	x, y, tpok := cell.ConvertCoordinatesToRunePos(after, to)
 	newEndPos := tree_sitter.Point{Row: uint(y), Column: uint(x)}
 
 	if !sok || !eok || !spok || !epok || !tpok {
@@ -405,7 +483,7 @@ func textapiEditTotreeSitterEdit(before, after [][]term.Cell, ev textapi.Event) 
 	return tree_sitter.InputEdit{
 		StartByte:      uint(startByte),
 		OldEndByte:     uint(oldEndByte),
-		NewEndByte:     uint(startByte + int(len([]byte(ev.Content)))),
+		NewEndByte:     uint(startByte + int(len([]byte(content)))),
 		StartPosition:  startPos,
 		OldEndPosition: oldEndPos,
 		NewEndPosition: newEndPos,

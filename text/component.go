@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
@@ -63,6 +64,8 @@ type Workspace interface {
 // Component is an implementation of browser.Browser for file editing.
 // It also satisfies tui.Component, and text.Editor.
 type Component struct {
+	ctx            context.Context
+	cancelCtx      func()
 	comp           browser.Component
 	workspace      Workspace
 	ed             Editor
@@ -124,6 +127,7 @@ func (c *Component) getSwapDir(file workspaceapi.URI) (workspaceapi.URI, error) 
 func (c *Component) newFileBuffer(
 	file, recSwapFile workspaceapi.URI, buf *cell.Buffer,
 	readOnly, forceRecover bool,
+	handler Handler,
 ) (ret *editorFlusherCloser, err error) {
 	var fc workspace.FlusherCloser
 	if recSwapFile != (workspaceapi.URI{}) {
@@ -139,6 +143,14 @@ func (c *Component) newFileBuffer(
 	if err != nil {
 		return nil, err
 	}
+
+	interrupter := browser.EventPublisherInterrupter(c)
+	locs := syntax.FuncLocationSetter(func(ll textapi.LocationList) error {
+		return c.ed.SetLocationList(handler, textapi.LocationPriorityInfo, "syntax", ll)
+	})
+
+	fc = syntax.WithTree(c.ctx, c.config, interrupter,
+		c.config.PkgManager, locs, file, buf, fc, c.config.Syntax)
 
 	efc := &editorFlusherCloser{
 		parent:    c,
@@ -162,6 +174,7 @@ func (c *Component) Init(
 	ed Editor, w Workspace, config Config,
 ) error {
 	c.config = config
+	c.ctx, c.cancelCtx = context.WithCancel(context.Background())
 
 	c.comp.Init(c.config.Config)
 	c.comp.Subscribe((*handlerWindowSubscriber)(c))
@@ -426,12 +439,12 @@ func (c *Component) openFileTab(
 	}
 
 	buf := c.newCellBuffer()
-	fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
+	editor, err := c.ed.Edit(file, buf)
 	if err != nil {
 		return nil, err
 	}
 
-	editor, err := c.ed.Edit(file, buf)
+	fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover, editor)
 	if err != nil {
 		return nil, err
 	}
@@ -1168,6 +1181,7 @@ func (c *Component) Workspace() Workspace {
 func (c *Component) Close() error {
 	// avoid dispatching close events on flusherCloser callbacks
 	c.edSubscribers = make(map[textapi.EventType][]EventHandler)
+	c.cancelCtx()
 
 	err := c.comp.Close()
 	if err != nil {

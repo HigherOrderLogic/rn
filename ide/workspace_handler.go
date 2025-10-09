@@ -52,7 +52,6 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term"
@@ -515,6 +514,8 @@ func (h *workspaceManagerHandler) textOpts(cfg ideConfig) []text.Option {
 		text.WithTabBarOffset(h.tabBarOffset),
 		text.WithTabBarHeight(h.tabBarHeight),
 		text.WithTabNameSeparator(cfg.tabNameSeparator()),
+		text.WithPackageManager(h.pkgmanager),
+		text.WithSyntaxConfig(cfg.syntaxConfig()),
 	}
 
 	for seq, cmd := range cfg.commandKeyMappings() {
@@ -581,13 +582,13 @@ func (h *workspaceManagerHandler) addWorkspace(
 		textOpts = append(textOpts, text.WithFile(uri))
 	}
 
+	// workspace capable of opening URIs other than the workspaceapi.URI
 	ed, err := h.newEditor(cfg)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new editor: %w", err)
 	}
 
-	// workspace capable of opening URIs other than the workspaceapi.URI
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications.notifier,
 		cfg.terminalConfig(), h.publishEvent, cfg.clipboard(), textOpts...)
@@ -602,16 +603,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 	if err = h.subscribeAllEvents(ex); err != nil {
 		cancel()
 		return err
-	}
-
-	// setup syntax tree parsing
-	delegate, events := syntax.NewDelegate(
-		h.pkgmanager, h.notifications,
-		ed, h, cfg.syntaxConfig(),
-	)
-	if err := ex.comp.SubscribeEvents(events, delegate); err != nil {
-		cancel()
-		return fmt.Errorf("subscribe events: %w", err)
 	}
 
 	go debug.CapturePanicReport(func() {
@@ -646,7 +637,6 @@ func (h *workspaceManagerHandler) addWorkspace(
 		cancelCtx: cancel,
 		uri:       uri,
 		ex:        ex,
-		delegate:  delegate,
 	}
 
 	// load async to speed up workspace initialization
@@ -924,14 +914,10 @@ type workspaceHandler struct {
 	cancelCtx  func()
 	uri        workspaceapi.URI
 	Extensions atomic.Value
-	delegate   *syntax.Delegate
 }
 
 func (hm *workspaceHandler) Close() (ret error) {
 	if err := hm.ex.Close(); err != nil {
-		ret = multierror.Append(ret, err)
-	}
-	if err := hm.delegate.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
 	if runner := hm.Extensions.Load(); runner != nil {
