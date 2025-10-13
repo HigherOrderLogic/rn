@@ -73,6 +73,7 @@ func TestLibDir(t *testing.T) {
 		expected := []string{
 			"highlights.scm",
 			"tags.scm",
+			"indents.scm",
 			"tree-sitter.so",
 			"go",
 			"gofmt",
@@ -122,7 +123,7 @@ func TestLibDir(t *testing.T) {
 				actual = append(actual, filepath.Base(file))
 			}
 			expected := []string{
-				"highlights.scm", "tags.scm",
+				"highlights.scm", "tags.scm", "indents.scm",
 				"tree-sitter.so", "go",
 				"gofmt", "goimports", "gopls",
 			}

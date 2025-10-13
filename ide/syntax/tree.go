@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -53,6 +54,7 @@ import (
 const (
 	parserFilename     = "tree-sitter.so"
 	highlightsFilename = "highlights.scm"
+	indentsFilename    = "indents.scm"
 )
 
 // WithTree installs a tree parser into the given buffer via cell.Buffer.WithEditor,
@@ -89,7 +91,19 @@ func (t *tree) Edit(ctx context.Context, start, end term.Coordinates, str string
 	from, to term.Coordinates, old string,
 ) {
 	from, to, old = t.ced.Edit(ctx, start, end, str)
-	t.edit(start, end, from, to, str)
+	t.incrementalParse(start, end, from, to, str)
+	if start == end && str == "\n" && t.indents != nil {
+		var builder strings.Builder
+		indentation := t.getIndentation(uint(to.Y))
+		for range indentation {
+			builder.WriteByte('\t')
+		}
+		indents := builder.String()
+		t.log(log.TraceLevel, "indentation at line %d should be: %d", to.Y, indentation)
+		ifrom, ito, _ := t.ced.Edit(ctx, to, to, indents)
+		t.incrementalParse(to, to, ifrom, ito, indents)
+		to.X += (indentation * t.buf.Tabspaces())
+	}
 	return
 }
 
@@ -136,6 +150,7 @@ type tree struct {
 	parser     *tree_sitter.Parser
 	tree       *tree_sitter.Tree
 	highlights *tree_sitter.Query
+	indents    *tree_sitter.Query
 }
 
 func (t *tree) downloadFiles(ctx context.Context) {
@@ -180,46 +195,35 @@ func (t *tree) downloadFiles(ctx context.Context) {
 func (t *tree) initParserFromFiles(
 	ctx context.Context, ext, langID string, allFiles []string,
 ) {
-	var langfile, highlightsfile string
+	var langFile, highlightsFile, indentsFile string
 	for _, file := range allFiles {
-		if filepath.Base(file) == parserFilename {
-			langfile = file
-			if highlightsfile == "" {
-				continue
-			}
-			err := t.initParser(ctx, langID, langfile, highlightsfile)
-			if err != nil {
-				t.log(log.ErrorLevel, "initialize language %s: %v", langID, err)
-				t.notifyNotAvail(ext)
-			} else {
-				t.log(log.DebugLevel, "successfully initialized parser")
-			}
-			return
-		}
-		if filepath.Base(file) == highlightsFilename {
-			highlightsfile = file
-			if langfile == "" {
-				continue
-			}
-			err := t.initParser(ctx, langID, langfile, highlightsfile)
-			if err != nil {
-				t.log(log.ErrorLevel, "initialize language %s: %v", langID, err)
-				t.notifyNotAvail(ext)
-			} else {
-				t.log(log.DebugLevel, "successfully initialized parser")
-			}
-			return
+		switch filepath.Base(file) {
+		case parserFilename:
+			langFile = file
+		case highlightsFilename:
+			highlightsFile = file
+		case indentsFilename:
+			indentsFile = file
 		}
 	}
-
-	t.log(log.WarnLevel, "language %s not available: reason: "+
-		"%q and %q files not found: files found: %v", langID,
-		parserFilename, highlightsFilename, allFiles)
-	t.notifyNotAvail(ext)
+	if langFile == "" {
+		t.log(log.WarnLevel, "language %s not available: "+
+			"parser file not found", langID)
+		t.notifyNotAvail(ext)
+		return
+	}
+	err := t.initParser(ctx, langID, langFile, highlightsFile, indentsFile)
+	if err != nil {
+		t.log(log.ErrorLevel, "initialize language %s: %v", langID, err)
+		t.notifyNotAvail(ext)
+	} else {
+		t.log(log.DebugLevel, "successfully initialized parser")
+	}
 }
 
 func (t *tree) initParser(
-	ctx context.Context, langID, langfile, highlightsfile string,
+	ctx context.Context, langID,
+	langfile, highlightsfile, indentsFile string,
 ) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -253,25 +257,57 @@ func (t *tree) initParser(
 		return fmt.Errorf("set parser language: %v", err)
 	}
 
-	data, err := os.ReadFile(highlightsfile)
-	if err != nil {
-		_ = purego.Dlclose(t.lib)
-		t.parser.Close()
-		return fmt.Errorf("read highlights file: %v", err)
+	if highlightsfile != "" {
+		data, err := os.ReadFile(highlightsfile)
+		if err != nil {
+			_ = purego.Dlclose(t.lib)
+			t.parser.Close()
+			return fmt.Errorf("read highlights file: %v", err)
+		}
+
+		// compile the highlights query for this language.
+		highlights, qerr := tree_sitter.NewQuery(language, string(data))
+		if qerr != nil {
+			_ = purego.Dlclose(t.lib)
+			t.parser.Close()
+			return fmt.Errorf("compile query: %v", qerr)
+		}
+		t.highlights = highlights
+		t.log(log.DebugLevel, "highlights initialized")
+	} else {
+		t.log(log.InfoLevel, "highlights file not found, some features will be disabled")
 	}
 
-	// compile the highlights query for this language.
-	highlights, qerr := tree_sitter.NewQuery(language, string(data))
-	if qerr != nil {
-		_ = purego.Dlclose(t.lib)
-		t.parser.Close()
-		return fmt.Errorf("compile query: %v", qerr)
+	if indentsFile != "" {
+		data, err := os.ReadFile(indentsFile)
+		if err != nil {
+			_ = purego.Dlclose(t.lib)
+			t.parser.Close()
+			if t.highlights != nil {
+				t.highlights.Close()
+			}
+			return fmt.Errorf("read highlights file: %v", err)
+		}
+
+		// compile the highlights query for this language.
+		indents, qerr := tree_sitter.NewQuery(language, string(data))
+		if qerr != nil {
+			_ = purego.Dlclose(t.lib)
+			t.parser.Close()
+			if t.highlights != nil {
+				t.highlights.Close()
+			}
+			return fmt.Errorf("compile query: %v", qerr)
+		}
+		t.indents = indents
+		t.log(log.DebugLevel, "indents initialized")
+	} else {
+		t.log(log.InfoLevel, "indents file not found, some features will be disabled")
 	}
 
 	// build the syntax tree
 	t.persistCells()
 	t.tree = t.parser.Parse(t.content, nil)
-	t.highlights = highlights
 	t.ready = true
 
 	if err := t.highlight(); err != nil {
@@ -313,7 +349,7 @@ func (t *tree) doReparse() {
 	}
 }
 
-func (t *tree) edit(start, end, from, to term.Coordinates, content string) {
+func (t *tree) incrementalParse(start, end, from, to term.Coordinates, content string) {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	if !t.ready {
@@ -321,7 +357,7 @@ func (t *tree) edit(start, end, from, to term.Coordinates, content string) {
 	}
 	// use old cells to convert coordinates
 	newCells := t.buf.RawCells()
-	edit, ok := textapiEditTotreeSitterEdit(t.cells, newCells, start, end, from, to, content)
+	edit, ok := editToTreesitterEdit(t.cells, newCells, start, end, from, to, content)
 	if !ok {
 		t.log(log.WarnLevel, "convert edit to tree-sitter coordinates failed, "+
 			"re-parsing enabled: %t", t.config.ReparseOnErrors)
@@ -330,8 +366,8 @@ func (t *tree) edit(start, end, from, to term.Coordinates, content string) {
 		}
 		return
 	}
-	t.log(log.TraceLevel, "converted edit(start=%v,end=%v,from=%v,to=%v,content=%s)  "+
-		"into tree sitter edit: %+v", start, end, from, to, content, edit)
+	t.log(log.TraceLevel, "converted edit(start=%v,end=%v,from=%v,to=%v)  "+
+		"into tree sitter edit: %+v", start, end, from, to, edit)
 
 	t.tree.Edit(&edit)
 
@@ -350,11 +386,10 @@ func (t *tree) persistCells() {
 }
 
 func (t *tree) highlight() error {
-	highlights, err := t.getHighlights(t.cells, t.content)
-	if err != nil {
-		return err
+	if t.highlights == nil {
+		return nil
 	}
-
+	highlights := t.getHighlights(t.cells, t.content)
 	ll := textapi.LocationSlice(highlights)
 	if err := t.loc.SetLocationList(ll); err != nil {
 		return fmt.Errorf("set location list: %w", err)
@@ -365,9 +400,7 @@ func (t *tree) highlight() error {
 	return nil
 }
 
-func (t *tree) getHighlights(cells [][]term.Cell, content []byte) (
-	[]textapi.Location, error,
-) {
+func (t *tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Location {
 	root := t.tree.RootNode()
 
 	cur := tree_sitter.NewQueryCursor()
@@ -406,7 +439,7 @@ func (t *tree) getHighlights(cells [][]term.Cell, content []byte) (
 			})
 		}
 	}
-	return locations, nil
+	return locations
 }
 
 func (t *tree) log(level log.Level, msg string, args ...any) {
@@ -460,7 +493,7 @@ func convertRangeToCoordinates(cells [][]term.Cell, n tree_sitter.Range) (
 	return
 }
 
-func textapiEditTotreeSitterEdit(
+func editToTreesitterEdit(
 	before, after [][]term.Cell, start, end, from, to term.Coordinates, content string,
 ) (tree_sitter.InputEdit, bool) {
 	startByte, sok := cell.ConvertCoordinatesToByteOffset(before, start)
