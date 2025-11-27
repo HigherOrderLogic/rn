@@ -146,7 +146,7 @@ func (f *foldsIterator) Next(ctx context.Context) (term.Range, bool) {
 	return f.slice.Next(ctx)
 }
 
-func (f foldsIterator) Err() error {
+func (f *foldsIterator) Err() error {
 	<-f.ready
 	if f.slice == nil {
 		if f.tree.tree == nil || f.tree.folds == nil {
@@ -161,6 +161,6 @@ func (f foldsIterator) Err() error {
 	return f.slice.Err()
 }
 
-func (f foldsIterator) Close() error {
+func (f *foldsIterator) Close() error {
 	return nil
 }

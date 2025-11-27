@@ -24,6 +24,7 @@
 package syntax
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -85,12 +86,37 @@ func WithTree(
 	ret.pkg = pkg
 	ret.loc = loc
 	ret.fc = fc
+	ret.statesubs = make(map[chan State]struct{})
+	ret.waitingReady = make(chan struct{})
 
 	go debug.CapturePanicReport(func() {
-		ret.downloadFiles(ctx)
+		files, err := ret.downloadFiles(ctx)
+		if err != nil {
+			config.ScheduleNextTick(func() {
+				// set current state either way, so unblocking
+				// waiting goroutines can stream the first state.
+				defer close(ret.waitingReady)
+				ret.mu.Lock()
+				defer ret.mu.Unlock()
+				ret.currState = State{Closed: ret.closed, ParserError: err.Error()}
+			})
+			return
+		}
 		config.ScheduleNextTick(func() {
-			for _, folds := range ret.waitingFolds {
-				close(folds)
+			defer close(ret.waitingReady)
+			err := ret.initParserFromFiles(ctx, files)
+			ret.mu.Lock()
+			defer ret.mu.Unlock()
+			if err != nil {
+				ret.currState = State{Closed: ret.closed, ParserError: err.Error()}
+			} else {
+				ret.currState = State{
+					Closed:     ret.closed,
+					LangID:     files.langID,
+					Highlights: ret.highlights != nil,
+					Folds:      ret.folds != nil,
+					Indents:    ret.indents != nil,
+				}
 			}
 		})
 	})
@@ -115,16 +141,19 @@ type Tree struct {
 	mu         sync.Mutex
 	cells      [][]term.Cell
 	content    []byte
+	contentBuf bytes.Buffer
 	parser     *tree_sitter.Parser
 	tree       *tree_sitter.Tree
 	highlights *tree_sitter.Query
 	indents    *tree_sitter.Query
 	folds      *tree_sitter.Query
+	statesubs  map[chan State]struct{}
+	currState  State
 
 	onWillEditStart term.Coordinates
 	onWillEditEnd   term.Coordinates
 	onWillEditStr   string
-	waitingFolds    []chan struct{}
+	waitingReady    chan struct{}
 }
 
 // IndentationAt returns the indentation that should correspond to a node placed
@@ -148,6 +177,23 @@ func (t *Tree) IndentationAt(line int) (int, bool) {
 	return ret, ret >= 0
 }
 
+// State returns an iterator that eventually, when the Tree is ready
+// streams the current state of the tree, every time it's altered.
+func (t *Tree) State() iterator.Iterator[State] {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if t.closed {
+		return iterator.FromSlice([]State{t.currState})
+	}
+
+	if !t.ready {
+		return newWaitStateIterator(t, t.waitingReady)
+	}
+
+	return newReadyStateIterator(t)
+}
+
 // Folds returns all the folds captured by the parser.
 func (t *Tree) Folds() (iterator.Iterator[term.Range], bool) {
 	t.mu.Lock()
@@ -158,9 +204,7 @@ func (t *Tree) Folds() (iterator.Iterator[term.Range], bool) {
 	}
 
 	if !t.ready {
-		ch := make(chan struct{})
-		t.waitingFolds = append(t.waitingFolds, ch)
-		return newFoldsIterator(false, t, ch), true
+		return newFoldsIterator(false, t, t.waitingReady), true
 	}
 
 	if t.folds == nil || t.tree == nil {
@@ -180,9 +224,7 @@ func (t *Tree) FoldsFrom(pos term.Coordinates) (iterator.Iterator[term.Range], b
 	}
 
 	if !t.ready {
-		ch := make(chan struct{})
-		t.waitingFolds = append(t.waitingFolds, ch)
-		return newFoldsFromIterator(pos, t, ch), true
+		return newFoldsFromIterator(pos, t, t.waitingReady), true
 	}
 
 	if t.folds == nil || t.tree == nil {
@@ -203,9 +245,7 @@ func (t *Tree) InitialFolds() (iterator.Iterator[term.Range], bool) {
 	}
 
 	if !t.ready {
-		ch := make(chan struct{})
-		t.waitingFolds = append(t.waitingFolds, ch)
-		return newFoldsIterator(true, t, ch), true
+		return newFoldsIterator(true, t, t.waitingReady), true
 	}
 
 	if t.folds == nil || t.tree == nil {
@@ -246,6 +286,11 @@ func (t *Tree) Close() (ret error) {
 	if err := purego.Dlclose(t.lib); err != nil {
 		ret = multierror.Append(ret, err)
 	}
+	for ch := range t.statesubs {
+		close(ch)
+	}
+	clear(t.statesubs)
+	t.currState.Closed = true
 	return
 }
 
@@ -303,50 +348,49 @@ func (t *internalTree) LastFlush() time.Time {
 	return t.fc.LastFlush()
 }
 
-func (t *Tree) downloadFiles(ctx context.Context) {
+type files struct {
+	ext    string
+	langID string
+	files  []string
+}
+
+func (t *Tree) downloadFiles(ctx context.Context) (files, error) {
 	ext := filepath.Ext(t.uri.String())
 	if ext == "" {
-		t.log(log.DebugLevel, "aborting syntax parsing: file does not have an extension")
-		return
+		msg := "file does not have an extension"
+		t.log(log.DebugLevel, "aborting syntax parsing: %s", msg)
+		return files{}, errors.New(msg)
 	}
 	id, ok := extensionToLanguageID[ext]
 	if !ok {
 		id = ext[1:]
 	}
-	files, err := t.pkg.LibDir(ctx, id)
+	iter, err := t.pkg.LibDir(ctx, id)
 	if err != nil {
 		if errors.Is(err, document.ErrNotFound) {
-			t.log(log.DebugLevel, "aborting syntax parsing: package for language "+
+			msg := fmt.Sprintf("package for language "+
 				"%q does not exist or it's not installed.", id)
-			return
+			t.log(log.DebugLevel, "aborting syntax parsing: %s", msg)
+			return files{}, errors.New(msg)
 		}
 		t.log(log.ErrorLevel, "aborting syntax parsing: %v", err)
 		t.notifyNotAvail(ext)
-		return
+		return files{}, err
 	}
-	defer files.Close()
-	allFiles, err := iterator.ToSlice(ctx, files)
+	defer iter.Close()
+	allFiles, err := iterator.ToSlice(ctx, iter)
 	if err != nil {
-		t.log(log.ErrorLevel, "language %s not available: reason: %v", id, err)
+		msg := fmt.Sprintf("fetch language %q package: %v", id, err)
+		t.log(log.ErrorLevel, "%s", msg)
 		t.notifyNotAvail(ext)
-		return
+		return files{}, errors.New(msg)
 	}
-
-	// access to text.Editor is unsynchronized,
-	// schedule calls on the next tick iteration
-	if !t.config.ScheduleNextTick(func() {
-		t.initParserFromFiles(ctx, ext, id, allFiles)
-	}) {
-		t.log(log.ErrorLevel, "could not schedule language %q initialization through event-loop", id)
-		t.notifyNotAvail(ext)
-	}
+	return files{files: allFiles, ext: ext, langID: id}, nil
 }
 
-func (t *Tree) initParserFromFiles(
-	ctx context.Context, ext, langID string, allFiles []string,
-) {
+func (t *Tree) initParserFromFiles(ctx context.Context, f files) error {
 	var langFile, highlightsFile, indentsFile, foldsFile string
-	for _, file := range allFiles {
+	for _, file := range f.files {
 		switch filepath.Base(file) {
 		case parserFilename:
 			langFile = file
@@ -359,19 +403,20 @@ func (t *Tree) initParserFromFiles(
 		}
 	}
 	if langFile == "" {
-		t.log(log.WarnLevel, "language %s not available: "+
-			"parser file not found", langID)
-		t.notifyNotAvail(ext)
-		return
+		msg := fmt.Sprintf("parser file not found in language %q package", f.langID)
+		t.log(log.InfoLevel, "language not available: %s", msg)
+		t.notifyNotAvail(f.ext)
+		return errors.New(msg)
 	}
-	err := t.initParser(ctx, langID, langFile,
+	err := t.initParser(ctx, f.langID, langFile,
 		highlightsFile, indentsFile, foldsFile)
 	if err != nil {
-		t.log(log.ErrorLevel, "initialize language %s: %v", langID, err)
-		t.notifyNotAvail(ext)
-	} else {
-		t.log(log.DebugLevel, "successfully initialized parser")
+		t.log(log.ErrorLevel, "initialize language %s: %v", f.langID, err)
+		t.notifyNotAvail(f.ext)
+		return err
 	}
+	t.log(log.DebugLevel, "successfully initialized parser")
+	return nil
 }
 
 func (t *Tree) initParser(
@@ -451,7 +496,8 @@ func (t *Tree) initParser(
 
 	// build the syntax tree
 	t.persistCells()
-	t.tree = t.parser.Parse(t.content, nil)
+	t.parseTree(nil, "initial parse error")
+
 	// set ready to true, even if tree is nil
 	t.ready = true
 
@@ -537,7 +583,7 @@ func (t *Tree) notifyNotAvail(ext string) {
 func (t *Tree) reparse() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if !t.ready {
+	if !t.ready || t.closed {
 		return
 	}
 	t.doReparse()
@@ -549,7 +595,8 @@ func (t *Tree) doReparse() {
 		t.tree.Close() // dealloc previous tree
 	}
 	t.persistCells()
-	t.tree = t.parser.Parse(t.content, nil)
+	t.parseTree(nil, "re-parse error")
+	t.streamState()
 	if t.tree == nil {
 		t.log(log.ErrorLevel, "parse failed: nil tree")
 		return
@@ -562,7 +609,7 @@ func (t *Tree) doReparse() {
 func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if !t.ready || t.tree == nil {
+	if !t.ready || t.tree == nil || t.closed {
 		return
 	}
 	// use old cells to convert coordinates
@@ -583,9 +630,14 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 
 	// get new cells to re-parse
 	t.persistCells()
-	t.tree = t.parser.Parse(t.content, t.tree)
-	if t.tree == nil {
-		t.log(log.ErrorLevel, "parsing failed: nil tree")
+	t.parseTree(t.tree, "incremental parse error")
+	t.streamState()
+	if t.tree == nil || t.currState.ParserError != "" {
+		t.log(log.DebugLevel, "incremental parsing failed: re-parse on errors: %t",
+			t.config.ReparseOnErrors)
+		if t.config.ReparseOnErrors {
+			t.doReparse()
+		}
 		return
 	}
 	if err := t.highlight(); err != nil {
@@ -594,9 +646,11 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 }
 
 func (t *Tree) persistCells() {
-	t.cells = t.buf.RawCells()
-	t.cells = cell.CloneCells(t.cells)
-	t.content = []byte(cell.CellsToString(t.cells))
+	t.cells = cell.CopyCells(t.cells, t.buf.RawCells())
+	t.contentBuf.Reset()
+	cell.CellsToBytesBuffer(&t.contentBuf, t.cells)
+	t.content = t.contentBuf.Bytes()
+
 }
 
 func (t *Tree) highlight() error {
@@ -652,6 +706,37 @@ func (t *Tree) getHighlights(cells [][]term.Cell, content []byte) []textapi.Loca
 		}
 	}
 	return locations
+}
+
+func (t *Tree) streamState() {
+	for ch := range t.statesubs {
+		select {
+		case ch <- t.currState:
+		default:
+		}
+	}
+}
+
+func (t *Tree) parseTree(prev *tree_sitter.Tree, errorMsg string) {
+	var hasError bool
+	opts := tree_sitter.ParseOptions{
+		ProgressCallback: func(state tree_sitter.ParseState) bool {
+			hasError = state.HasError
+			return false
+		},
+	}
+	t.tree = t.parser.ParseWithOptions(func(i int, _ tree_sitter.Point) []byte {
+		if i < len(t.content) {
+			return t.content[i:]
+		}
+		return []byte{}
+	}, prev, &opts)
+	if hasError || (t.tree != nil && t.tree.RootNode().HasError()) {
+		t.currState.ParserError = errorMsg
+	} else {
+		t.currState.ParserError = ""
+	}
+	t.currState.Progress = 1
 }
 
 func (t *Tree) log(level log.Level, msg string, args ...any) {

@@ -155,6 +155,65 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		cleanup()
 	})
 
+	t.Run("if language package has no parser file, the iterators are eventually empty", func(t *testing.T) {
+		rootPkgs := newInstalledPkgManagerWithFiles(t,
+			"go/highlights.scm",
+			"go/indents.scm",
+			"go/folds.scm",
+		)
+		var mu sync.Mutex
+		libDirIt := iterator.FromFunc(
+			func(ctx context.Context) (string, bool, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				val, ok := rootPkgs.ret.Next(ctx)
+				return val, ok, nil
+			},
+			func() error {
+				return nil
+			},
+		)
+
+		pkgs := &mockPkgManager{ret: libDirIt}
+		ready := func(context.Context) error {
+			return nil
+		}
+		const width, height = 30, 15
+		tmu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+
+		// prevent tree from becoming ready, so we can test not ready path
+		mu.Lock()
+
+		tmu.Lock()
+		_, h := newEditFile(t, comp, fileContent)
+		tmu.Unlock()
+
+		cref, ok := h.(interface{ CursorReference() *text.Cursor })
+		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		require.True(t, ok)
+
+		it, ok := tree.Folds()
+		require.True(t, ok)
+
+		it2, ok := tree.InitialFolds()
+		require.True(t, ok)
+
+		// syntax tree becomes ready
+		mu.Unlock()
+
+		// this should block until initialization is complete
+		actual, err := iterator.ToSlice(context.Background(), it)
+		require.NoError(t, err)
+		assert.Empty(t, actual)
+
+		actual, err = iterator.ToSlice(context.Background(), it2)
+		require.NoError(t, err)
+		assert.Empty(t, actual)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
 	t.Run("if file has no extension or no language package, the iterators are eventually empty", func(t *testing.T) {
 		rootPkgs := newInstalledPkgManagerWithFiles(t,
 			"go/tree-sitter.so",
@@ -214,6 +273,7 @@ func TestTreeFoldsIntegration(t *testing.T) {
 		require.NoError(t, tree.Close())
 		cleanup()
 	})
+	
 
 	t.Run("if folds.scm file is not found and tree is ready Folds returns false", func(t *testing.T) {
 		pkgs := newInstalledPkgManagerWithFiles(t,
@@ -221,7 +281,7 @@ func TestTreeFoldsIntegration(t *testing.T) {
 			"go/highlights.scm",
 			"go/indents.scm",
 		)
-		tree, cleanup := newTreeWithPkgManager(t, pkgs)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
 
 		_, ok := tree.Folds()
 		require.False(t, ok)
@@ -1146,6 +1206,244 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	goleak.VerifyNone(t)
 }
 
+func TestTreeStateIntegration(t *testing.T) {
+	t.Run("first call to State waits for language and parser to be initialized", func(t *testing.T) {
+		tree, cleanup := newTree(t)
+
+		it := tree.State()
+
+		actual, ok := it.Next(context.Background())
+		require.True(t, ok)
+		defer it.Close()
+		assert.Equal(t, syntax.State{
+			LangID:     "go",
+			Folds:      true,
+			Indents:    true,
+			Highlights: true,
+		}, actual)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if folds.scm file is not found and tree is NOT ready, State itertor eventually streams state", func(t *testing.T) {
+		rootPkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/highlights.scm",
+			"go/indents.scm",
+		)
+		var mu sync.Mutex
+		libDirIt := iterator.FromFunc(
+			func(ctx context.Context) (string, bool, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				val, ok := rootPkgs.ret.Next(ctx)
+				return val, ok, nil
+			},
+			func() error {
+				return nil
+			},
+		)
+
+		pkgs := &mockPkgManager{ret: libDirIt}
+		ready := func(context.Context) error {
+			return nil
+		}
+		const width, height = 30, 15
+		tmu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+
+		// prevent tree from becoming ready, so we can test not ready path
+		mu.Lock()
+
+		tmu.Lock()
+		_, h := newEditFile(t, comp, fileContent)
+		tmu.Unlock()
+
+		cref, ok := h.(interface{ CursorReference() *text.Cursor })
+		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		require.True(t, ok)
+
+		it := tree.State()
+
+		// syntax tree becomes ready
+		mu.Unlock()
+
+		// this should block until initialization is complete
+		actual, ok := it.Next(context.Background())
+		require.True(t, ok)
+		defer it.Close()
+		assert.Equal(t, syntax.State{
+			LangID:     "go",
+			Folds:      false,
+			Indents:    true,
+			Highlights: true,
+		}, actual)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if file has no extension or no language package, State eventually returns State", func(t *testing.T) {
+		rootPkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/highlights.scm",
+			"go/indents.scm",
+			"go/folds.scm",
+		)
+		var mu sync.Mutex
+		libDirIt := iterator.FromFunc(
+			func(ctx context.Context) (string, bool, error) {
+				mu.Lock()
+				defer mu.Unlock()
+				val, ok := rootPkgs.ret.Next(ctx)
+				return val, ok, nil
+			},
+			func() error {
+				return nil
+			},
+		)
+
+		pkgs := &mockPkgManager{ret: libDirIt}
+		ready := func(context.Context) error {
+			return nil
+		}
+		const width, height = 30, 15
+		tmu, comp, cleanup := newTestCase(t, pkgs, width, height, ready)
+
+		// prevent tree from becoming ready, so we can test not ready path
+		mu.Lock()
+
+		tmu.Lock()
+		_, h := newEditFileName(t, comp, "abc", strconv.Itoa(int(rand.Int())))
+
+		cref, ok := h.(interface{ CursorReference() *text.Cursor })
+		tree, ok := cref.CursorReference().View().(*syntax.Tree)
+		require.True(t, ok)
+
+		it := tree.State()
+
+		// syntax tree becomes ready
+		mu.Unlock()
+		tmu.Unlock()
+
+		// this should block until initialization is complete
+		actual, ok := it.Next(context.Background())
+		require.True(t, ok)
+		defer it.Close()
+		assert.Equal(t, syntax.State{ParserError: "file does not have an extension"}, actual)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+
+	t.Run("if highligghts.scm file is not found and tree is ready State returns state with Folds set to false", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/indents.scm",
+			"go/folds.scm",
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		it := tree.State()
+		actual, ok := it.Next(context.Background())
+		require.True(t, ok)
+		assert.Equal(t, syntax.State{
+			LangID:     "go",
+			Folds:      true,
+			Indents:    true,
+			Highlights: false,
+		}, actual)
+		cleanup()
+	})
+
+	t.Run("Tree.Close closes all iterators gracefully", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/indents.scm",
+			"go/folds.scm",
+		)
+		_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		ctx := context.Background()
+		prev := tree.State()
+		_, ok := prev.Next(ctx) // drain
+		assert.True(t, ok)
+
+		prev2 := tree.State() // don't drain
+
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			async := tree.State()
+			_, ok := async.Next(ctx)
+			assert.True(t, ok)
+
+			// this blocks until Close is called
+			_, ok = async.Next(ctx)
+			assert.False(t, ok)
+		})
+
+		require.NoError(t, tree.Close())
+
+		_, ok = prev.Next(ctx)
+		assert.False(t, ok)
+
+		_, ok = prev2.Next(ctx)
+		assert.True(t, ok) // there was one state in the buffered channel
+		_, ok = prev2.Next(ctx)
+		assert.False(t, ok)
+
+		wg.Wait() // async also closes
+		
+		after := tree.State()
+		state, ok := after.Next(ctx)
+		assert.True(t, ok)
+		assert.True(t, state.Closed)
+		_, ok = after.Next(ctx)
+		assert.False(t, ok)
+		
+		cleanup()
+	})
+
+	t.Run("reports parse errors", func(t *testing.T) {
+		pkgs := newInstalledPkgManagerWithFiles(t,
+			"go/tree-sitter.so",
+			"go/highlights.scm",
+			"go/indents.scm",
+			"go/folds.scm",
+		)
+		cursor, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+
+		cursor.InsertString("/* */")
+
+		it := tree.State()
+		actual, ok := it.Next(context.Background())
+		require.True(t, ok)
+		assert.Equal(t, syntax.State{
+			LangID:     "go",
+			Progress:   1,
+			Folds:      true,
+			Indents:    true,
+			Highlights: true,
+		}, actual)
+
+		cursor.InsertString("}}}}}}}}}}}}}}}}(*&^%$#@!*&^%$#@!")
+
+		actual, ok = it.Next(context.Background())
+		require.True(t, ok)
+		assert.Equal(t, syntax.State{
+			ParserError: "incremental parse error",
+			LangID:      "go",
+			Progress:    1,
+			Folds:       true,
+			Indents:     true,
+			Highlights:  true,
+		}, actual)
+
+		require.NoError(t, tree.Close())
+		cleanup()
+	})
+}
+
 func newInstalledPkgManager(t *testing.T) mockPkgManager {
 	return newInstalledPkgManagerWithFiles(t,
 		"go/tree-sitter.so",
@@ -1289,10 +1587,13 @@ func (n nopNotifications) UpdateNotificationProgress(
 
 func newTree(t *testing.T) (*syntax.Tree, func()) {
 	pkgs := newInstalledPkgManager(t)
-	return newTreeWithPkgManager(t, pkgs)
+	_, tree, cleanup := newTreeWithPkgManager(t, pkgs)
+	return tree, cleanup
 }
 
-func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (*syntax.Tree, func()) {
+func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (
+	*text.Cursor, *syntax.Tree, func(),
+) {
 	var wg sync.WaitGroup
 	ready := func(context.Context) error {
 		wg.Done()
@@ -1312,7 +1613,7 @@ func newTreeWithPkgManager(t *testing.T, pkgs syntax.PkgManager) (*syntax.Tree, 
 	tree, ok := cref.CursorReference().View().(*syntax.Tree)
 	require.True(t, ok)
 
-	return tree, cleanup
+	return cref.CursorReference(), tree, cleanup
 }
 
 const fileContent = `package main
