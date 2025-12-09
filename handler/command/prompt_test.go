@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -162,6 +163,179 @@ mercedes my▐
 			handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
 		})
 	}
+}
+
+func TestCommandHandlerPreview(t *testing.T) {
+	t.Run("esc at the end", func(t *testing.T) {
+		storage := document.NewInMemoryService()
+		cfg := DefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+
+		dispatchFn := func(cmd string, args ...string) bool {
+			return true
+		}
+
+		var dispatches []string
+		var state string
+		previewFn := func(cmd string, args ...string) (func(), bool) {
+			prevState := state
+			state = args[0]
+			dispatches = append(dispatches, strings.Join(append([]string{cmd}, args...), " "))
+			return func() {
+				state = prevState
+			}, false
+		}
+
+		completeFn, cleanupComplete := completeWith("arg1", "arg2")()
+		defer cleanupComplete(t)
+
+		cmd := Manual{Name: "kotomichi"}
+		interrupter := term.NopInterrupter()
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcherWithPreview(dispatchFn, previewFn),
+			interrupter, []Manual{cmd}, cfg,
+		)
+		defer b.Close()
+
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "kotomichi ⬇⬇", Expected: `kotomichi ▐         
+arg1                
+arg2                
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		b.Wait()
+		assert.Equal(t, "arg2", state)
+		assert.Equal(t, []string{"kotomichi arg1", "kotomichi arg2"}, dispatches)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "⬆", Expected: `kotomichi ▐         
+arg1                
+arg2                
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		b.Wait()
+		assert.Equal(t, "arg1", state)
+		assert.Equal(t, []string{"kotomichi arg1", "kotomichi arg2", "kotomichi arg1"}, dispatches)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "⬆", Expected: `kotomichi ▐         
+arg1                
+arg2                
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		b.Wait()
+		assert.Equal(t, "", state)
+		assert.Equal(t, []string{"kotomichi arg1", "kotomichi arg2", "kotomichi arg1"}, dispatches)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "<", Expected: `kotomichi ▐         
+arg1                
+arg2                
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		b.Wait()
+		assert.Equal(t, "", state)
+		assert.Equal(t, []string{"kotomichi arg1", "kotomichi arg2", "kotomichi arg1"}, dispatches)
+	})
+
+	t.Run("dispatch at the end", func(t *testing.T) {
+		storage := document.NewInMemoryService()
+		cfg := DefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+
+		var state string
+		dispatchFn := func(cmd string, args ...string) bool {
+			state = args[0]
+			return true
+		}
+
+		var dispatches []string
+		previewFn := func(cmd string, args ...string) (func(), bool) {
+			prevState := state
+			state = args[0]
+			dispatches = append(dispatches, strings.Join(append([]string{cmd}, args...), " "))
+			return func() {
+				state = prevState
+			}, false
+		}
+
+		completeFn, cleanupComplete := completeWith("arg1", "arg2")()
+		defer cleanupComplete(t)
+
+		cmd := Manual{Name: "kotomichi"}
+		interrupter := term.NopInterrupter()
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcherWithPreview(dispatchFn, previewFn),
+			interrupter, []Manual{cmd}, cfg,
+		)
+		defer b.Close()
+
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "kotomichi ⬇⬇", Expected: `kotomichi ▐         
+arg1                
+arg2                
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		b.Wait()
+		assert.Equal(t, "arg2", state)
+		assert.Equal(t, []string{"kotomichi arg1", "kotomichi arg2"}, dispatches)
+
+		cases = []handlertest.SequenceTestCase{
+			{InputSequence: "⬆ar✌>", Expected: `▐                   
+kotomichi           
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `}, // unimportant after dispatching
+		}
+		handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		b.Wait()
+		assert.Equal(t, "arg1", state)
+		assert.Equal(t, []string{"kotomichi arg1", "kotomichi arg2", "kotomichi arg1"}, dispatches)
+	})
 }
 
 func TestCommandHandlerDispatch(t *testing.T) {

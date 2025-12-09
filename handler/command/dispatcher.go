@@ -26,17 +26,36 @@ package command
 // Dispatcher abstracts the ability to dispatch commands.
 type Dispatcher interface {
 	Dispatch(cmd string, args ...string) bool
+	Preview(cmd string, args ...string) (func(), bool)
 }
 
 // FuncDispatcher returns a Dispatcher that calls fn every time Dispatch is called.
+// It ignores calls to Preview.
 func FuncDispatcher(fn func(string, ...string) bool) Dispatcher {
 	return fnDispatcher{fn: fn}
 }
 
+// FuncDispatcherWithPreview returns a Dispatcher that calls fn every time Dispatch is called.
+// It ignores calls to Preview.
+func FuncDispatcherWithPreview(
+	fn func(string, ...string) bool,
+	preview func(string, ...string) (func(), bool),
+) Dispatcher {
+	return fnDispatcher{fn: fn, preview: preview}
+}
+
 type fnDispatcher struct {
-	fn func(string, ...string) bool
+	fn      func(string, ...string) bool
+	preview func(string, ...string) (func(), bool)
 }
 
 func (d fnDispatcher) Dispatch(cmd string, args ...string) bool {
 	return d.fn(cmd, args...)
+}
+
+func (d fnDispatcher) Preview(cmd string, args ...string) (func(), bool) {
+	if d.preview == nil {
+		return func() {}, false
+	}
+	return d.preview(cmd, args...)
 }

@@ -103,6 +103,7 @@ type workspaceManagerHandler struct {
 	externalCommands        map[string]externalCommand
 	externalEvents          []externalEvents
 	initialVTECapacity      int
+	dispatchOnPreview       map[string]func() func()
 	// NOTE: if user changes frame config, then mouse calculations
 	// for resize might be off.
 	frame        bool
@@ -197,6 +198,7 @@ func (h *workspaceManagerHandler) init(
 	releaseManager release.Manager,
 	shaderRunner *shaderRunner,
 	initialVTECapacity int,
+	dispatchOnPreview map[string]func() func(),
 ) (err error) {
 	ctx := context.Background()
 
@@ -216,6 +218,7 @@ func (h *workspaceManagerHandler) init(
 	h.builtinExtensions = builtinExtensions
 	h.storage = localstorage.New(ctx, sixDir, doctoml.Marshaler())
 	h.initialVTECapacity = initialVTECapacity
+	h.dispatchOnPreview = dispatchOnPreview
 
 	h.workspacesIcon = workspacesIcon
 	h.tabBarOffset = tabBarOffset
@@ -240,7 +243,7 @@ func (h *workspaceManagerHandler) init(
 
 	h.empty, err = newEx(ed, homeWorkspace, h.storage, notifications,
 		cfg.terminalConfig(), h.publishEvent, h.initialVTECapacity, cfg.clipboard(),
-		globalOpts...)
+		h.dispatchOnPreview, globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
 	}
@@ -643,7 +646,7 @@ func (h *workspaceManagerHandler) addWorkspace(
 	multicwd := workspace.Multi(ctx, h.workspace, cwd, uri)
 	ex, err := newEx(ed, multicwd, h.storage, h.notifications.notifier,
 		cfg.terminalConfig(), h.publishEvent, h.initialVTECapacity,
-		cfg.clipboard(), textOpts...)
+		cfg.clipboard(), h.dispatchOnPreview, textOpts...)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("new ex: %w", err)

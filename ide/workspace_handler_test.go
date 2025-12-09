@@ -135,7 +135,7 @@ func TestWorkspaceConfig(t *testing.T) {
 				return true
 			}, runner, new(sync.Mutex), nil,
 			func() (ideConfig, error) { return cfg, errors.New("boom") },
-			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0)
+			".sixrc", 0, 0, '1', 0, 0, true, nil, releaseManager, shRunner, 0, nil)
 		require.NoError(t, err)
 		defer m.Close()
 
@@ -2168,7 +2168,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 			return true
 		}, runner, new(sync.Mutex), extensions,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0)
+		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0, nil)
 
 	require.NoError(t, err)
 	return m

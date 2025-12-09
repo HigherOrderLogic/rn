@@ -857,6 +857,86 @@ func TestWriteExclamationNoQuit(t *testing.T) {
 	assert.False(t, b.exit)
 }
 
+func TestPreviewCommands(t *testing.T) {
+	t.Run("reverts a preview", func(t *testing.T) {
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		}
+		var called, reverted bool
+		previews := map[string]func() func(){
+			"setTheme": func() func() {
+				called = true
+				return func() {
+					reverted = true
+				}
+			},
+		}
+		mockBuf := testFileBuffer{}
+		workspace := testLoader{buf: &mockBuf}
+		b := newExForTestingCommandsPreview(t, &workspace, texttest.NopEditor(),
+			vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), previews, opts...)
+		defer b.Close()
+
+		cancel, ok := b.Preview("setTheme", "arg1")
+		require.True(t, ok)
+
+		assert.True(t, called)
+		assert.False(t, reverted)
+
+		cancel()
+		assert.True(t, called)
+		assert.True(t, reverted)
+	})
+
+	t.Run("ignores previews when command is not set", func(t *testing.T) {
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		}
+		var called, reverted bool
+		previews := map[string]func() func(){
+			"setTheme": func() func() {
+				called = true
+				return func() {
+					reverted = true
+				}
+			},
+		}
+		mockBuf := testFileBuffer{}
+		workspace := testLoader{buf: &mockBuf}
+		b := newExForTestingCommandsPreview(t, &workspace, texttest.NopEditor(),
+			vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(), previews, opts...)
+		defer b.Close()
+
+		_, ok := b.Preview("guiSetTheme", "arg1")
+		require.False(t, ok)
+
+		assert.False(t, called)
+		assert.False(t, reverted)
+	})
+
+	t.Run("ignores previews when previews are disabled", func(t *testing.T) {
+		opts := []text.Option{
+			text.WithCommandKey(testCommandKey),
+			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
+		}
+		var called, reverted bool
+		mockBuf := testFileBuffer{}
+		workspace := testLoader{buf: &mockBuf}
+		b := newExForTestingCommandsPreview(t, &workspace, texttest.NopEditor(),
+			vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(),
+			nil /*previews*/, opts...)
+		defer b.Close()
+
+		_, ok := b.Preview("guiSetTheme", "arg1")
+		require.False(t, ok)
+
+		assert.False(t, called)
+		assert.False(t, reverted)
+	})
+}
+
 func TestBrowserCloseLastWindow(t *testing.T) {
 	cases := []handlertest.SequenceTestCase{
 		{":windowclose>",
@@ -1037,7 +1117,7 @@ func TestExKeySequence(t *testing.T) {
 				defer mu.Unlock()
 				ex.Handle(ev)
 				return true
-			}, 0, clipboard.NewInMemory(), opts...))
+			}, 0, clipboard.NewInMemory(), nil, opts...))
 		ex.subscribeCommands()
 		b := testEx{Component: n, ex: ex}
 		closeFns = append(closeFns, func() error {
@@ -1222,7 +1302,7 @@ func newExForTestingTerminal(
 	opts = append(opts, defCommandKeyBindings()...)
 	require.NoError(t, ex.init(ed, workspace, svc,
 		container, emulatorCfg, publishEvent,
-		0, clipboard.NewInMemory(), opts...))
+		0, clipboard.NewInMemory(), nil, opts...))
 	ex.subscribeCommands()
 	return testEx{Component: container, ex: ex}
 }
@@ -1248,7 +1328,40 @@ func newExForTestingWithWorkspace(
 	finalOpts = append(finalOpts, text.WithNotifications(notifications))
 
 	require.NoError(t, ex.init(ed, workspace, svc,
-		container, emulatorCfg, publishEvent, 0, clip, finalOpts...))
+		container, emulatorCfg, publishEvent, 0, clip, nil, finalOpts...))
+	ex.subscribeCommands()
+	ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
+		return newTestVteWithConfig(initialCmd), nil
+	}
+	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
+		return newTestVteWithConfig(strings.Join(args, " ")), nil
+	}
+	return testEx{Component: container, ex: ex}
+}
+
+func newExForTestingCommandsPreview(
+	t *testing.T, workspace workspace.Workspace,
+	ed text.Editor,
+	emulatorCfg vte.Config,
+	publishEvent func(term.Event) bool,
+	clip clipboard.Register,
+	previews map[string]func() func(),
+	opts ...text.Option,
+) testEx {
+	ex := new(ex)
+	ex.syncCommandPrompt = true
+	// user opts override default test opts
+	finalOpts := defCommandKeyBindings()
+	finalOpts = append(finalOpts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	finalOpts = append(finalOpts, opts...)
+
+	svc := document.NewInMemoryService()
+	container := notifications.New(ex, notificationsConfig())
+	notifications := newWorkspaceNotifications(svc, container)
+	finalOpts = append(finalOpts, text.WithNotifications(notifications))
+
+	require.NoError(t, ex.init(ed, workspace, svc,
+		container, emulatorCfg, publishEvent, 0, clip, previews, finalOpts...))
 	ex.subscribeCommands()
 	ex.newEmulatorHandler = func(initialCmd string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(initialCmd), nil

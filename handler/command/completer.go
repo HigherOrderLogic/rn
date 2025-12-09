@@ -52,6 +52,11 @@ func FuncCompleter(
 	return fnCompleter{fn: fn}
 }
 
+// NopCompleter returns a Completer that does nothing.
+func NopCompleter() Completer {
+	return fnCompleter{}
+}
+
 type fnCompleter struct {
 	fn func(context.Context, []string) (iterator.Iterator[string], string, error)
 }
@@ -59,7 +64,10 @@ type fnCompleter struct {
 func (d fnCompleter) Complete(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[string], string, error) {
-	return d.fn(ctx, args)
+	if d.fn != nil {
+		return d.fn(ctx, args)
+	}
+	return iterator.Empty[string](), "", nil
 }
 
 // FilePathCompleter returns a files path completer with the given directory reader.

@@ -96,6 +96,7 @@ type Prompt struct {
 	manualComponent       component.Responsive
 	showManual            bool
 	resetManualTimeout    chan struct{}
+	preview               func()
 	ctx                   context.Context
 	cancelCtx             func()
 	completionCtx         context.Context // children of ctx
@@ -321,6 +322,37 @@ func (h *Prompt) trimmedCommandAndArgs(cmd string, args ...string) []string {
 	return ret
 }
 
+func (h *Prompt) dispatchPreviewArgument() {
+	match, ok := h.list.Focus()
+	if !ok {
+		return
+	}
+	cmdAndArgsStr := h.buf.String()
+	cmdAndArgs := strings.Split(cmdAndArgsStr, " ")
+	if len(cmdAndArgs) == 0 {
+		return
+	}
+	// last argument is the one we want to preview
+	cmdAndArgs = cmdAndArgs[:len(cmdAndArgs)-1]
+	previewArg := string(match.Data())
+	cmdAndArgs = append(cmdAndArgs, previewArg)
+
+	cancel, ok := h.dispatcher.Preview(cmdAndArgs[0], cmdAndArgs[1:]...)
+	if !ok {
+		return
+	}
+	h.log(log.DebugLevel, "previewing command %#v", cmdAndArgs)
+	if h.preview != nil {
+		prev := h.preview
+		h.preview = func() {
+			cancel()
+			prev()
+		}
+	} else {
+		h.preview = cancel
+	}
+}
+
 func (h *Prompt) dispatchCommand() (
 	quit, handled bool,
 ) {
@@ -424,21 +456,28 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 			if h.userScrolling {
 				h.incArgsCompleteMode(!h.bracketedPaste, sync)
 			}
+			h.cancelPreview()
 			quit, handled = h.dispatchCommand()
 			h.reset()
 		case term.KeyEsc:
 			quit = true
+			handled = true
+			h.cancelPreview()
 			h.Cancel()
 		case term.KeyArrowDown:
 			if h.userScrolling {
-				h.list.FocusDown()
+				handled = h.list.FocusDown()
 			} else {
 				h.setUserScrolling(true)
 			}
+			h.dispatchPreviewArgument()
 		case term.KeyArrowUp:
-			ok := h.list.FocusUp()
-			if !ok {
-				h.setUserScrolling(false)
+			handled = h.list.FocusUp()
+			if !handled {
+				handled = h.setUserScrolling(false)
+				h.cancelPreview()
+			} else {
+				h.dispatchPreviewArgument()
 			}
 		case term.KeyTab:
 			h.incArgsCompleteMode(!h.bracketedPaste, sync)
@@ -453,19 +492,24 @@ func (h *Prompt) handleCommon(ev *term.Event, sync bool) (quit, handled bool) {
 		switch ev.Ch {
 		case 'j':
 			if h.userScrolling {
-				h.list.FocusDown()
+				handled = h.list.FocusDown()
 			} else {
-				h.setUserScrolling(true)
+				handled = h.setUserScrolling(true)
 			}
+			h.dispatchPreviewArgument()
 		case 'k':
 			ok := h.list.FocusUp()
 			if !ok {
-				h.setUserScrolling(false)
+				handled = h.setUserScrolling(false)
+				h.cancelPreview()
+			} else {
+				h.dispatchPreviewArgument()
 			}
 		case 'c':
 			select {
 			case <-h.completionCtx.Done():
 				// completion already canceled
+				h.cancelPreview()
 				quit = true
 			default:
 			}
@@ -525,6 +569,7 @@ func (h *Prompt) handleCommand(ev term.Event, sync bool) (quit, handled bool) {
 		if cols == 0 {
 			handled = true
 			quit = true
+			h.cancelPreview()
 			h.Cancel()
 			return
 		}
@@ -571,6 +616,7 @@ func (h *Prompt) handleCompleteArgs(ev term.Event, sync bool) (quit, handled boo
 			return
 		}
 
+		h.cancelPreview()
 		handled = true
 		cols := h.buf.Columns(0)
 		if cols != 0 {
@@ -1065,14 +1111,15 @@ func (h *Prompt) Close() error {
 	return h.list.Close()
 }
 
-func (h *Prompt) setUserScrolling(scrolling bool) {
+func (h *Prompt) setUserScrolling(scrolling bool) bool {
+	ret := h.userScrolling != scrolling
 	h.userScrolling = scrolling
 	if scrolling {
 		h.list.SetFocusAttr(h.config.FocusElementAttr)
 	} else {
 		h.list.SetFocusAttr(h.config.ElementAttr)
 	}
-
+	return ret
 }
 
 func (h *Prompt) startManualTimer() {
@@ -1192,6 +1239,14 @@ func (h *Prompt) getSeparatorHeight() int {
 		return 0
 	}
 	return defaultSeparatorHeight
+}
+
+func (h *Prompt) cancelPreview() {
+	if h.preview == nil {
+		return
+	}
+	h.preview()
+	h.preview = nil
 }
 
 func newNopAnimation(cfg Config) tui.Component {

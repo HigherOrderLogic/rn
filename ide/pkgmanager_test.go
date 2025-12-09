@@ -752,7 +752,8 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 			return true
 		}, runner, new(sync.Mutex), extensions,
 		func() (ideConfig, error) { return cfg, nil },
-		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager, shRunner, 0)
+		".sixrc", 0, 0, '1', 0, 0, true, onTabsClick, releaseManager,
+		shRunner, 0, nil)
 
 	require.NoError(t, err)
 	return m

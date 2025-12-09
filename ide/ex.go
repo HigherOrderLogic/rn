@@ -89,6 +89,7 @@ type ex struct {
 	newPluginHandler     func(...string) (pluginHandler, error)
 	workspace            workspace.Workspace
 	tasks                *idetask.Manager
+	dispatchOnPreview    map[string]func() func()
 	filepathCompleter    command.Completer
 	sequencer            handler.Sequencer
 	publishEvent         func(term.Event) bool
@@ -120,11 +121,13 @@ func newEx(
 	publishEvent func(term.Event) bool,
 	initialVTECapacity int,
 	clip clipboard.Register,
+	dispatchOnPreview map[string]func() func(),
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
 	err = e.init(ed, m, storage, notifications,
-		emulatorConfig, publishEvent, initialVTECapacity, clip, opts...)
+		emulatorConfig, publishEvent, initialVTECapacity, clip,
+		dispatchOnPreview, opts...)
 	if err != nil {
 		return
 	}
@@ -142,6 +145,7 @@ func (e *ex) init(
 	publishEvent func(term.Event) bool,
 	initialVTECapacity int,
 	clip clipboard.Register,
+	dispatchOnPreview map[string]func() func(),
 	opts ...text.Option,
 ) (err error) {
 	err = e.doInit(ed, m, storage, notifications,
@@ -181,6 +185,7 @@ func (e *ex) init(
 		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
 			e.Browser(), strings.Join(args, " "), e.width, pluginOpts...)
 	}
+	e.dispatchOnPreview = dispatchOnPreview
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
 	e.tasks = idetask.NewManager(e.Browser(), m, pluginOpts...)
 	e.comp.SubscribeWindow(e.tasks)
@@ -310,6 +315,20 @@ func (e *ex) Dispatch(command string, args ...string) bool {
 	}
 	e.isPromptDispatch = false
 	return quit
+}
+
+// Preview satisfies command.Dispatcher for command.Handler.
+func (e *ex) Preview(command string, args ...string) (func(), bool) {
+	if e.dispatchOnPreview == nil {
+		return nil, false
+	}
+	cancel, ok := e.dispatchOnPreview[command]
+	if !ok {
+		return nil, false
+	}
+	cancelTrigger := cancel()
+	e.Dispatch(command, args...)
+	return cancelTrigger, true
 }
 
 func (e *ex) handlerInFocus() (workspaceapi.URI, text.Handler, bool) {

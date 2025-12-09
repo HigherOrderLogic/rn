@@ -71,6 +71,17 @@ func WithLocker(locker sync.Locker) Option {
 	}
 }
 
+// WithDispatchOnPreview determines a list of commands
+// that should be dispatched as user is scrolling down the list of completions.
+func WithDispatchOnPreview(cmd string, cancelPreview func() func()) Option {
+	return func(opts *options) {
+		if opts.dispatchOnPreview == nil {
+			opts.dispatchOnPreview = make(map[string]func() func())
+		}
+		opts.dispatchOnPreview[cmd] = cancelPreview
+	}
+}
+
 // WithPublishEvent sets the EventPublisher of the IDE.
 // The default is tui.PublishEvent.
 func WithPublishEvent(p EventPublisher) Option {
@@ -258,6 +269,7 @@ type options struct {
 	workspacesIcon      rune
 	workspacesBarOffset int
 	locker              sync.Locker
+	dispatchOnPreview   map[string]func() func()
 	extensions          map[string]Extension
 	workspaceConfig     string
 	defaultWallpaper    browser.Wallpaper
