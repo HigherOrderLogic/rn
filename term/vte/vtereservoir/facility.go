@@ -101,6 +101,14 @@ func (f *Facility) Get() (VTE, error) {
 	if len(f.pool) != 0 {
 		head := f.pool[0]
 		f.pool = f.pool[1:]
+		// ensure there's always at least one available
+		if len(f.pool) == 0 {
+			newvte, err := f.new(true)
+			if err != nil {
+				return nil, err
+			}
+			f.pool = append(f.pool, newvte)
+		}
 		return head, nil
 	}
 
@@ -132,6 +140,8 @@ func (f *Facility) Close() (ret error) {
 	return
 }
 
+const maxPoolSize = 10
+
 func (f *Facility) initCap(initialCapacity int) {
 	pool := make([]VTE, initialCapacity)
 
@@ -160,13 +170,17 @@ func (f *Facility) initCap(initialCapacity int) {
 	}
 }
 
-func (f *Facility) put(v VTE) {
+func (f *Facility) put(v VTE) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	v.ClearPrimaryBuffer()
+	if len(f.pool) == maxPoolSize {
+		return false
+	}
 
+	v.ClearPrimaryBuffer()
 	f.pool = append(f.pool, v)
+	return true
 }
 
 func (e *Facility) log(level log.Level, msg string, args ...any) {
@@ -222,7 +236,9 @@ func (v *vteAdapter) Close() error {
 	v.Handler.SystemCanDispatchBell(func(err error) {
 		if err == nil {
 			v.f.log(log.TraceLevel, "we were able to schedule a callback, caching VTE %p", v)
-			v.f.put(v)
+			if !v.f.put(v) {
+				_ = v.Handler.Close()
+			}
 		}
 	})
 	return nil

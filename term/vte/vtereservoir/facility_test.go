@@ -61,11 +61,26 @@ func TestFacility(t *testing.T) {
 
 		assert.Equal(t, 5, int(called.Load()))
 	})
+	
+	t.Run("pre-allocates if pool is empty", func(t *testing.T) {
+		t.Parallel()
+		var called atomic.Int64
+		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+			called.Add(1)
+			return newTestVte(f), nil
+		})
+		assert.Equal(t, 1, int(called.Load()))
+
+		_, err := f.Get()
+		require.NoError(t, err)
+
+		assert.Equal(t, 2, int(called.Load()))
+	})
 
 	t.Run("errors are handled and pool capacity reduced accordingly", func(t *testing.T) {
 		t.Parallel()
 		var called atomic.Int64
-		f := newTestFacility(3, func(f *Facility) (VTE, error) {
+		f := newTestFacility(4, func(f *Facility) (VTE, error) {
 			if called.Add(1)%2 == 0 {
 				return nil, errors.New("errors, lots of them")
 			}
@@ -85,7 +100,7 @@ func TestFacility(t *testing.T) {
 		_, err = f.Get()
 		require.NoError(t, err)
 
-		assert.Equal(t, 5, int(called.Load()))
+		assert.Equal(t, 7, int(called.Load()))
 
 		f.Resize(10, 10)
 	})
@@ -121,29 +136,8 @@ func TestFacility(t *testing.T) {
 	t.Run("VTE.Close puts vte back into the pool", func(t *testing.T) {
 		t.Parallel()
 		var called int
-		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+		f := newTestFacility(2, func(f *Facility) (VTE, error) {
 			tvte := newTestVte(f)
-			called++
-			return tvte, nil
-		})
-
-		vte, err := f.Get()
-		require.NoError(t, err)
-
-		require.NoError(t, vte.Close())
-
-		vte, err = f.Get()
-		require.NoError(t, err)
-
-		assert.Equal(t, 1, called)
-	})
-
-	t.Run("VTE.Close does not put vte back into the pool, if used alternate buffer", func(t *testing.T) {
-		t.Parallel()
-		var called int
-		f := newTestFacility(1, func(f *Facility) (VTE, error) {
-			tvte := newTestVte(f)
-			tvte.usedAlt = true
 			called++
 			return tvte, nil
 		})
@@ -159,10 +153,31 @@ func TestFacility(t *testing.T) {
 		assert.Equal(t, 2, called)
 	})
 
+	t.Run("VTE.Close does not put vte back into the pool, if used alternate buffer", func(t *testing.T) {
+		t.Parallel()
+		var called int
+		f := newTestFacility(2, func(f *Facility) (VTE, error) {
+			tvte := newTestVte(f)
+			tvte.usedAlt = true
+			called++
+			return tvte, nil
+		})
+
+		vte, err := f.Get()
+		require.NoError(t, err)
+
+		require.NoError(t, vte.Close())
+
+		vte, err = f.Get()
+		require.NoError(t, err)
+
+		assert.Equal(t, 3, called)
+	})
+
 	t.Run("VTE.Close clears the primary buffer when put back into pool", func(t *testing.T) {
 		t.Parallel()
 		var tvte *testVte
-		f := newTestFacility(1, func(f *Facility) (VTE, error) {
+		f := newTestFacility(2, func(f *Facility) (VTE, error) {
 			tvte = newTestVte(f)
 			return tvte, nil
 		})
