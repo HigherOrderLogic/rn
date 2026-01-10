@@ -386,6 +386,12 @@ func TestMoveTabs(t *testing.T) {
 	assertTabNames(t, b, []string{"A", "b", "d", "C"})
 	assert.Error(t, b.MoveTabRight(b.Focus()))
 	assertTabNames(t, b, []string{"A", "b", "d", "C"})
+	assert.NoError(t, b.MoveTabTo(b.Focus(), 1))
+	assertTabNames(t, b, []string{"A", "C", "b", "d"})
+	assert.NoError(t, b.MoveTabTo(b.Focus(), 0))
+	assertTabNames(t, b, []string{"C", "A", "b", "d"})
+	assert.NoError(t, b.MoveTabTo(b.Focus(), 10))
+	assertTabNames(t, b, []string{"A", "b", "d", "C"})
 }
 
 func TestFocusLastFocusOnCloseTab(t *testing.T) {

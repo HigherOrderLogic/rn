@@ -134,14 +134,22 @@ var (
 		},
 		"tabmove": {
 			man: textapi.CommandManual{
-				Summary:  "Moves the tab in focus in the given direction in the tabs list.",
-				Synopsis: "(right|left)",
+				Summary: "Moves the tab in focus in the given direction in the tabs list," +
+					" or absolute position if a number is passed.",
+				Synopsis: "(right|left|1|2|3|4|5|6|7|8|9...)",
 			},
 			handler: (*ex).moveTab,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
 				if len(cmd.Args) <= 1 {
-					return iterator.FromSlice([]string{"left", "right"}), "", nil
+					tabNames := []string{"left", "right"}
+					if len(cmd.Args) <= 1 {
+						var i int
+						for i = range e.comp.Browser().Tabs() {
+							tabNames = append(tabNames, strconv.Itoa(i+1))
+						}
+					}
+					return iterator.FromSlice(tabNames), "", nil
 				}
 				return iterator.FromSlice[string](nil), "", nil
 			},

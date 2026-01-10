@@ -105,6 +105,32 @@ func TestTabsDraw(t *testing.T) {
                     `,
 		}, {
 			func() {
+				assert.True(t, l.MoveTo(1, 0))
+			}, `
+┌──────────────────┐
+│X Atzari  $ Saturn│
+│                  │
+├──────────────────┤
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
+				assert.True(t, l.MoveTo(0, 1))
+			}, `
+┌──────────────────┐
+│$ Saturn  X Atzari│
+│                  │
+├──────────────────┤
+                    
+                    
+                    
+                    
+                    `,
+		}, {
+			func() {
 				assert.True(t, l.MoveRight(0))
 				assert.False(t, l.MoveRight(1))
 			}, `

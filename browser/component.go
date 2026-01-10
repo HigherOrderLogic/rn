@@ -241,9 +241,10 @@ func (c *Component) MoveTabLeft(win Window) error {
 	if idx == 0 {
 		return errors.New("tab is already at the start of the list")
 	}
-	c.doRemoveTab(idx)
-	c.doInsertTab(idx-1, t)
-	c.tabs.MoveLeft(idx)
+	if c.tabs.MoveLeft(idx) {
+		c.doRemoveTab(idx)
+		c.doInsertTab(idx-1, t)
+	}
 	return nil
 }
 
@@ -259,10 +260,30 @@ func (c *Component) MoveTabRight(win Window) error {
 	if idx == c.tabs.Size()-1 {
 		return errors.New("tab is already at the end of the list")
 	}
-	c.doRemoveTab(idx)
-	c.doInsertTab(idx+1, t)
-	c.tabs.MoveRight(idx)
+	if c.tabs.MoveRight(idx) {
+		c.doRemoveTab(idx)
+		c.doInsertTab(idx+1, t)
+	}
 	return nil
+}
+
+// MoveTabTo moves the tab in the given window to the given position.
+func (c *Component) MoveTabTo(win Window, idx int) error {
+	bWin := win.(*browserWindow)
+	t, ok := browserTabAtWindow(bWin)
+	if !ok {
+		return errors.New("window content is not a tab")
+	}
+	if idx > c.tabs.Size()-1 {
+		idx = c.tabs.Size() - 1
+	}
+	curridx := c.findTabID(t)
+	if c.tabs.MoveTo(curridx, idx) {
+		c.doRemoveTab(curridx)
+		c.doInsertTab(idx, t)
+		return nil
+	}
+	return errors.New("")
 }
 
 // PreviousTab updates win with the tab before the current tab.

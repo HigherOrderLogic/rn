@@ -320,6 +320,17 @@ func (t *Tabs) MoveLeft(idx int) bool {
 	return true
 }
 
+// MoveTo moves the tab at curridx to the given idx.
+func (t *Tabs) MoveTo(curridx, idx int) bool {
+	if curridx < 0 || idx < 0 || curridx >= len(t.tabs) || idx >= len(t.tabs) {
+		return false
+	}
+	tt := t.doRemoveTab(curridx)
+	t.doInsertTab(idx, tt)
+	t.dirty = true
+	return true
+}
+
 // RemoveAll removes all tabs.
 func (t *Tabs) RemoveAll() bool {
 	ret := t.Size() != 0
