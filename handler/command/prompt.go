@@ -337,6 +337,9 @@ func (h *Prompt) dispatchPreviewArgument() {
 	previewArg := string(match.Data())
 	cmdAndArgs = append(cmdAndArgs, previewArg)
 
+	if len(cmdAndArgs) == 1 {
+		return
+	}
 	cancel, ok := h.dispatcher.Preview(cmdAndArgs[0], cmdAndArgs[1:]...)
 	if !ok {
 		return

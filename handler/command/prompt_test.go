@@ -336,6 +336,51 @@ kotomichi
 		assert.Equal(t, "arg1", state)
 		assert.Equal(t, []string{"kotomichi arg1", "kotomichi arg2", "kotomichi arg1"}, dispatches)
 	})
+
+	t.Run("dispatch at the end", func(t *testing.T) {
+		storage := document.NewInMemoryService()
+		cfg := DefaultConfig()
+		cfg.ShowManualAfter = 1 * time.Hour
+		cfg.HistoryKey = term.KeyComb{Ch: '@'}
+		cfg.Sync = true
+
+		var called bool
+		dispatchFn := func(cmd string, args ...string) bool {
+			called = true
+			return true
+		}
+
+		previewFn := func(cmd string, args ...string) (func(), bool) {
+			return func() {}, false
+		}
+
+		completeFn, cleanupComplete := completeWith()()
+		defer cleanupComplete(t)
+
+		cmd := Manual{Name: "kotomichi"}
+		interrupter := term.NopInterrupter()
+		b := NewPrompt(
+			storage, FuncCompleter(completeFn), FuncDispatcherWithPreview(dispatchFn, previewFn),
+			interrupter, []Manual{cmd}, cfg,
+		)
+		defer b.Close()
+
+		cases := []handlertest.SequenceTestCase{
+			{InputSequence: "⬇⬇", Expected: `▐                   
+kotomichi           
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		}
+		handlertest.TestHandlerSequence(t, testCommandHandler{b}, 20, 10, cases)
+		b.Wait()
+		assert.False(t, called)
+	})
 }
 
 func TestCommandHandlerDispatch(t *testing.T) {
