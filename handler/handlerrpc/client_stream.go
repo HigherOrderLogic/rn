@@ -538,20 +538,14 @@ func (s *ClientStream[T]) receiveMessages() (ret error) {
 			handle := recvMsg.GetHandle()
 			// GetHandled is ignored; Handle always returns true
 			exit := handle.GetQuit()
-			if exit {
-				s.exit.Store(true)
-				// handle response might arrive late, and EventNone
-				// dispatched to a different Handler. This is an acceptable
-				// risk: when user focuses back on handler and sends an event
-				// then Handle will retur exit. This should generally not happen.
-				err := s.publisher(term.Event{Type: term.EventNone})
-				if err != nil {
-					ret = fmt.Errorf("publish event none: %w", err)
-					return
-
-				}
-				// do not return here, allow Close to be
-				// called and propagated to server
+			if exit && s.closed.CompareAndSwap(false, true) {
+				// shortcircuit calling Close so there aren't unintended
+				// side effects from returning exit=false in the call that
+				// originated this response. Publishing term.EventNone,
+				// might not be enough, if focus changed.
+				var req CloseStreamRequest
+				msg := ServerMessage{Type: MessageType_Close, Close: &req}
+				ret = s.stream.SendMsg(&msg)
 			}
 		case MessageType_Resize:
 			/* nothing to do*/
