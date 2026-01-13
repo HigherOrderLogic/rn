@@ -167,6 +167,46 @@ func TestCommandSplitHandlerOpenWindow(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, called)
 	})
+
+	t.Run("closes window when handler is closed", func(t *testing.T) {
+		cmdName := "blah"
+		handler := browsertest.NewTestHandler()
+		handler.Exit = true
+		rh := FuncRedispatchHandler(handler,
+			func(ctx context.Context, cmd textapi.Command) error {
+				return nil
+			})
+		config := CommandSplitHandlerConfig{
+			Command:          testCommand(cmdName),
+			SplitOrientation: browserapi.OrientationLeft,
+			Handler: func(_ context.Context, _ textapi.Command, grants []extension.Grant, broker rpc.MuxBroker,
+				focus browserapi.Window, c config.Config) (RedispatchHandler, error) {
+				return rh, nil
+			},
+		}
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		var h browserapi.Handler
+		mockWm := browserapitest.NewMockWindowManager(ctrl)
+		win := browserapitest.NewMockWindow(ctrl)
+		mockWm.EXPECT().
+			Split(gomock.Eq(config.SplitOrientation), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(
+				_ browserapi.Orientation, _ browserapi.Window, _h browserapi.Handler,
+			) (browserapi.Window, error) {
+				h = _h
+				return win, nil
+			})
+		splitHandler := cmdSplitHandler{config: config, wm: mockWm}
+
+		err := splitHandler.HandleCommand(context.Background(), textapi.Command{Name: cmdName})
+		require.NoError(t, err)
+
+		mockWm.EXPECT().CloseWindow(gomock.Any())
+		require.NoError(t, h.Close())
+	})
 }
 
 func testSplitWindow(

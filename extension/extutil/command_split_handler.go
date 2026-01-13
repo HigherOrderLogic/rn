@@ -152,6 +152,9 @@ func (t *cmdSplitHandler) cleanWindow() bool {
 		return false
 	}
 
+	if err := t.wm.CloseWindow(t.win); err != nil {
+		t.log(log.DebugLevel, "close window: %v", err)
+	}
 	t.win = nil
 
 	return true
