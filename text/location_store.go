@@ -165,11 +165,8 @@ func DrawLocations(locations []textapi.Location, scroll *component.Scroll, w ter
 	height := scroll.SizeHeight()
 	buffer := scroll.Buffer()
 
-	// this might add some extra calls to UnionAttributes that are noop but
-	// it's way more efficient that calculating screen coordinates on every
-	// location.
-	minY := offset.Y
-	maxY := offset.Y + height + scroll.HiddenLineCount()
+	minY := scroll.WindowToScrollCoordinates(term.Coordinates{}).Y
+	maxY := scroll.WindowToScrollCoordinates(term.Coordinates{Y: height}).Y
 	for _, loc := range locations {
 		fromAtScroll := loc.From
 		toAtScroll := loc.To

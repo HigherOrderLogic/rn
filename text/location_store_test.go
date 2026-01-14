@@ -523,4 +523,44 @@ func TestCursorDrawLocationListsIntegration(t *testing.T) {
 		DrawLocations(c.SortedLocations(), c.scroll, w)
 		assert.Equal(t, expected, w.RawCells())
 	})
+
+	t.Run("does not render attrs past last rendered line", func(t *testing.T) {
+		c := setupCursorContent(t, 1, 5, "\na\nb\nc\n", false)
+
+		require.True(t, c.scroll.MarkHidden(1, 3))
+
+		locations := []textapi.Location{
+			{
+				From: term.Coordinates{Y: 1},
+				To:   term.Coordinates{Y: 1, X: 1},
+				Attr: term.Attributes{Bg: tcell.ColorRed},
+			},
+			{
+				From: term.Coordinates{Y: 2},
+				To:   term.Coordinates{Y: 2, X: 1},
+				Attr: term.Attributes{Bg: tcell.ColorOrange},
+			},
+			{
+				From: term.Coordinates{Y: 3},
+				To:   term.Coordinates{Y: 3, X: 1},
+				Attr: term.Attributes{Bg: tcell.ColorYellow},
+			},
+		}
+
+		expected := [][]term.Cell{
+			{{}, {}},
+			{{}, {}},
+			{{}, {}},
+			{{}, {}},
+			{{}, {}},
+		}
+		abcList := LocationSlice(locations)
+
+		assert.Nil(t, c.SetLocationList(textapi.LocationPriorityInfo, locID, abcList))
+
+		c.scroll.Resize(1, 1)
+		w := cell.NewBufferWriter(context.Background(), 2, 5)
+		DrawLocations(c.SortedLocations(), c.scroll, w)
+		assert.Equal(t, expected, w.RawCells())
+	})
 }
