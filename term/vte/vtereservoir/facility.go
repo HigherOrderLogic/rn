@@ -234,11 +234,13 @@ func (v *vteAdapter) Close() error {
 		return v.Handler.Close()
 	}
 	v.Handler.SystemCanDispatchBell(func(err error) {
-		if err == nil {
-			v.f.log(log.TraceLevel, "we were able to schedule a callback, caching VTE %p", v)
-			if !v.f.put(v) {
-				_ = v.Handler.Close()
-			}
+		if err != nil {
+			_ = v.Handler.Close()
+			return
+		}
+		v.f.log(log.TraceLevel, "we were able to schedule a callback, caching VTE %p", v)
+		if !v.f.put(v) {
+			_ = v.Handler.Close()
 		}
 	})
 	return nil
