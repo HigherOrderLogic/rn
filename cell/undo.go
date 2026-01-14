@@ -116,6 +116,9 @@ func (u *undoer) redo() (bool, term.Coordinates) {
 }
 
 func (u *undoer) undo() (bool, term.Coordinates) {
+	if u.version == 0 {
+		return false, term.Coordinates{}
+	}
 	undoTimeline, op, ok := popLastOp(u.undoTimeline)
 	if !ok {
 		return false, term.Coordinates{}

@@ -28,8 +28,6 @@ import (
 	"fmt"
 	"os"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/logging"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
@@ -54,18 +52,9 @@ func (w *schemeWorkspace) Init(uri workspaceapi.URI, p schemeapi.Scheme) {
 	w.Scheme = p
 }
 
-func (w *schemeWorkspace) log(msg string, args ...interface{}) {
-	log.WithField(logging.KeyClass, "schemeWorkspace").
-		Tracef(msg, args...)
-}
-
 func (w *schemeWorkspace) Recover(
 	uri, swapURI workspaceapi.URI, buf *cell.Buffer, force bool,
 ) (ret FlusherCloser, err error) {
-	w.log("Recover(%s, %s, %p, force=%v)", uri, swapURI, buf, force)
-	defer w.log("Recover(%s, %s, %p, force=%v): %p %v",
-		uri, swapURI, buf, force, ret, err)
-
 	// force cleanup and expansion of URI paths
 	// but first check if it's from this workspace
 	is, err := IsWorkspaceURI(w, uri)
@@ -98,10 +87,6 @@ func (w *schemeWorkspace) Recover(
 func (w *schemeWorkspace) Load(
 	uri workspaceapi.URI, buf *cell.Buffer, swapDir workspaceapi.URI, readOnly bool,
 ) (ret FlusherCloser, err error) {
-	w.log("Load(%s, %s, %p, read=%v)", uri, swapDir, buf, readOnly)
-	defer w.log("Load(%s, %s, %p, read=%v): %p %v",
-		uri, swapDir, buf, readOnly, ret, err)
-
 	// force cleanup and expansion of URI paths
 	// but first check if it's from this workspace
 	is, err := IsWorkspaceURI(w, uri)

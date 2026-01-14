@@ -507,6 +507,12 @@ func (b *Buffer) ReadFrom(r io.Reader) (int64, error) {
 	return b.cells.readFromWithView(r, b.view)
 }
 
+// ResetVersion reset version resets the version of the buffer to 0,
+// so further calls to Undo will fail until buffer is edited further.
+func (b *Buffer) ResetVersion() {
+	b.undoer.version = 0
+}
+
 // Write satisfies io.Writer.
 func (b *Buffer) Write(p []byte) (int, error) {
 	nextWrite := nextWrite(b.view)

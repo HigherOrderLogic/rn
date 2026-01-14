@@ -62,6 +62,7 @@ import (
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/texttest"
+	"unstable.build/go-tui/text/vi"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
@@ -3168,6 +3169,36 @@ func TestViewForceWriteAll(t *testing.T) {
 		nopPublishEvent, clipboard.NewInMemory(), opts...)
 	defer e.Close()
 	handlertest.TestHandlerSequence(t, e, 30, 15, cases)
+}
+
+func TestIntegrationUndoAfterOpen(t *testing.T) {
+	cases := []handlertest.SequenceTestCase{
+		{":edit<space>enm.go<enter>u",
+			`┌────────────────────────────┐
+│o enm.go                    │
+├────────────────────────────┤
+│▐                           │
+└────────────────────────────┘`},
+	}
+
+	tempDir, err := os.MkdirTemp("", "")
+	t.Cleanup(func() {
+		_ = os.RemoveAll(tempDir)
+	})
+	ctx := context.Background()
+	uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+	require.NoError(t, err)
+	fileScheme, err := workspace.NewFileScheme(ctx, config.NopConfig(), uri)
+	require.NoError(t, err)
+	workspace := workspace.NewSchemeWorkspace(uri, fileScheme)
+	e := newExForTestingWithWorkspace(t, workspace, vi.Editor(),
+		vte.DefaultConfig(), nopPublishEvent, clipboard.NewInMemory(),
+		text.WithCommandKey(term.KeyComb{Ch: ':'}),
+	)
+	handlertest.RunHandlerSequence(t, e, 30, 5, cases)
+	require.NoError(t, e.Close())
+	require.NoError(t, workspace.Close())
+	require.NoError(t, fileScheme.Close())
 }
 
 func TestCopyPath(t *testing.T) {

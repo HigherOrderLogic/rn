@@ -96,12 +96,6 @@ func (c *Component) log(level log.Level, msg string, args ...interface{}) {
 	log.WithField(logging.KeyClass, "text.Component").Logf(level, msg, args...)
 }
 
-func (c *Component) newCellBuffer() *cell.Buffer {
-	buf := cell.NewBuffer()
-	buf.Init()
-	return buf
-}
-
 func (c *Component) resetTabProperties(file workspaceapi.URI) {
 	c.comp.ResetTabNameAndAttrs(file)
 }
@@ -418,7 +412,7 @@ func (c *Component) openFileTab(
 		return t, nil
 	}
 
-	buf := c.newCellBuffer()
+	buf := cell.NewBuffer()
 	handler, fc, err := c.newFileBuffer(file, recoveryFilename, buf, readOnly, forceRecover)
 	if err != nil {
 		return nil, err
@@ -467,7 +461,7 @@ func (c *Component) ReadFile(file workspaceapi.URI, h Handler) error {
 	}
 
 	// dump the file contents into a buffer we can read from
-	buf := c.newCellBuffer()
+	buf := cell.NewBuffer()
 	_, err = c.workspace.Load(file, buf, swapDir, true)
 	if err != nil {
 		return err

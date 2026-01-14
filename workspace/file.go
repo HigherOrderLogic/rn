@@ -280,6 +280,7 @@ func (f *file) initBuffer(buf *cell.Buffer, file workspaceapi.File) (err error) 
 
 	buf.Subscribe(f)
 	buf.WithView(view)
+	buf.ResetVersion()
 
 	f.buf = buf
 	f.view = view
