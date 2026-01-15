@@ -101,6 +101,16 @@ func (b *Tab) URI() workspaceapi.URI {
 	return b.uri
 }
 
+// SetAttrs sets this tab's name and tab name attributes.
+func (b *Tab) SetAttrs(name string, attrs term.Attributes) {
+	b.parent.SetTabAttrs(b.uri, attrs)
+}
+
+// ResetAttrs resets this tab's name and tab name attributes.
+func (b *Tab) ResetAttrs() {
+	b.parent.ResetTabNameAndAttrs(b.uri)
+}
+
 // Window returns this tab's Window and true or nil and false
 // if this tab is not currently active on any window.
 func (b *Tab) Window() (Window, bool) {

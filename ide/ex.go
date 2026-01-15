@@ -767,6 +767,38 @@ func (e *ex) moveTab(args ...string) error {
 	return err
 }
 
+func (e *ex) convertTab(args ...string) error {
+	if len(args) == 0 {
+		return errors.New("command expects at least one argument with tab name")
+	}
+
+	var icon rune
+	name := args[0]
+	if len(args) > 1 {
+		runeArgs := []rune(args[1])
+		if len(runeArgs) > 0 {
+			icon = runeArgs[0]
+		}
+	}
+	if icon == 0 {
+		icon = ''
+	}
+	win := e.invokeWindow()
+	tab, ok := e.comp.Browser().NewTabFromContent(icon, name, win)
+	if !ok {
+		return errors.New("window content is already a tab")
+	}
+	if win.IsFloating() {
+		err := win.Close()
+		if err == nil {
+			other, _ := e.comp.Focus()
+			return other.SetContent(tab)
+		}
+		return err
+	}
+	return nil
+}
+
 func (e *ex) windowresize(args ...string) error {
 	if (len(args) == 1 && args[0] != "reset") || len(args) == 0 {
 		return errors.New("invalid arguments")

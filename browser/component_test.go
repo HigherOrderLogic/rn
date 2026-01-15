@@ -37,6 +37,176 @@ import (
 	"unstable.build/go-tui/term"
 )
 
+func TestNewTabFromContent(t *testing.T) {
+	t.Run("returns false if content is already a tab", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		uri, err := workspaceapi.ParseURI("file:///" + "d")
+		require.NoError(t, err)
+		h := newTestHandler()
+		tab := b.NewTab(uri, 'o', "d", h, h)
+		b.Focus().SetContent(tab)
+
+		expectedTab, ok := b.FocusTab()
+		require.True(t, ok)
+		assert.Equal(t, "file:///d", expectedTab.URI().String())
+
+		actualTab, ok := b.NewTabFromContent('o', "tab", b.Focus())
+		assert.False(t, ok)
+		assert.Equal(t, tab, actualTab)
+	})
+
+	t.Run("converts scrollable into a tab", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		h := newTestScrollableHandler()
+		b.Focus().SetContent(h)
+
+		tab, ok := b.NewTabFromContent('o', "tab", b.Focus())
+		assert.True(t, ok)
+
+		h.maxSeekOffset = 10
+		assert.Equal(t, 10, tab.MaxSeekOffset())
+		assert.True(t, tab.SeekDown())
+		assert.True(t, tab.SeekUp())
+		assert.NotZero(t, tab.URI())
+		win, ok := tab.Window()
+		assert.True(t, ok)
+		assert.Equal(t, b.Focus(), win)
+	})
+
+	t.Run("converts non-scrollable into a tab", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		h := newTestHandler()
+		b.Focus().SetContent(h)
+
+		tab, ok := b.NewTabFromContent('o', "tab", b.Focus())
+		assert.True(t, ok)
+		assert.False(t, tab.SeekDown())
+		assert.NotZero(t, tab.URI())
+		win, ok := tab.Window()
+		assert.True(t, ok)
+		assert.Equal(t, b.Focus(), win)
+
+		require.NoError(t, tab.Close())
+		assert.True(t, h.closed)
+	})
+
+	t.Run("converts floating window content into a tab", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		h := newTestHandler()
+		floating := b.Floating(h, component.FloatingConfig{
+			Alignment: component.SpanAlignmentHorizontallyCentered,
+		})
+
+		tab, ok := b.NewTabFromContent('o', "tab", floating)
+		assert.True(t, ok)
+		assert.False(t, tab.SeekDown())
+		assert.NotZero(t, tab.URI())
+		win, ok := tab.Window()
+		assert.True(t, ok)
+		assert.Equal(t, floating, win)
+
+		require.NoError(t, floating.Close())
+		assert.False(t, h.closed)
+
+		win, ok = tab.Window()
+		assert.False(t, ok)
+
+		b.Focus().SetContent(tab)
+		win, ok = tab.Window()
+		assert.True(t, ok)
+		assert.Equal(t, b.Focus(), win)
+	})
+
+	t.Run("converts content with URI into a tab, maintains URI", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		uri1, err := workspaceapi.ParseURI("file:///a")
+		require.NoError(t, err)
+
+		h := newTestHandlerURI(uri1)
+		b.Focus().SetContent(h)
+
+		tab, ok := b.NewTabFromContent('o', "tab", b.Focus())
+		assert.True(t, ok)
+		assert.Equal(t, uri1, tab.URI())
+	})
+
+	t.Run("multiple windows, multiple tabs", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+		win0 := b.Focus()
+
+		tabs := []string{"A", "b", "C", "d"}
+		for i, name := range tabs {
+			uri, err := workspaceapi.ParseURI("file:///" + name)
+			require.NoError(t, err)
+			h := newTestHandler()
+			tab := b.NewTab(uri, 'o', name, h, h)
+			if i%2 == 0 {
+				b.Split(browserapi.OrientationRight, b.Focus(), tab)
+			}
+		}
+
+		// window 0 has nothing
+		// window 1 has A
+		// window 2 has C
+		h := newTestHandler()
+		require.True(t, b.FocusLeft())
+		require.True(t, b.FocusLeft())
+		b.Focus().SetContent(h)
+		tab, ok := b.NewTabFromContent('o', "tab", b.Focus())
+		assert.True(t, ok)
+
+		actualWin, ok := tab.Window()
+		assert.True(t, ok)
+		assert.Equal(t, win0, actualWin)
+
+		actualTabs := b.Tabs()
+		require.Len(t, actualTabs, 5)
+
+		assert.True(t, b.SetContentToTab(win0, 1))
+
+		actualWin, ok = tab.Window()
+		assert.False(t, ok)
+		assert.Nil(t, actualWin)
+	})
+
+	t.Run("subscribes content to tab focus changes, if applicable", func(t *testing.T) {
+		b := NewComponent(DefaultConfig())
+
+		uri1, err := workspaceapi.ParseURI("file:///a")
+		require.NoError(t, err)
+
+		h := newTestHandlerURI(uri1)
+		b.Focus().SetContent(h)
+
+		assert.Equal(t, 0, h.onFocus)
+		assert.Equal(t, 0, h.onFree)
+
+		tab1, ok := b.NewTabFromContent('o', "tab", b.Focus())
+		assert.True(t, ok)
+		assert.Equal(t, uri1, tab1.URI())
+
+		assert.Equal(t, 1, h.onFocus)
+		assert.Equal(t, 0, h.onFree)
+
+		uri, err := workspaceapi.ParseURI("file:///b")
+		require.NoError(t, err)
+		tab2 := b.NewTab(uri, 'o', "b", newTestHandler(), nil)
+
+		b.Focus().SetContent(tab2)
+		assert.Equal(t, 1, h.onFocus)
+		assert.Equal(t, 1, h.onFree)
+
+		b.Focus().SetContent(tab1)
+		assert.Equal(t, 2, h.onFocus)
+		assert.Equal(t, 1, h.onFree)
+	})
+}
+
 func TestWindowDraw(t *testing.T) {
 	noFrameNoDim := DefaultConfig()
 	noFrameNoDim.Dim = false
@@ -579,15 +749,16 @@ func TestFocusLastFocusOnCloseTab(t *testing.T) {
 var _ component.Scrollable = (*nopScrollableHandler)(nil)
 
 type nopScrollableHandler struct {
+	maxSeekOffset int
 	nopHandler
 }
 
 func (b *nopScrollableHandler) SeekUp() bool {
-	return false
+	return true
 }
 
 func (b *nopScrollableHandler) SeekDown() bool {
-	return false
+	return true
 }
 
 func (b *nopScrollableHandler) SeekOffset() int {
@@ -595,7 +766,7 @@ func (b *nopScrollableHandler) SeekOffset() int {
 }
 
 func (b *nopScrollableHandler) MaxSeekOffset() int {
-	return 0
+	return b.maxSeekOffset
 }
 
 func newTestScrollableHandler() *nopScrollableHandler {
@@ -603,19 +774,44 @@ func newTestScrollableHandler() *nopScrollableHandler {
 }
 
 type nopHandler struct {
+	closed bool
 	handler.TestHandler
 }
 
-func (n nopHandler) Dimensions() (int, int) {
+func (n *nopHandler) Dimensions() (int, int) {
 	return 12, 8
 }
 
-func (n nopHandler) Close() error {
+func (n *nopHandler) Close() error {
+	n.closed = true
 	return nil
 }
 
 func newTestHandler() *nopHandler {
 	return &nopHandler{}
+}
+
+type nopHandlerURI struct {
+	onFocus int
+	onFree  int
+	uri     workspaceapi.URI
+	nopHandler
+}
+
+func (n *nopHandlerURI) URI() workspaceapi.URI {
+	return n.uri
+}
+
+func (n *nopHandlerURI) OnFocus(*Tab) {
+	n.onFocus++
+}
+
+func (n *nopHandlerURI) OnFree(*Tab) {
+	n.onFree++
+}
+
+func newTestHandlerURI(uri workspaceapi.URI) *nopHandlerURI {
+	return &nopHandlerURI{uri: uri}
 }
 
 func assertTabNames(t *testing.T, b *Component, expected []string) {

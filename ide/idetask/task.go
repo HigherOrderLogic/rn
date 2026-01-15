@@ -85,6 +85,7 @@ type Task struct {
 	doneWaitCh  chan struct{}
 	mu          *sync.Mutex
 	win         browser.Window
+	tab         *browser.Tab
 	cmdAndArgs  string
 	pluginOpts  []plugin.Option
 	donech      chan error
@@ -376,6 +377,7 @@ func (t *Task) tryRunning(b browser.Browser, scheme schemeapi.Scheme, reason str
 		t.doSetError(err)
 		return false
 	}
+	handler.Resize(t.width, t.height)
 
 	t.setRunning(handler)
 	return true
@@ -466,11 +468,26 @@ func (t *Task) interrupt() {
 }
 
 func (t *Task) setBarColor(color tcell.Color) tcell.Color {
-	if _, is := t.win.IsMinimized(); is {
+	if _, is := t.win.IsMinimized(); is && !t.win.Closed() {
 		prev, _ := t.win.SetFrameAttr(term.Attributes{Bg: color})
 		return prev.Bg
 	}
+	if t.tab != nil {
+		t.tab.SetAttrs(t.Name, term.Attributes{Fg: color})
+	}
 	return 0
+}
+
+// OnFocus satisfies browser.TabSubscriber.
+func (t *Task) OnFocus(tab *browser.Tab) {
+	// task was converted to tab; assign and
+	// ensure that attributes are "cleared"
+	t.tab = tab
+	t.tab.ResetAttrs()
+}
+
+// OnFree satisfies browser.TabSubscriber.
+func (t *Task) OnFree(tab *browser.Tab) {
 }
 
 func (t *Task) setMaxWidthHeight(width, height int) {
@@ -503,11 +520,17 @@ func (t *Task) onUnfocus() {
 }
 
 func (t *Task) unminimize() {
+	if t.win.Closed() {
+		return
+	}
 	t.win.Unminimize()
 	t.setBarColor(t.defaultBarColor)
 }
 
 func (t *Task) minimize() {
+	if t.win.Closed() {
+		return
+	}
 	switch t.MinimizeAlignment {
 	case component.SpanAlignmentTop:
 		t.win.MinimizeUp(minimizePadding)

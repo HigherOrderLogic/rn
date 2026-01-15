@@ -41,6 +41,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/api/workspaceapi"
@@ -675,8 +676,8 @@ type fakeWindow struct {
 	cfg      component.FloatingConfig
 }
 
-func (w *fakeWindow) Content() (browserapi.Handler, error) {
-	return nil, nil
+func (w *fakeWindow) Content() tui.Handler {
+	return nil
 }
 
 func (w *fakeWindow) Unminimize() bool {
@@ -776,17 +777,25 @@ func newFakeBrowser() *fakeBrowser {
 	}
 }
 
+type fakeBrowserWindow struct {
+	*fakeWindow
+}
+
+func (w fakeBrowserWindow) Content() (browserapi.Handler, error) {
+	return w.fakeWindow.Content().(browserapi.Handler), nil
+}
+
 func (m *fakeBrowser) Focus() (browser.Window, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.focus, nil
+	return fakeBrowserWindow{m.focus}, nil
 }
 
 func (m *fakeBrowser) SetFocus(win browser.Window) (browser.Window, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	prev := m.focus
-	m.focus = win.(*fakeWindow)
+	prev := fakeBrowserWindow{m.focus}
+	m.focus = win.(fakeBrowserWindow).fakeWindow
 	return prev, nil
 }
 
@@ -807,7 +816,7 @@ func (m *fakeBrowser) Floating(h browser.Floating, cfg component.FloatingConfig)
 	if m.createHook != nil {
 		m.createHook("", cfg)
 	}
-	return w, nil
+	return fakeBrowserWindow{w}, nil
 }
 
 func (m *fakeBrowser) Created() []*fakeWindow {

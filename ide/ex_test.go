@@ -2791,6 +2791,102 @@ func TestRunStopTasks(t *testing.T) {
 ││                  └────────┘
 ││                           │
 └└───────────────────────────┘`},
+			{":tabconvert build x>",
+				`┌────────────────────────────┐
+│x build                     │
+├┌───────────────────────────┤
+││                           │
+││                           │
+││                           │
+││                           │
+││ new vte: start command:   │
+││ context canceled          │
+││                           │
+││                           │
+││                           │
+││                           │
+││                           │
+└└───────────────────────────┘`},
+			{":edit abc>:write>",
+				`┌────────────────────────────┐
+│x build  o abc              │
+├┌───────────────────────────┤
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+││AAAAAAAAAAAAAAAAAAAAAAAAAAA│
+└└───────────────────────────┘`},
+			{":tabprevious>",
+				`┌────────────────────────────┐
+│x build  o abc              │
+├┌───────────────────────────┤
+││                           │
+││                           │
+││                           │
+││                           │
+││ new vte: start command:   │
+││ context canceled          │
+││                           │
+││                           │
+││                           │
+││                           │
+││                           │
+└└───────────────────────────┘`},
+			{":windowfocus left>:tabconvert tests>",
+				`┌────────────────────────────┐
+│x build  o abc    tests    │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│  new vte: start command:   │
+│  context canceled          │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`},
+			{":tabprevious>:tabprevious>:tabprevious>",
+				`┌────────────────────────────┐
+│x build  o abc    tests    │
+├────────────────────────────┤
+│                            │
+│                            │
+│                            │
+│                            │
+│  new vte: start command:   │
+│  context canceled          │
+│                            │
+│                            │
+│                            │
+│                            │
+│                            │
+└────────────────────────────┘`},
+			{":windowsplit right>:tabnext>:tabnext>",
+				`┌────────────────────────────┐
+│x build  o abc    tests    │
+├─────────────┐┌─────────────┐
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│  new vte:   ││AAAAAAAAAAAAA│
+│  start      ││AAAAAAAAAAAAA│
+│  command:   ││AAAAAAAAAAAAA│
+│  context    ││AAAAAAAAAAAAA│
+│  canceled   ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+│             ││AAAAAAAAAAAAA│
+└─────────────┘└─────────────┘`},
 		}
 
 		e, cleanup := newExForTestingTasks(t)

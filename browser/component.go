@@ -145,6 +145,42 @@ func (c *Component) NewTab(
 	return t
 }
 
+// NewTabFromContent converts the given window's content into a tab, if it's not a tab
+// already. This method always returns a valid tab; whether it created one
+// or returned false because the window's content is already a tab.
+func (c *Component) NewTabFromContent(
+	icon rune, name string, win Window,
+) (*Tab, bool) {
+	bwin := win.(*browserWindow)
+	content := bwin.win.Content().(browserapi.Handler)
+	tab, ok := content.(*Tab)
+	if ok {
+		return tab, false
+	}
+	content = c.unwrapContent(content)
+	var uri workspaceapi.URI
+	// best effort
+	if urier, ok := content.(interface{ URI() workspaceapi.URI }); ok {
+		uri = urier.URI()
+	} else {
+		var err error
+		uri, err = workspaceapi.ParseURI(fmt.Sprintf("internal:///%p", content))
+		if err != nil {
+			panic("parse internal uri")
+		}
+	}
+	subscriber, ok := content.(TabSubscriber)
+	tab = c.NewTab(uri, icon, name, content, nil)
+	bwin.win.SetContent(tab)
+	tab.setWindow(nil, bwin)
+	if ok {
+		tab.Subscribe(subscriber)
+	}
+	c.tabs.SetFocus(c.findTabID(tab))
+	c.dirtyTabs = true
+	return tab, true
+}
+
 // Tab returns the tab with name and true if there's a tab with such name
 // or nil and false otherwise.
 func (c *Component) Tab(uri workspaceapi.URI) (*Tab, bool) {
@@ -186,6 +222,20 @@ func (c *Component) SetTabNameAndAttrs(
 	for i, t := range c.buffers {
 		if t.uri.String() == uri.String() {
 			c.tabs.SetTabName(i, name)
+			c.tabs.SetTabAttr(i, attr)
+			return true
+		}
+	}
+	return false
+}
+
+// SetTabAttrs overrides the name and attributes of the tab with the given uri.
+// It returns false if there's no tab with id.
+func (c *Component) SetTabAttrs(
+	uri workspaceapi.URI, attr term.Attributes,
+) bool {
+	for i, t := range c.buffers {
+		if t.uri.String() == uri.String() {
 			c.tabs.SetTabAttr(i, attr)
 			return true
 		}
@@ -1227,6 +1277,26 @@ func (c *Component) newBrowserContent(content browserapi.Handler) browserapi.Han
 		return &browserScrollableContent{browserContent: bc}
 	}
 	return &bc
+}
+
+func (c *Component) unwrapContent(content browserapi.Handler) browserapi.Handler {
+	bsc, ok := content.(*browserScrollableContent)
+	if ok {
+		return bsc.Handler
+	}
+	bc, ok := content.(*browserContent)
+	if ok {
+		return bc.Handler
+	}
+	bfc, ok := content.(*browserFloatingContent)
+	if ok {
+		return bfc.Handler
+	}
+	bfsc, ok := content.(*browserFloatingScrollableContent)
+	if ok {
+		return bfsc.Handler
+	}
+	panic("extraneous content")
 }
 
 type clearOnClosePromptHandler struct {

@@ -153,6 +153,14 @@ var (
 				return iterator.FromSlice[string](nil), "", nil
 			},
 		},
+		"tabconvert": {
+			man: textapi.CommandManual{
+				Summary: "Converts the content of the window in focus into a tab. " +
+					"If the current window is a floating window, it is closed.",
+				Synopsis: "name [icon]",
+			},
+			handler: (*ex).convertTab,
+		},
 		"windowclose": {
 			man: textapi.CommandManual{
 				Summary: "Closes the current active window and switches focus " +

@@ -33,6 +33,7 @@ import (
 	"github.com/ernestrc/logd-go/logging"
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
 	log "github.com/sirupsen/logrus"
+	"unstable.build/go-tui"
 	"unstable.build/go-tui/api/schemeapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/debug"
@@ -207,7 +208,12 @@ func (m *Manager) Close() error {
 }
 
 // allows calling it directly in tests with fake windows
-func (m *Manager) onFocus(prevFocus, newFocus interface{ ID() uint64 }) {
+type window interface {
+	ID() uint64
+	Content() tui.Handler
+}
+
+func (m *Manager) onFocus(prevFocus, newFocus window) {
 	m.tasks.Range(func(k, v any) bool {
 		task := v.(*Task)
 		winID := task.win.WindowID()
@@ -218,6 +224,17 @@ func (m *Manager) onFocus(prevFocus, newFocus interface{ ID() uint64 }) {
 		}
 		return true
 	})
+	t, ok := newFocus.Content().(*browser.Tab)
+	if !ok {
+		return
+	}
+	task, ok := t.Handler().(*Task)
+	if !ok {
+		return
+	}
+	if task.tab != nil {
+		t.ResetAttrs()
+	}
 }
 
 func (m *Manager) log(level log.Level, msg string, args ...interface{}) {
