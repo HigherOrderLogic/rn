@@ -412,6 +412,7 @@ type HandleStreamResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Handled       bool                   `protobuf:"varint,1,opt,name=handled,proto3" json:"handled,omitempty"`
 	Quit          bool                   `protobuf:"varint,2,opt,name=quit,proto3" json:"quit,omitempty"`
+	Request       *termrpc.Event         `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -458,6 +459,13 @@ func (x *HandleStreamResponse) GetQuit() bool {
 		return x.Quit
 	}
 	return false
+}
+
+func (x *HandleStreamResponse) GetRequest() *termrpc.Event {
+	if x != nil {
+		return x.Request
+	}
+	return nil
 }
 
 type ManStreamRequest struct {
@@ -1084,10 +1092,11 @@ const file_handlerrpc_handler_proto_rawDesc = "" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x0e\n" +
 	"\x02ok\x18\x02 \x01(\bR\x02ok\"8\n" +
 	"\x13HandleStreamRequest\x12!\n" +
-	"\x05event\x18\x01 \x01(\v2\v.term.EventR\x05event\"D\n" +
+	"\x05event\x18\x01 \x01(\v2\v.term.EventR\x05event\"k\n" +
 	"\x14HandleStreamResponse\x12\x18\n" +
 	"\ahandled\x18\x01 \x01(\bR\ahandled\x12\x12\n" +
-	"\x04quit\x18\x02 \x01(\bR\x04quit\"\x12\n" +
+	"\x04quit\x18\x02 \x01(\bR\x04quit\x12%\n" +
+	"\arequest\x18\x03 \x01(\v2\v.term.EventR\arequest\"\x12\n" +
 	"\x10ManStreamRequest\"3\n" +
 	"\x11ManStreamResponse\x12\x1e\n" +
 	"\x03man\x18\x01 \x01(\v2\f.term.ManualR\x03man\"\x15\n" +
@@ -1181,14 +1190,15 @@ var file_handlerrpc_handler_proto_depIdxs = []int32{
 	18, // 11: handler.DrawStreamResponse.cursor:type_name -> handler.DrawStreamResponse.Cursor
 	19, // 12: handler.DrawStreamResponse.selection:type_name -> handler.DrawStreamResponse.Selection
 	21, // 13: handler.HandleStreamRequest.event:type_name -> term.Event
-	22, // 14: handler.ManStreamResponse.man:type_name -> term.Manual
-	23, // 15: handler.CursorStreamResponse.position:type_name -> term.Coordinates
-	23, // 16: handler.DrawStreamResponse.Cursor.position:type_name -> term.Coordinates
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	21, // 14: handler.HandleStreamResponse.request:type_name -> term.Event
+	22, // 15: handler.ManStreamResponse.man:type_name -> term.Manual
+	23, // 16: handler.CursorStreamResponse.position:type_name -> term.Coordinates
+	23, // 17: handler.DrawStreamResponse.Cursor.position:type_name -> term.Coordinates
+	18, // [18:18] is the sub-list for method output_type
+	18, // [18:18] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_handlerrpc_handler_proto_init() }

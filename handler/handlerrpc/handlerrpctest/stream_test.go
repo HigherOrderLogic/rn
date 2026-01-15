@@ -162,7 +162,7 @@ AAAAAAAAAAAAAAAAAAAA
 		mock := browserapitest.NewMockFloating(ctrl)
 		var wg sync.WaitGroup
 
-		expectedHandled, expectedExit := false, true
+		expectedHandled, expectedExit := true, true
 		expectedEv := term.Event{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}
 		client, closeFn := setupIntTest(t, mock, func() {
 			mock.EXPECT().Handle(gomock.Any()).DoAndReturn(func(actualEv term.Event) (bool, bool) {
@@ -190,6 +190,41 @@ AAAAAAAAAAAAAAAAAAAA
 		_, _ = client.Handle(expectedEv)
 		// wait for event none
 		wg.Wait()
+	})
+
+	t.Run("handle re-dispatches prior event if handle response is handled=false", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		mock := browserapitest.NewMockFloating(ctrl)
+		var wg sync.WaitGroup
+
+		var actualRepublishedEvent term.Event
+		expectedHandled, expectedExit := false, false
+		ev := term.Event{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}
+		client, closeFn := setupIntTest(t, mock, func() {
+			mock.EXPECT().Handle(gomock.Any()).DoAndReturn(func(actualEv term.Event) (bool, bool) {
+				assert.Equal(t, ev, actualEv)
+				return expectedExit, expectedHandled
+			})
+			mock.EXPECT().Selection()
+			mock.EXPECT().Dimensions()
+			mock.EXPECT().Cursor()
+			mock.EXPECT().Draw(gomock.Any())
+		}, func(_ev term.Event) error {
+			if _ev.Type == term.EventKey {
+				defer wg.Done()
+				actualRepublishedEvent = _ev
+			}
+			return nil
+		})
+		defer closeFn()
+
+		wg.Add(1)
+		_, _ = client.Handle(ev)
+		wg.Wait()
+		// raw is overwritten for the re-publishing feature
+		actualRepublishedEvent.Raw = nil
+		ev.Raw = nil
+		assert.Equal(t, ev, actualRepublishedEvent)
 	})
 
 	t.Run("cursor returns nothing", func(t *testing.T) {

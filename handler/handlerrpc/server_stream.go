@@ -119,13 +119,15 @@ func (c *ServerStream[T]) ReceiveMessages() {
 			c.handler.Resize(width, height)
 
 		case MessageType_Handle:
+			rpcEv := recvMsg.GetHandle().GetEvent()
 			var ev term.Event
-			ev, err = recvMsg.GetHandle().GetEvent().ToModel()
+			ev, err = rpcEv.ToModel()
 			if err == nil {
 				exit, handled := c.handler.Handle(ev)
 				var resp HandleStreamResponse
 				resp.Handled = handled
 				resp.Quit = exit
+				resp.Request = rpcEv
 				sendMsg.SetHandle(&resp)
 				err = c.stream.SendMsg(sendMsg)
 			}

@@ -24,6 +24,7 @@
 package handlerrpc
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -171,6 +172,8 @@ func (s *ClientStream[T]) ReceiveMessages() (ret error) {
 	}
 }
 
+var clientStreamRepublishKey = []byte("__handlerrpc.ClientStreamRepublish")
+
 // Handle satisfies Handler.
 func (s *ClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
 	if s.exit.Load() {
@@ -179,6 +182,11 @@ func (s *ClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
 	}
 	if s.closed.Load() {
 		return
+	}
+	// republished event that's ignored because
+	// handler server responded with handled=false.
+	if bytes.Equal(ev.Raw, clientStreamRepublishKey) {
+		return false, false
 	}
 	pending := s.respPending.CompareAndSwap(true, false)
 	if pending {
@@ -536,9 +544,7 @@ func (s *ClientStream[T]) receiveMessages() (ret error) {
 			s.mu.Unlock()
 		case MessageType_Handle:
 			handle := recvMsg.GetHandle()
-			// GetHandled is ignored; Handle always returns true
-			exit := handle.GetQuit()
-			if exit {
+			if handle.GetQuit() {
 				s.exit.Store(true)
 				// handle response might arrive late, and EventNone
 				// dispatched to a different Handler. This is an acceptable
@@ -558,6 +564,19 @@ func (s *ClientStream[T]) receiveMessages() (ret error) {
 					var req CloseStreamRequest
 					msg := ServerMessage{Type: MessageType_Close, Close: &req}
 					ret = s.stream.SendMsg(&msg)
+				}
+			} else if !handle.GetHandled() {
+				// re-publish event that wasn't handled, so we can return handled=false to Handle
+				ev, err := handle.GetRequest().ToModel()
+				if err != nil {
+					s.log(log.ErrorLevel, "convert handle event back into model: %v", err)
+					continue
+				}
+				ev.Raw = clientStreamRepublishKey
+				err = s.publisher(ev)
+				if err != nil {
+					ret = fmt.Errorf("publish event none: %w", err)
+					return
 				}
 			}
 		case MessageType_Resize:

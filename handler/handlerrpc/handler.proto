@@ -67,6 +67,7 @@ message HandleStreamRequest {
 message HandleStreamResponse {
 	bool handled = 1;
 	bool quit = 2;
+    term.Event request = 3;
 }
 
 message ManStreamRequest {}
