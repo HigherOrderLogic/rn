@@ -677,21 +677,32 @@ func (t *Component) createPty() error {
 		return fmt.Errorf("expand shell arguments: %w", err)
 	}
 	t.log(log.DebugLevel, "creating pty with cmdAndArgs: %#v", cmdAndArgs)
-	if len(cmdAndArgs) == 0 {
-		sh := os.Getenv("SHELL")
-		if sh == "" {
-			sh = "sh"
-		}
-		cmdAndArgs = []string{sh, "--login", "-i"}
-	}
 	cmd := workspaceapi.Cmd{
-		Path: cmdAndArgs[0],
 		SysProcAttr: &syscall.SysProcAttr{
 			Setsid:  true,
 			Setctty: true,
 		},
 		Watcher: t.watcher,
 	}
+	if len(cmdAndArgs) == 0 {
+		sh := os.Getenv("SHELL")
+		if sh == "" {
+			sh = "sh"
+		}
+		cmdAndArgs = []string{sh, "--login"}
+		switch cmdAndArgs[0] {
+		case "zsh":
+			if t.cfg.ZdotDir != "" {
+				cmd.Env = append(cmd.Env, fmt.Sprintf("ZDOTDIR=%s", t.cfg.ZdotDir))
+			}
+		case "bash":
+			// with bash there's nothing you can inject (en vars or cli options); if --login is set
+			// BASH_ENV, --rcfile are ignored. So we can't provide a custom rc
+		case "sh": // ctrl-a ctrl-g works by default
+		}
+	}
+
+	cmd.Path = cmdAndArgs[0]
 	if len(cmdAndArgs) > 1 {
 		cmd.Args = cmdAndArgs[1:]
 	}

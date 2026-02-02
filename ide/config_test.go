@@ -384,7 +384,8 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 func TestConfigDefault(t *testing.T) {
 	ret := new(ideConfig)
-	initDefaultConfig(ret, browser.NopWallpaper(), term.RingBell, term.ScheduleNextTick)
+	initDefaultConfig(ret, browser.NopWallpaper(),
+		term.RingBell, term.ScheduleNextTick, "")
 	assertDefaultConfig(t, ret)
 }
 
@@ -413,7 +414,8 @@ func TestConfigSetting(t *testing.T) {
 	require.NoError(t, err)
 
 	var cfg ideConfig
-	initConfig(&cfg, m, browser.NopWallpaper(), term.RingBell, term.ScheduleNextTick)
+	initConfig(&cfg, m, browser.NopWallpaper(),
+		term.RingBell, term.ScheduleNextTick, "")
 
 	assert.Equal(t, 4, cfg.editorTabspaces())
 	_, ok := cfg.wallpaper().NewComponent().(component.String)
@@ -744,7 +746,7 @@ func TestConfigSetting(t *testing.T) {
 func TestLoadEmbededConfig(t *testing.T) {
 	var cfg ideConfig
 	err := loadConfig(&cfg, "nonExistent", browser.NopWallpaper(), "{}",
-		term.RingBell, term.ScheduleNextTick)
+		term.RingBell, term.ScheduleNextTick, "")
 	require.NoError(t, err)
 }
 
@@ -766,7 +768,7 @@ command:
 
 	var cfg ideConfig
 	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}",
-		term.RingBell, term.ScheduleNextTick)
+		term.RingBell, term.ScheduleNextTick, "")
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "alias cycle detected")
 	assert.Empty(t, cfg.commandAliases())
@@ -785,7 +787,7 @@ editor:
 
 	var cfg ideConfig
 	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(), "{}",
-		term.RingBell, term.ScheduleNextTick)
+		term.RingBell, term.ScheduleNextTick, "")
 	require.NoError(t, err)
 	assert.Equal(t, 2, cfg.editorTabspaces())
 }
