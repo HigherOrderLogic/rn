@@ -209,7 +209,8 @@ func (i *IDE) init(
 	i.options = op
 
 	configErr := loadConfig(&i.ideConfig, cfgfilename,
-		op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
+		op.defaultWallpaper, op.defaultConfig, op.bell,
+		op.scheduleFn, op.bashrcFile, op.zdotDir)
 
 	if logPath := i.ideConfig.logOutputPath(); logPath != "" {
 		f, err := workspace.OpenFile(logPath,
@@ -308,7 +309,8 @@ func (i *IDE) init(
 		notifications, i.ideConfig, dataDir, i.publishEvent,
 		op.extensionRunner, i.locker, op.extensions, func() (ideConfig, error) {
 			return reloadConfig(cfgfilename,
-				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn)
+				op.defaultWallpaper, op.defaultConfig, op.bell, op.scheduleFn,
+				op.bashrcFile, op.zdotDir)
 		}, op.workspaceConfig, op.tabBarOffset,
 		op.tabBarHeight, op.workspacesIcon, op.workspacesBarHeight,
 		op.workspacesBarOffset, op.workspacesBarFrame, op.tabsClickCallback,

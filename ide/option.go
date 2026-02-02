@@ -176,6 +176,24 @@ func WithScheduleNextTick(scheduleFn func(func()) bool) Option {
 	}
 }
 
+// WithBashrcFile sets the starting bash configuration file via --rcfile
+// when bash is used as the default shell, or is passed via config (terminal.shell)
+// as "bash", rather than with the proper flags (-i, --login, etc.).
+func WithBashrcFile(bashrcFile string) Option {
+	return func(opts *options) {
+		opts.bashrcFile = bashrcFile
+	}
+}
+
+// WithZdotDir sets the starting zsh directory configuration file via env ZDOTDIR
+// when zsh is used as the default shell, or is passed via config (terminal.shell)
+// as "zsh", rather than with the proper flags (-i, --login, etc.).
+func WithZdotDir(dir string) Option {
+	return func(opts *options) {
+		opts.zdotDir = dir
+	}
+}
+
 // WithInitShader configures the IDE to initialize with the
 // given Shader animation.
 func WithInitShader(
@@ -284,6 +302,8 @@ type options struct {
 	shutdownShaderFn       func(term.Attributes) shader.Shader
 	shutdownShaderDuration time.Duration
 	shutdownShaderFPS      int
+	bashrcFile             string
+	zdotDir                string
 }
 
 func defaultOptions() options {

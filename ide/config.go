@@ -88,6 +88,8 @@ type ideConfig struct {
 	errors           map[string]error
 	ringBell         func()
 	scheduleNextTick func(func()) bool
+	bashrcFile       string
+	zdotDir          string
 }
 
 func overrideConfig(ideConfig, cfg map[string]interface{}) {
@@ -114,10 +116,13 @@ func overrideConfig(ideConfig, cfg map[string]interface{}) {
 func initConfig(
 	c *ideConfig, cfg map[string]interface{}, defaultWallpaper browser.Wallpaper,
 	ringBell func(), scheduleNextTick func(func()) bool,
+	bashrcFile, zdotDir string,
 ) {
 	c.cfg = cfg
 	c.ringBell = ringBell
 	c.scheduleNextTick = scheduleNextTick
+	c.bashrcFile = bashrcFile
+	c.zdotDir = zdotDir
 	c.defaultWallpaper = defaultWallpaper
 	c.errors = make(map[string]error)
 }
@@ -125,9 +130,11 @@ func initConfig(
 func initDefaultConfig(
 	c *ideConfig, defaultWallpaper browser.Wallpaper,
 	ringBell func(), scheduleNextTick func(func()) bool,
+	bashrcFile, zdotDir string,
 ) {
 	cfg := make(map[string]interface{})
-	initConfig(c, cfg, defaultWallpaper, ringBell, scheduleNextTick)
+	initConfig(c, cfg, defaultWallpaper, ringBell,
+		scheduleNextTick, bashrcFile, zdotDir)
 }
 
 func (c ideConfig) command() (config.Config, bool) {
@@ -1917,6 +1924,8 @@ func (c ideConfig) terminalConfig() vte.Config {
 	ret.ScheduleNextTick = c.scheduleNextTick
 	ret.RingBell = c.ringBell
 	ret.MinWidth = defaultMinWidth
+	ret.ZdotDir = c.zdotDir
+	ret.BashrcFile = c.bashrcFile
 	return ret
 }
 
@@ -2075,9 +2084,11 @@ func decodeConfig(r io.Reader) (cfg map[string]interface{}, err error) {
 func reloadConfig(
 	configFilePath string, defaultWallpaper browser.Wallpaper,
 	defaultConfig string, ringBell func(), scheduleNextTick func(func()) bool,
+	bashrcFile, zdotDir string,
 ) (ret ideConfig, err error) {
 	err = loadConfig(&ret, configFilePath,
-		defaultWallpaper, defaultConfig, ringBell, scheduleNextTick)
+		defaultWallpaper, defaultConfig, ringBell,
+		scheduleNextTick, bashrcFile, zdotDir)
 	return
 }
 
@@ -2117,15 +2128,18 @@ func loadConfig(
 	defaultWallpaper browser.Wallpaper,
 	defaultConfig string,
 	ringBell func(), scheduleNextTick func(func()) bool,
+	bashrcFile, zdotDir string,
 ) (err error) {
-	initDefaultConfig(c, defaultWallpaper, ringBell, scheduleNextTick)
+	initDefaultConfig(c, defaultWallpaper, ringBell, scheduleNextTick,
+		bashrcFile, zdotDir)
 
 	cfg, err := decodeConfig(strings.NewReader(defaultConfig))
 	if err != nil {
 		panic(err)
 	}
 
-	initConfig(c, cfg, defaultWallpaper, ringBell, scheduleNextTick)
+	initConfig(c, cfg, defaultWallpaper, ringBell,
+		scheduleNextTick, bashrcFile, zdotDir)
 
 	if err := loadFileConfig(c, configpath); err != nil {
 		return err

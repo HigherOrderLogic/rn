@@ -174,15 +174,11 @@ func (p *ptyWriter) triggerBell() error {
 			// gets filled up, the performance degrades substantially
 			// but eventually it should catch up.
 			var data []byte
-			if p.comp.parserHandler.modeCursorKeys {
-				data = []byte{0x01, 0x1b, 'O', 'D'}
-			} else {
-				data = []byte{0x01, 0x1b, '[', 'D'}
-			}
 			if len(p.comp.cfg.Bell) != 0 {
-				// trigger clients still expect cursor to move left
-				// with the bell trigger
-				data = append(p.comp.cfg.Bell, data...)
+				data = append(data, p.comp.cfg.Bell...)
+			} else {
+				// ctrl-a, ctrl-g is the default
+				data = []byte{0x01, 0x07}
 			}
 			scheduled := p.scheduleCallback(func() {
 				_ = p.comp.WriteToPty(data)

@@ -87,7 +87,9 @@ type Config struct {
 	WidthHint  int
 	HeightHint int
 
-	Debug bool
+	Debug      bool
+	BashrcFile string
+	ZdotDir    string
 }
 
 func (c Config) scheduleBell() {
