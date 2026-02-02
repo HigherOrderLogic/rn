@@ -176,6 +176,15 @@ func WithScheduleNextTick(scheduleFn func(func()) bool) Option {
 	}
 }
 
+// WithZdotDir sets the starting zsh directory configuration file via env ZDOTDIR
+// when zsh is used as the default shell, or is passed via config (terminal.shell)
+// as "zsh", rather than with the proper flags (-i, --login, etc.).
+func WithZdotDir(dir string) Option {
+	return func(opts *options) {
+		opts.zdotDir = dir
+	}
+}
+
 // WithInitShader configures the IDE to initialize with the
 // given Shader animation.
 func WithInitShader(
@@ -284,6 +293,7 @@ type options struct {
 	shutdownShaderFn       func(term.Attributes) shader.Shader
 	shutdownShaderDuration time.Duration
 	shutdownShaderFPS      int
+	zdotDir                string
 }
 
 func defaultOptions() options {
