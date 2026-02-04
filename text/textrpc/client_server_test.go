@@ -36,21 +36,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/browser/browserrpc"
+	tbrowserrpc "unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 	"unstable.build/go-tui/workspace"
@@ -443,13 +444,13 @@ func TestClientServerIntegration(t *testing.T) {
 		r := client.CellView(h)
 		cells, err := r.RawCells()
 		require.NoError(t, err)
-		assert.Equal(t, "guacamole", cell.CellsToString(cells))
+		assert.Equal(t, "guacamole", term.CellsToString(cells))
 
 		buf.WriteString("\npollos hermanos")
 
 		cells, err = r.RawCells()
 		require.NoError(t, err)
-		assert.Equal(t, "guacamole\npollos hermanos", cell.CellsToString(cells))
+		assert.Equal(t, "guacamole\npollos hermanos", term.CellsToString(cells))
 	})
 
 	t.Run("dispatches commands to subscribed command handler", func(t *testing.T) {
@@ -566,7 +567,7 @@ func TestClientServerIntegration(t *testing.T) {
 		wg.Add(1)
 		noti.EXPECT().Notify(gomock.Any(), gomock.Any(), gomock.Any()).
 			Times(1).
-			DoAndReturn(func(notifications.Level, string, ...any) (string, error) {
+			DoAndReturn(func(browserapi.NotificationLevel, string, ...any) (string, error) {
 				wg.Done()
 				return "", nil
 			})
@@ -772,7 +773,7 @@ func TestRPCTab(t *testing.T) {
 			return nil, nil, err
 		}
 
-		s := browserrpc.NewServer(c, mu)
+		s := tbrowserrpc.NewServer(c, mu)
 		s.SetSyncMode()
 
 		client, closeFn := setupWmIntTest(t, s)
@@ -843,12 +844,12 @@ func testTabIntegration(t *testing.T,
 			resource2, err := workspaceapi.ParseURI("file:///b")
 			require.NoError(t, err)
 			b1 := browsertest.NewTestHandler()
-			b1.Ch = '$'
+			b1.TestHandler.Ch = '$'
 			_, err = wm.Tab(resource1, 'x', "$$", b1)
 			require.NoError(t, err)
 
 			b2 := browsertest.NewTestHandler()
-			b2.Ch = '#'
+			b2.TestHandler.Ch = '#'
 			t2, err := wm.Tab(resource2, 'x', "##", b2)
 			require.NoError(t, err)
 
@@ -856,7 +857,7 @@ func testTabIntegration(t *testing.T,
 			require.NoError(t, err)
 
 			require.NoError(t, wm.SetWindowContent(win, t2))
-			return handler.Sync(&mu, handler.Nop(c.Browser()))
+			return handler.Sync(&mu, handler.NopFromComponent(c.Browser()))
 		}
 		handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 	})
@@ -975,7 +976,7 @@ func setupIntTest(
 	t *testing.T, s *Server,
 ) (*Client, func()) {
 	conn, closeFn := doSetupIntTest(t, func(grpcServer *grpc.Server) {
-		RegisterEditorServer(grpcServer, s)
+		textrpc.RegisterEditorServer(grpcServer, s)
 	})
 	client := NewClient(context.Background(), conn)
 	return client, func() {
@@ -985,7 +986,7 @@ func setupIntTest(
 }
 
 func setupWmIntTest(
-	t *testing.T, s *browserrpc.Server,
+	t *testing.T, s *tbrowserrpc.Server,
 ) (*browserrpc.Client, func()) {
 	conn, closeFn := doSetupIntTest(t, func(grpcServer *grpc.Server) {
 		browserrpc.RegisterWindowManagerServer(grpcServer, s)
@@ -1000,12 +1001,12 @@ func setupWmIntTest(
 type nopNotifications struct{}
 
 func (n nopNotifications) Notify(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	return "", nil
 }
 func (n nopNotifications) NotifyOnce(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	return "", nil
 }

@@ -27,7 +27,7 @@ import (
 	"context"
 	"fmt"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // View is the interface that wraps methods to query a 2D matrix of term.Cell.

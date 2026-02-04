@@ -30,14 +30,15 @@ import (
 	"os"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/workspace/workspacerpc"
+	tworkspacerpc "unstable.build/go-tui/workspace/workspacerpc"
 )
 
 // StartSchemeServer installs server to handle incoming workspacerpc requests
 // over the calling process' os.Stdin and sends responses over os.Stdout.
 func StartSchemeServer(
-	logger *log.Logger, server *workspacerpc.Server,
+	logger *log.Logger, server *tworkspacerpc.Server,
 	grpcServer *grpc.Server,
 ) error {
 	lis := newStdioListener(

@@ -24,9 +24,9 @@
 package idetask
 
 import (
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 type noopWindow struct{}

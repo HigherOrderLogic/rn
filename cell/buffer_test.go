@@ -30,7 +30,7 @@ import (
 	"testing"
 	"unicode"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1085,7 +1085,7 @@ func (b *testView) String() string {
 	if !b.endsWithEOL() {
 		return b.reader.String()
 	}
-	return CellsToString(b.RawCells())
+	return term.CellsToString(b.RawCells())
 }
 
 func TestBufferInsertRowAtWithUnixView(t *testing.T) {

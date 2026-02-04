@@ -27,7 +27,7 @@ import (
 	"testing"
 
 	"unstable.build/go-tui/component/shader/shadertest"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestFlames(t *testing.T) {

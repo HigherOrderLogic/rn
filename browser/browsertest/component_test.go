@@ -28,14 +28,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	browser "unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/browser"
+	thandler "unstable.build/go-tui/handler"
 )
 
 func splitVerticalLeft(c *browser.Component, h browserapi.Handler) (browser.Window, bool) {
@@ -563,7 +564,7 @@ func TestComponentPrompt(t *testing.T) {
 		c.Resize(20, 12)
 		closeCalled := false
 		c.Prompt("Albert Pla?", []string{"Buah!", "Hmm"}, nil,
-			handler.FuncPromptHandler(
+			thandler.FuncPromptHandler(
 				func(idx int, option string) {},
 				func() error {
 					closeCalled = true
@@ -603,7 +604,7 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
-				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, handler.NopPromptHandler())
+				c.Prompt("Virgen Maria?", []string{"Boh", "Meh"}, nil, thandler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │x music           │    
@@ -634,12 +635,13 @@ func TestComponentPrompt(t *testing.T) {
 └──────────────────┘    `,
 			}, {func() {
 				c.Prompt("Tokischa?", []string{"Yay", "Nay"}, nil,
-					handler.FuncPromptHandler(
+					thandler.FuncPromptHandler(
 						func(idx int, option string) {
-							c.Prompt("Robert Love", []string{"YAS!"}, nil, handler.NopPromptHandler())
+							c.Prompt("Robert Love", []string{"YAS!"}, nil,
+								thandler.NopPromptHandler())
 						},
 						func() error { return nil }))
-				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, handler.NopPromptHandler())
+				c.Prompt("Rosalia?", []string{"Yay", "Nay"}, nil, thandler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │x music           │    
@@ -780,9 +782,12 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil,
+					thandler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil,
+					thandler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil,
+					thandler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │x music           │    
@@ -812,9 +817,9 @@ func TestComponentPrompt(t *testing.T) {
 │888888888888888888│    
 └──────────────────┘    `,
 			}, {func() {
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
-				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, handler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, thandler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, thandler.NopPromptHandler())
+				c.Prompt("Twitch Streaming?", []string{"Yes", "No"}, nil, thandler.NopPromptHandler())
 			}, `
 ┌──────────────────┐    
 │x music           │    
@@ -893,7 +898,7 @@ func TestComponentSplitNil(t *testing.T) {
 		cfg.Wallpaper = browser.Wallpaper{
 			NewComponent: func() tui.Component {
 				return component.NewStringWithConfig("BART", component.StringConfig{
-					Alignment: component.SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				})
 			},
 		}
@@ -923,7 +928,7 @@ func TestFloatingPanicWallpaper(t *testing.T) {
 	c := browser.NewComponent(cfg)
 	c.Resize(20, 8)
 
-	fw := c.Floating(browser.StaticFloating(NewTestHandler(), 10, 10), component.FloatingConfig{})
+	fw := c.Floating(browser.StaticFloating(NewTestHandler(), 10, 10), browserapi.FloatingConfig{})
 	c.SetFocus(fw)
 	assert.NotPanics(t, func() {
 		c.RemoveWindowContent(c.Focus())

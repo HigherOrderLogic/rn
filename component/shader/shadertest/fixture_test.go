@@ -26,7 +26,7 @@ package shadertest
 import (
 	"math"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // testShader1234 draws characters progressively from 0-9 based on progress

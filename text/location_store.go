@@ -27,10 +27,10 @@ import (
 	"math"
 	"sort"
 
-	"unstable.build/go-tui/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // LocationStore manages LocationLists and priorities and provides

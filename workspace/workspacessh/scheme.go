@@ -37,13 +37,13 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
 const (

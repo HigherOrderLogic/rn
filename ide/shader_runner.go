@@ -31,13 +31,13 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/component"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/glslshader"
 	"unstable.build/go-tui/component/shader/timeshader"
-	"unstable.build/go-tui/term"
 )
 
 const (

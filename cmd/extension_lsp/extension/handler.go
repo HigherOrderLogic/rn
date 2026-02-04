@@ -38,31 +38,31 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/golang-internal-tools/fakenet"
 	"github.com/unstablebuild/golang-internal-tools/jsonrpc2"
 	"github.com/unstablebuild/golang-internal-tools/lsp"
 	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"github.com/unstablebuild/golang-internal-tools/lsp/source"
 	"github.com/unstablebuild/golang-internal-tools/span"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/browserapi/browserext"
-	"unstable.build/go-tui/api/config"
 	configextension "unstable.build/go-tui/api/config/extension"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
-	"unstable.build/go-tui/handler"
+	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
 )
@@ -860,7 +860,7 @@ func (h *lspEditorHandler) newFile(
 			URI: protocol.URIFromSpanURI(spanURI),
 		},
 		uri:        uri,
-		_cells:     cell.StringToCells(content),
+		_cells:     term.StringToCells(content),
 		languageID: languageID,
 	}
 
@@ -1241,7 +1241,7 @@ func (h *lspEditorHandler) handleFileFlush(ev textapi.Event) error {
 	if err != nil {
 		return err
 	}
-	h.setCells(f, cell.StringToCells(ev.Content))
+	h.setCells(f, term.StringToCells(ev.Content))
 	ctx = h.newSemanticTokensCtx()
 	return h.semanticTokensFull(ctx, srv, f, h.getCells(f), ev.Content)
 }
@@ -1683,10 +1683,10 @@ func (h *lspEditorHandler) handleHover(
 	}
 
 	log.Tracef("lspEditorHandler.Server.Hover(%s, %s): %#v", f.uri, f.languageID, hover)
-	cfg := handler.DefaultLessConfig()
+	cfg := thandler.DefaultLessConfig()
 	cfg.Attributes = h.hoverWindowAttr
 	cfg.BarAttr = h.hoverWindowAttr
-	less := handler.NewLess(cfg)
+	less := thandler.NewLess(cfg)
 	less.Buffer().WriteString(hover.Contents.Value)
 	padx, pady := 1, 1
 	if h.frame {
@@ -1694,10 +1694,10 @@ func (h *lspEditorHandler) handleHover(
 		padx += 2
 	}
 	bh := browserapi.NopFloatingHandler(handler.PaddedFloating(
-		handler.FloatingBuffer(less, less.Buffer()), padx, pady))
+		thandler.FloatingBuffer(less, less.Buffer()), padx, pady))
 
 	at := h.findBestFloatingWindowPosition(cursorAtWindow, less.Buffer().Rows())
-	_, err = h.wm.Floating(bh, component.FloatingConfig{Offset: at})
+	_, err = h.wm.Floating(bh, browserapi.FloatingConfig{Offset: at})
 	if err != nil {
 		err = fmt.Errorf("wm.Floating: %v", err)
 		return err
@@ -1816,7 +1816,7 @@ func (h *lspEditorHandler) browseLocations(
 
 		err := h.goToLocation(win, textToLocation[text])
 		if err != nil {
-			_, _ = h.m.Notify(notifications.LevelError, "go to location: %s", err)
+			_, _ = h.m.Notify(browserapi.LevelError, "go to location: %s", err)
 		}
 	})
 

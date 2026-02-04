@@ -35,14 +35,14 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
@@ -1072,7 +1072,7 @@ func newTestWorkspaceManagerHandlerWithReleaseManager(
 	cfg.cfg["command"] = updatedCfg
 
 	shRunner := new(shaderRunner)
-	shRunner.init(handler.Nop(component.Nop()), interrupter, term.Attributes{},
+	shRunner.init(handler.Nop(), interrupter, term.Attributes{},
 		shutdownShaderCfg, component.FrameCharSetDefault())
 
 	err = m.workspaceManagerHandler.init(nil, homeURI, manager, n, cfg,

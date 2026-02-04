@@ -36,21 +36,21 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	gomock "go.uber.org/mock/gomock"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/api/extutil"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/workspacetest"
@@ -58,7 +58,6 @@ import (
 
 var (
 	keya = term.KeyComb{Ch: 'a'}
-	keyb = term.KeyComb{Ch: 'b'}
 )
 
 type testFlusherCloser struct {
@@ -1051,7 +1050,7 @@ func TestEventTypeFocusIntegration(t *testing.T) {
 		win, err := c.Focus()
 		require.NoError(t, err)
 		mock.EXPECT().Handle(gomock.Any(), gomock.Any()).Return(false).Times(1)
-		win.SetContent(browserapi.NopHandler(handler.Nop(component.Nop())))
+		win.SetContent(browserapi.NopHandler(handler.Nop()))
 		_, ok := c.Browser().NewTabFromContent('a', "bla", win)
 		require.True(t, ok)
 		require.NoError(t, c.SubscribeEvents(evs, mock))
@@ -1610,12 +1609,12 @@ func testTabIntegration(t *testing.T,
 			resource2, err := workspaceapi.ParseURI("file:///b")
 			require.NoError(t, err)
 			b1 := browsertest.NewTestHandler()
-			b1.Ch = '$'
+			b1.TestHandler.Ch = '$'
 			_, err = wm.Tab(resource1, 'x', "$$", b1)
 			require.NoError(t, err)
 
 			b2 := browsertest.NewTestHandler()
-			b2.Ch = '#'
+			b2.TestHandler.Ch = '#'
 			t2, err := wm.Tab(resource2, 'x', "##", b2)
 			require.NoError(t, err)
 
@@ -1623,7 +1622,7 @@ func testTabIntegration(t *testing.T,
 			require.NoError(t, err)
 
 			require.NoError(t, win.SetContent(t2))
-			return handler.Sync(&mu, handler.Nop(c))
+			return handler.Sync(&mu, handler.NopFromComponent(c))
 		}
 		handlertest.TestHandlerIsolated(t, fn, 20, 10, cases)
 	})
@@ -1796,7 +1795,7 @@ func TestReload(t *testing.T) {
 			cview := ed.CellView()
 			cells := cview.RawCells()
 			require.NoError(t, err)
-			assert.Equal(t, expected, cell.CellsToString(cells))
+			assert.Equal(t, expected, term.CellsToString(cells))
 
 			res, ok := tracker.Resource(resource1)
 			require.True(t, ok)
@@ -1875,7 +1874,7 @@ func TestOverwrite(t *testing.T) {
 			t.Helper()
 			cview := ed.CellView()
 			cells := cview.RawCells()
-			assert.Equal(t, expected, cell.CellsToString(cells))
+			assert.Equal(t, expected, term.CellsToString(cells))
 
 			res, ok := tracker.Resource(resource1)
 			require.True(t, ok)

@@ -35,15 +35,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/release"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
-	"unstable.build/go-tui/term"
 )
 
 func TestIDEInitializationIntegration(t *testing.T) {

@@ -36,8 +36,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
 )
 
 //go:embed test/*.in
@@ -71,14 +71,14 @@ func TestLSPFormatting(t *testing.T) {
 			buffer := cell.NewBuffer()
 			_, err = buffer.ReadFrom(in)
 			require.NoError(t, err)
-			editsRaw := cell.CellsToString(buffer.RawCells()[buffer.Rows()-2:])
+			editsRaw := term.CellsToString(buffer.RawCells()[buffer.Rows()-2:])
 			var edits []protocol.TextEdit
 			err = json.Unmarshal([]byte(editsRaw), &edits)
 			require.NoError(t, err)
 
 			var b editBuilder
 			b.init(4, makeFile(), wrapEditor{buffer.Editor()},
-				cell.StringToCells(buffer.String()))
+				term.StringToCells(buffer.String()))
 			b.applyEdits(edits)
 			assert.Equal(t, string(want), b.buf.String())
 		})

@@ -29,9 +29,9 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/text"

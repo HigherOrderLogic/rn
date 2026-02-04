@@ -24,8 +24,8 @@
 package search
 
 import (
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Handler wraps a List to satisfy tui.Handler.
@@ -100,10 +100,6 @@ func (s simpleHandler) Selection() (string, bool) {
 		return "", false
 	}
 	return string(match.Data()), true
-}
-
-func (s simpleHandler) Man() tui.Manual {
-	panic("TODO")
 }
 
 func (s simpleHandler) Resize(width, height int) {

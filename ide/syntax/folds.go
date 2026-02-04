@@ -30,7 +30,7 @@ import (
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/iterator"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const captureNameFoldsInitial = "initial_fold"

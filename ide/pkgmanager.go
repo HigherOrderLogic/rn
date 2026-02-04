@@ -34,15 +34,15 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/idepkg"
-	"unstable.build/go-tui/term"
 )
 
 const (
@@ -225,9 +225,9 @@ func (m *pkgManager) handlePkgInstall(ctx context.Context, cmd textapi.Command) 
 }
 
 func (m *pkgManager) makeProgressAnimation() component.Responsive {
-	frames, seq := component.ProgressAnimationFrames()
+	frames, seq := tcomponent.ProgressAnimationFrames()
 	animation := component.FuncResponsive(
-		component.NewAnimation(m.interrupter, frames, seq, 10),
+		tcomponent.NewAnimation(m.interrupter, frames, seq, 10),
 		func(width int) int { return 15 },
 	)
 	return animation
@@ -287,7 +287,7 @@ func (m *pkgManager) handlePkgRemove(ctx context.Context, cmd textapi.Command) e
 	if version == "" {
 		err := m.pkg.DeletePackage(ctx, pkgID)
 		if err == nil {
-			_, err = m.n.Notify(notifications.LevelSuccess,
+			_, err = m.n.Notify(browserapi.LevelSuccess,
 				"package %s has been removed", pkgID)
 		} else if errors.Is(err, idepkg.ErrNotInstalled) {
 			return fmt.Errorf("package %s is not installed", pkgID)
@@ -296,7 +296,7 @@ func (m *pkgManager) handlePkgRemove(ctx context.Context, cmd textapi.Command) e
 	}
 	err := m.pkg.DeletePackageVersion(ctx, pkgID, version, false)
 	if err == nil {
-		_, err = m.n.Notify(notifications.LevelSuccess,
+		_, err = m.n.Notify(browserapi.LevelSuccess,
 			"version %s of package %s has been removed", version, pkgID)
 		return err
 	} else if errors.Is(err, idepkg.ErrNotInstalled) {
@@ -324,7 +324,7 @@ func (m *pkgManager) handlePkgUse(ctx context.Context, cmd textapi.Command) erro
 		}
 		return err
 	}
-	_, err = m.n.Notify(notifications.LevelSuccess,
+	_, err = m.n.Notify(browserapi.LevelSuccess,
 		"version %s of package %s is now in use", version, pkgID)
 	return err
 }
@@ -371,7 +371,7 @@ func (m *pkgManager) handlePkgUpgradeAll(ctx context.Context, cmd textapi.Comman
 				return
 			}
 			if latest == inUse {
-				_, errors[i] = m.n.Notify(notifications.LevelInfo,
+				_, errors[i] = m.n.Notify(browserapi.LevelInfo,
 					"package %s already upgraded to the latest version (%s)",
 					pkgID, latest)
 				return
@@ -403,7 +403,7 @@ func (m *pkgManager) handlePkgCurrent(ctx context.Context, cmd textapi.Command) 
 		return err
 	}
 
-	_, err = m.n.Notify(notifications.LevelInfo,
+	_, err = m.n.Notify(browserapi.LevelInfo,
 		"version %s of package %s is in use", version, pkgID)
 	return err
 }

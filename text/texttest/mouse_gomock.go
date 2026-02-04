@@ -12,8 +12,8 @@ package texttest
 import (
 	reflect "reflect"
 
+	term "github.com/unstablebuild/rune-go-sdk/term"
 	gomock "go.uber.org/mock/gomock"
-	term "unstable.build/go-tui/term"
 	text "unstable.build/go-tui/text"
 )
 

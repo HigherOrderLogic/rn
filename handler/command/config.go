@@ -26,9 +26,9 @@ package command
 import (
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
 // Config represents the configuration needed to initialize a Handler.

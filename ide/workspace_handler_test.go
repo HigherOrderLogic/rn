@@ -41,20 +41,21 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release/docrelease"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
 )
@@ -396,7 +397,7 @@ func TestWorkspaceConfig(t *testing.T) {
 		releaseManager := docrelease.NewManager(document.NewInMemoryService())
 		shRunner := new(shaderRunner)
 		shRunner.init(
-			handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
+			handler.Nop(), term.NopInterrupter(), term.Attributes{},
 			nopShutdownShaderConfig(), component.FrameCharSetDefault())
 		err = m.workspaceManagerHandler.init(&uri, homeURI, manager, n, cfg, dir,
 			func(term.Event) bool {
@@ -452,6 +453,8 @@ func TestWorkspaceConfig(t *testing.T) {
 			return cfg, nil
 		}
 
+		require.Equal(t, 0, m.height)
+		require.Equal(t, 0, m.width)
 		require.NoError(t, m.commandReloadWorkspace())
 		assert.EqualValues(t, mockConfig, passed)
 
@@ -1423,7 +1426,7 @@ func TestInitializeNotifications(t *testing.T) {
 └──────────────────┘`},
 	}
 	h := newSafeHandler(m)
-	m.notifications.NotifyOnce(notifications.LevelWarn, "6:14am")
+	m.notifications.NotifyOnce(browserapi.LevelWarn, "6:14am")
 	handlertest.TestHandlerSequence(t, h, 20, 10, cases)
 
 	require.NoError(t, m.Close())
@@ -2525,7 +2528,7 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 	cfg.cfg["command"] = defaultCfg().cfg["command"]
 
 	shRunner := new(shaderRunner)
-	shRunner.init(handler.Nop(component.Nop()), term.NopInterrupter(), term.Attributes{},
+	shRunner.init(handler.Nop(), term.NopInterrupter(), term.Attributes{},
 		shutdownShaderCfg, component.FrameCharSetDefault())
 
 	releaseManager := docrelease.NewManager(document.NewInMemoryService())

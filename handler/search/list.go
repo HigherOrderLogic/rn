@@ -32,11 +32,12 @@ import (
 	"time"
 
 	"github.com/junegunn/fzf/src/util"
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 )
 
 // List is a collection of elements that can be interactively searched.
@@ -89,7 +90,7 @@ func (l *List) Init(cfg ListConfig) {
 	l.cfg = cfg.toInternal()
 
 	l.searchBar.internalRead = cell.NewBuffer()
-	l.searchBar.Responsive = component.Buffer(
+	l.searchBar.Responsive = tcomponent.Buffer(
 		l.searchBar.internalRead, component.StringResponsiveConfig{
 			StringConfig: component.StringConfig{
 				Attributes:           l.cfg.textAttr,
@@ -746,8 +747,8 @@ type searchResultComponent struct {
 type matchCounter struct {
 	width int
 	cell.Buffer
-	component.Scroll
-	component.Virtual[*component.Scroll]
+	tcomponent.Scroll
+	component.Virtual[*tcomponent.Scroll]
 }
 
 func (b *matchCounter) init() {

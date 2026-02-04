@@ -41,13 +41,12 @@ import (
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -610,7 +609,7 @@ func (t *Tree) initLocals(
 }
 
 func (t *Tree) notifyNotAvail(ext string) {
-	_, _ = t.n.Notify(notifications.LevelWarn,
+	_, _ = t.n.Notify(browserapi.LevelWarn,
 		"syntax tree parser for language (%q) is not available", ext)
 	if err := t.interrupter.Interrupt(context.Background()); err != nil {
 		t.log(log.WarnLevel, "interrupt: %v", err)
@@ -694,7 +693,7 @@ func (t *Tree) incrementalParse(start, end, from, to term.Coordinates, content s
 }
 
 func (t *Tree) persistCells() {
-	t.cells = cell.CopyCells(t.cells, t.buf.RawCells())
+	t.cells = term.CopyCells(t.cells, t.buf.RawCells())
 	t.contentBuf.Reset()
 	cell.CellsToBytesBuffer(&t.contentBuf, t.cells)
 	t.content = t.contentBuf.Bytes()

@@ -25,25 +25,9 @@ package cell
 
 import (
 	"bytes"
-	"strings"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
-
-// CellsToString returns the string representation of the given cell matrix.
-func CellsToString(cells [][]term.Cell) string {
-	builder := strings.Builder{}
-	CellsToStringBuilder(&builder, cells)
-	return builder.String()
-}
-
-// CellsToStringBuilder copies the string representation of the given cell matrix
-// to th supplied builder.
-//
-// Caller is responsible for resetting builder prior to this call if necessary.
-func CellsToStringBuilder(builder *strings.Builder, cells [][]term.Cell) {
-	copyToBuilder(builder, cells)
-}
 
 // CellsToBytesBuffer copies the bytes representation of the given cell matrix
 // to the supplied buffer.
@@ -51,47 +35,6 @@ func CellsToStringBuilder(builder *strings.Builder, cells [][]term.Cell) {
 // Caller is responsible for resetting buffer prior to this call if necessary.
 func CellsToBytesBuffer(buffer *bytes.Buffer, cells [][]term.Cell) {
 	copyToBuffer(buffer, cells)
-}
-
-// StringToCells returns the cell matrix representation of the given string.
-func StringToCells(str string) (cells [][]term.Cell) {
-	var builder rawCells
-	builder.init()
-	_, _ = builder.ReadFrom(strings.NewReader(str))
-	return builder.RawCells()
-}
-
-// CloneCells returns a deep clone of in.
-func CloneCells(in [][]term.Cell) [][]term.Cell {
-	ret := make([][]term.Cell, len(in))
-	for i, r := range in {
-		ret[i] = make([]term.Cell, len(r))
-		copy(ret[i], r)
-	}
-	return ret
-}
-
-// CopyCells copies src into dst, re-using dst's capacity when possible.
-func CopyCells(dst [][]term.Cell, src [][]term.Cell) [][]term.Cell {
-	if len(dst) > len(src) {
-		dst = dst[:len(src)]
-	} else if len(dst) < len(src) {
-		for i := len(dst); i < len(src); i++ {
-			dst = append(dst, nil) // will be replaced with a proper row below
-		}
-	}
-
-	for i := range len(src) {
-		if cap(dst[i]) < len(src[i]) {
-			dst[i] = make([]term.Cell, len(src[i]))
-		} else if dst[i] == nil { // cap=0, len=0; set to nil above
-			dst[i] = make([]term.Cell, 0)
-		} else {
-			dst[i] = dst[i][:len(src[i])]
-		}
-		copy(dst[i], src[i])
-	}
-	return dst
 }
 
 // CellsToBuffer efficienty returns a Buffer that uses c as the
@@ -106,7 +49,7 @@ func CellsToBuffer(c [][]term.Cell) *Buffer {
 	cells := new(rawCells)
 
 	cells.init()
-	cells.cells = CopyCells(cells.cells, c)
+	cells.cells = term.CopyCells(cells.cells, c)
 
 	// rawCells hasthe property that there's always at least one row
 	if cells.Rows() == 0 {
@@ -245,21 +188,6 @@ func ConvertCoordinatesToByteOffset(cells [][]term.Cell, c term.Coordinates) (
 		offset += int(row[x].Bytes)
 	}
 	return offset, true
-}
-
-// CalculateOptimalWidth calculates the width of this cells,
-// such that nothing is truncated if rendered.
-func CalculateOptimalWidth(cells [][]term.Cell) (max int) {
-	for _, row := range cells {
-		var rowcount int
-		for _, c := range row {
-			rowcount += int(c.Width)
-		}
-		if rowcount > max {
-			max = rowcount
-		}
-	}
-	return
 }
 
 func nextWrite(c View) term.Coordinates {

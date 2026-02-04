@@ -25,7 +25,7 @@ package text
 
 import (
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // CursorMouseDelegate satisfies MouseDelegate with a Cursor on a component.Scroll.

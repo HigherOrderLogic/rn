@@ -31,13 +31,13 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/text/vi"
 )
@@ -221,10 +221,6 @@ func (v *viHandler) Draw(w term.Writer) {
 	}
 }
 
-func (v *viHandler) Man() tui.Manual {
-	panic("TODO")
-}
-
 func (v *viHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	v.sync.mu.Lock()
 	defer v.sync.mu.Unlock()
@@ -348,7 +344,7 @@ func (v *viHandler) Edit(ctx context.Context, start, end term.Coordinates, str s
 	v.sync.vi.OnWillEdit(ctx, start, end, str)
 	oldCells, _, ok := v.sync.selector.Select(start, end)
 	if ok {
-		old = cell.CellsToString(oldCells)
+		old = term.CellsToString(oldCells)
 		if old != "" && strings.Count(old, " ") != len(old) {
 			// Edit must maintain reversibility. Since shell
 			// wraps lines automatically, we must remove newlines.

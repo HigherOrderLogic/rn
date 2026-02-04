@@ -28,9 +28,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestComponentDraw(t *testing.T) {

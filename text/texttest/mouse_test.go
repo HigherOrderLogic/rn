@@ -28,7 +28,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	gomock "go.uber.org/mock/gomock"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
 )
 

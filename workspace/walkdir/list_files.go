@@ -34,7 +34,7 @@ import (
 
 	multierr "github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 )
 

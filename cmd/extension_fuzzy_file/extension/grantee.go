@@ -30,16 +30,17 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	tconfig "unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/cmd/extension_fuzzy_file/finder"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -100,7 +101,7 @@ func newHandler(
 			log.Printf("failed to load 'command' config: %v", err)
 		}
 	}
-	historyKey, err := config.GetKey(c, "history_key")
+	historyKey, err := tconfig.GetKey(c, "history_key")
 	if err != nil {
 		if err != config.ErrNotFound {
 			log.Printf("failed to load 'command' config: %v", err)

@@ -29,9 +29,10 @@ import (
 	"sort"
 	"unicode"
 
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
 )
 
 const (
@@ -85,7 +86,7 @@ type Scroll struct {
 	InvertOffset bool
 }
 
-var _ Scrollable = (*Scroll)(nil)
+var _ component.Scrollable = (*Scroll)(nil)
 
 // NewScroll allocates storage for a Scroll and initializes it.
 func NewScroll(buf *cell.Buffer) (s *Scroll) {

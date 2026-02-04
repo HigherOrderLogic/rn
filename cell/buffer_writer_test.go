@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestWriterContext(t *testing.T) {
@@ -79,7 +79,7 @@ func TestWriteFlush(t *testing.T) {
 
 	expected := "A\x00\x00\x00\x00\nBB\x00\x00\x00\n" +
 		"CCC\x00\x00\nDDDD\x00\nEEEEE\n\x00\x00\x00\x00\x00"
-	assert.Equal(t, expected, CellsToString(writer.RawCells()))
+	assert.Equal(t, expected, term.CellsToString(writer.RawCells()))
 }
 
 func benchBufferWriter(b *testing.B, n int) {

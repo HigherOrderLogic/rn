@@ -28,13 +28,11 @@ import (
 	"errors"
 	"fmt"
 
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/term"
 )
 
 // BrowserFromAPIBrowser wraps a browserapi.Browser and returns
@@ -80,7 +78,7 @@ func (b toBrowser) Split(
 }
 
 func (b toBrowser) Floating(
-	h browser.Floating, cfg component.FloatingConfig,
+	h browser.Floating, cfg browserapi.FloatingConfig,
 ) (browser.Window, error) {
 	retWin, err := b.b.Floating(h, cfg)
 	if err != nil {
@@ -103,14 +101,14 @@ func (b toBrowser) Window(id uint64) (browser.Window, bool) {
 	return NopWindow(), true
 }
 
-func (b toBrowser) Notify(level notifications.Level, msg string, args ...interface{}) (
+func (b toBrowser) Notify(level browserapi.NotificationLevel, msg string, args ...interface{}) (
 	string, error,
 ) {
 	return b.b.Notify(level, msg, args...)
 }
 
 func (b toBrowser) NotifyOnce(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	return b.b.NotifyOnce(level, msg, args...)
 }

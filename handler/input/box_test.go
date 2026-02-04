@@ -28,10 +28,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text/modeless"
 )
 

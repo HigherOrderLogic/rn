@@ -39,12 +39,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/syntax"
-	"unstable.build/go-tui/term"
 )
 
 var (
@@ -250,7 +250,7 @@ func makeSymbolItem(
 	to.Y = from.Y
 	to.X = buf.Columns(from.Y)
 	cells, _, _ := buf.Select(from, to)
-	textToDisplay := cell.CellsToString(cells)
+	textToDisplay := term.CellsToString(cells)
 	lineStr := fmt.Sprintf("%s:%d: %s", filename, from.Y+1, textToDisplay)
 	return match{CaptureName: captureName, LineString: lineStr}, nil
 }

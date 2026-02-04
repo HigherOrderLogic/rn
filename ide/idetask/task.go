@@ -35,16 +35,18 @@ import (
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/plugin"
-	"unstable.build/go-tui/term"
 )
 
 const (
@@ -219,11 +221,6 @@ func (e *Task) SeekUp() bool {
 	return e.handler.SeekUp()
 }
 
-// Man satisfies tui.Handler.
-func (t *Task) Man() tui.Manual {
-	panic("TODO")
-}
-
 // Close satisfies browserapi.Handler.
 func (t *Task) Close() error {
 	t.closeHook()
@@ -284,10 +281,9 @@ func (t *Task) init(
 	t.closed = new(atomic.Bool)
 	t.doneWaitCh = make(chan struct{})
 	t.cmdAndArgs = append([]string{t.Cmd}, t.Args...)
-	t.bar = component.WithAttrSetter(component.NewString(""))
+	t.bar = tcomponent.WithAttrSetter(component.NewString(""))
 	// always have a valid handler so methods do not need to check for nil
-	t.handler = browser.NopScrollableFloatingHandler(
-		handler.NopScrollableFloating(component.NopScrollableFloating()))
+	t.handler = browser.NopScrollableFloatingHandler(handler.NopScrollableFloating())
 	ctx, cancel := context.WithCancel(ctx)
 	t.cancelCtx = cancel
 	t.ctx = ctx
@@ -300,16 +296,16 @@ func (t *Task) init(
 	}
 	alignment := t.MinimizeAlignment
 	switch t.MinimizeAlignment {
-	case component.SpanAlignmentBottom:
-		alignment |= component.SpanAlignmentHorizontallyCentered
-	case component.SpanAlignmentLeft:
-		alignment |= component.SpanAlignmentVerticallyCentered
-	case component.SpanAlignmentTop:
-		alignment |= component.SpanAlignmentHorizontallyCentered
-	case component.SpanAlignmentRight:
-		alignment |= component.SpanAlignmentVerticallyCentered
+	case component.AlignmentBottom:
+		alignment |= component.AlignmentHorizontallyCentered
+	case component.AlignmentLeft:
+		alignment |= component.AlignmentVerticallyCentered
+	case component.AlignmentTop:
+		alignment |= component.AlignmentHorizontallyCentered
+	case component.AlignmentRight:
+		alignment |= component.AlignmentVerticallyCentered
 	}
-	win, err := b.Floating(t, component.FloatingConfig{
+	win, err := b.Floating(t, browserapi.FloatingConfig{
 		Alignment: alignment,
 	})
 	if err != nil {
@@ -413,13 +409,13 @@ func (t *Task) doSetError(err error) {
 
 	if _, ok := t.handler.(*plugin.Handler); !ok && err != nil {
 		t.handler = browser.NopScrollableFloatingHandler(
-			handler.NopScrollableFloating(
+			handler.NopScrollableFloatingFromComponent(
 				component.NewResponsiveString(
 					err.Error(),
 					component.StringResponsiveConfig{
 						NoSplitWords: true,
 						StringConfig: component.StringConfig{
-							Alignment: component.SpanAlignmentCentered,
+							Alignment: component.AlignmentCentered,
 						},
 					},
 				),
@@ -523,11 +519,11 @@ func (t *Task) minimize() {
 		return
 	}
 	switch t.MinimizeAlignment {
-	case component.SpanAlignmentTop:
+	case component.AlignmentTop:
 		t.win.MinimizeUp(minimizePadding)
-	case component.SpanAlignmentBottom:
+	case component.AlignmentBottom:
 		t.win.MinimizeDown(minimizePadding)
-	case component.SpanAlignmentLeft:
+	case component.AlignmentLeft:
 		t.win.MinimizeLeft(minimizePadding)
 	default:
 		t.win.MinimizeRight(minimizePadding)

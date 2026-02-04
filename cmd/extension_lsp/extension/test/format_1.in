@@ -1,11 +1,11 @@
 package vi
 
 import (
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 var _ tui.Handler = (*Vi)(nil)

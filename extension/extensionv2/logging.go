@@ -31,7 +31,7 @@ import (
 
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 var _ io.Writer = (*logCollector)(nil)

@@ -27,7 +27,7 @@ import (
 	"context"
 	"os"
 
-	"unstable.build/go-tui/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/text/textrpc"

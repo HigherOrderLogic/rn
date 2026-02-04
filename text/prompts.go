@@ -27,11 +27,10 @@ import (
 	"fmt"
 
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component/notifications"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -71,7 +70,7 @@ and lose all the new updates?`, file)
 				}
 				if err != nil {
 					c.log(log.ErrorLevel, "recovery prompt: %v", err)
-					_, _ = c.Notify(notifications.LevelError, "%v", err)
+					_, _ = c.Notify(browserapi.LevelError, "%v", err)
 					return
 				}
 			},
@@ -147,7 +146,7 @@ func (c *Component) openRecoveryPrompt(file workspaceapi.URI) {
 				}
 				if err != nil {
 					c.log(log.ErrorLevel, "recovery prompt: %v", err)
-					_, _ = c.Notify(notifications.LevelError, "%v", err)
+					_, _ = c.Notify(browserapi.LevelError, "%v", err)
 				}
 			},
 			func() error { return nil }))

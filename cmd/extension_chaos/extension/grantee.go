@@ -24,8 +24,8 @@
 package extension
 
 import (
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 )

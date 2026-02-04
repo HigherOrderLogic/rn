@@ -28,13 +28,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	compapi "github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
 )
 
 func altEvent(ch rune) term.Event {
@@ -68,8 +70,8 @@ func TestWindowManagerSetFocusNoFrame(t *testing.T) {
 
 func testWindowManagerSetFocus(t *testing.T, frame bool) {
 	width, height := 8, 4
-	_, wm := prepareTest(width, height, frame, NewTestHandler())
-	right, ok := wm.SplitHorizontal(wm.Focus(), NewTestHandler())
+	_, wm := prepareTest(width, height, frame, handler.NewTestHandler())
+	right, ok := wm.SplitHorizontal(wm.Focus(), handler.NewTestHandler())
 	require.True(t, ok)
 
 	assert.False(t, right.Focus())
@@ -79,14 +81,14 @@ func testWindowManagerSetFocus(t *testing.T, frame bool) {
 	if focus := wm.Focus(); focus != right {
 		t.Errorf("focus should be %+v, instead of %+v", right, focus)
 	}
-	_, ok = wm.Focus().Content().(*TestHandler)
+	_, ok = wm.Focus().Content().(*handler.TestHandler)
 	assert.True(t, ok)
 }
 
 // TestHandler signals that it's handling event by incrementing it's fill rune
 func TestWindowManagerHandle(t *testing.T) {
 	t.Run("passes correct mouse position", func(t *testing.T) {
-		handler := NewTestHandler()
+		handler := handler.NewTestHandler()
 
 		var actualEv term.Event
 		handler.HandleOverride = func(ev term.Event) (bool, bool) {
@@ -119,12 +121,12 @@ func TestWindowManagerHandle(t *testing.T) {
 }
 
 func TestWindowManagerHandleFrame(t *testing.T) {
-	leftHandler := NewTestHandler()
+	leftHandler := handler.NewTestHandler()
 	width, height := 12, 4
-	writer, handler := prepareTest(width, height, true, leftHandler)
+	writer, h := prepareTest(width, height, true, leftHandler)
 
-	rightHandler := NewTestHandler()
-	_, ok := handler.SplitVertical(handler.Focus(), rightHandler)
+	rightHandler := handler.NewTestHandler()
+	_, ok := h.SplitVertical(h.Focus(), rightHandler)
 	require.True(t, ok)
 
 	cases := []handlertest.SingleTestCase{
@@ -137,9 +139,9 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 		},
 	}
 
-	require.True(t, handler.FocusRight())
+	require.True(t, h.FocusRight())
 
-	handlertest.TestHandler(t, handler, cases, writer)
+	handlertest.TestHandler(t, h, cases, writer)
 
 	cases = []handlertest.SingleTestCase{
 		{
@@ -151,11 +153,11 @@ func TestWindowManagerHandleFrame(t *testing.T) {
 		},
 	}
 
-	handlertest.TestHandler(t, handler, cases, writer)
+	handlertest.TestHandler(t, h , cases, writer)
 }
 
 func TestWindowFocusInitSplitVertical(t *testing.T) {
-	leftHandler := NewTestHandler()
+	leftHandler := handler.NewTestHandler()
 	width, height := 12, 4
 	_, m := prepareTest(width, height, true, leftHandler)
 
@@ -165,7 +167,7 @@ func TestWindowFocusInitSplitVertical(t *testing.T) {
 	assert.False(t, ok)
 	assert.False(t, m.ShiftFocus())
 
-	rightHandler := NewTestHandler()
+	rightHandler := handler.NewTestHandler()
 	_, ok = m.SplitVertical(m.Focus(), rightHandler)
 	require.True(t, ok)
 
@@ -174,103 +176,103 @@ func TestWindowFocusInitSplitVertical(t *testing.T) {
 
 func TestSwapContent(t *testing.T) {
 	t.Run("swaps content left", func(t *testing.T) {
-		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		leftHandler := &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '1'}}
 		width, height := 12, 4
 		_, m := prepareTest(width, height, true, leftHandler)
 
 		w1 := m.Focus()
 
 		w2, ok := m.SplitVertical(w1,
-			&TestHandler{TestComponent: component.TestComponent{Ch: '2'}})
+			&handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '2'}})
 		require.True(t, ok)
 
 		m.SetFocus(w2)
 
 		assert.True(t, m.SwapContentLeft())
 
-		assert.Equal(t, '1', w2.Content().(*TestHandler).Ch)
-		assert.Equal(t, '2', w1.Content().(*TestHandler).Ch)
+		assert.Equal(t, '1', w2.Content().(*handler.TestHandler).TestComponent.Ch)
+		assert.Equal(t, '2', w1.Content().(*handler.TestHandler).TestComponent.Ch)
 
 		assert.True(t, m.SwapContentLeft())
 
-		assert.Equal(t, '2', w2.Content().(*TestHandler).Ch)
-		assert.Equal(t, '1', w1.Content().(*TestHandler).Ch)
+		assert.Equal(t, '2', w2.Content().(*handler.TestHandler).TestComponent.Ch)
+		assert.Equal(t, '1', w1.Content().(*handler.TestHandler).TestComponent.Ch)
 	})
 
 	t.Run("swaps content right", func(t *testing.T) {
-		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		leftHandler := &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '1'}}
 		width, height := 12, 4
 		_, m := prepareTest(width, height, true, leftHandler)
 
 		w1 := m.Focus()
 
 		w2, ok := m.SplitVertical(w1,
-			&TestHandler{TestComponent: component.TestComponent{Ch: '2'}})
+			&handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '2'}})
 		require.True(t, ok)
 
 		assert.True(t, m.SwapContentRight())
 
-		assert.Equal(t, '1', w2.Content().(*TestHandler).Ch)
-		assert.Equal(t, '2', w1.Content().(*TestHandler).Ch)
+		assert.Equal(t, '1', w2.Content().(*handler.TestHandler).TestComponent.Ch)
+		assert.Equal(t, '2', w1.Content().(*handler.TestHandler).TestComponent.Ch)
 
 		assert.True(t, m.SwapContentRight())
 
-		assert.Equal(t, '2', w2.Content().(*TestHandler).Ch)
-		assert.Equal(t, '1', w1.Content().(*TestHandler).Ch)
+		assert.Equal(t, '2', w2.Content().(*handler.TestHandler).TestComponent.Ch)
+		assert.Equal(t, '1', w1.Content().(*handler.TestHandler).TestComponent.Ch)
 	})
 
 	t.Run("swaps content down", func(t *testing.T) {
-		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		leftHandler := &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '1'}}
 		width, height := 12, 4
 		_, m := prepareTest(width, height, true, leftHandler)
 
 		w1 := m.Focus()
 
 		w2, ok := m.SplitHorizontal(w1,
-			&TestHandler{TestComponent: component.TestComponent{Ch: '2'}})
+			&handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '2'}})
 		require.True(t, ok)
 
 		assert.True(t, m.SwapContentDown())
 
-		assert.Equal(t, '1', w2.Content().(*TestHandler).Ch)
-		assert.Equal(t, '2', w1.Content().(*TestHandler).Ch)
+		assert.Equal(t, '1', w2.Content().(*handler.TestHandler).TestComponent.Ch)
+		assert.Equal(t, '2', w1.Content().(*handler.TestHandler).TestComponent.Ch)
 
 		assert.True(t, m.SwapContentDown())
 
-		assert.Equal(t, '2', w2.Content().(*TestHandler).Ch)
-		assert.Equal(t, '1', w1.Content().(*TestHandler).Ch)
+		assert.Equal(t, '2', w2.Content().(*handler.TestHandler).TestComponent.Ch)
+		assert.Equal(t, '1', w1.Content().(*handler.TestHandler).TestComponent.Ch)
 	})
 
 	t.Run("swaps content up", func(t *testing.T) {
-		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		leftHandler := &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '1'}}
 		width, height := 12, 4
 		_, m := prepareTest(width, height, true, leftHandler)
 
 		w1 := m.Focus()
 
 		w2, ok := m.SplitHorizontal(w1,
-			&TestHandler{TestComponent: component.TestComponent{Ch: '2'}})
+			&handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '2'}})
 		require.True(t, ok)
 
 		m.SetFocus(w2)
 
 		assert.True(t, m.SwapContentUp())
 
-		assert.Equal(t, '1', w2.Content().(*TestHandler).Ch)
-		assert.Equal(t, '2', w1.Content().(*TestHandler).Ch)
+		assert.Equal(t, '1', w2.Content().(*handler.TestHandler).TestComponent.Ch)
+		assert.Equal(t, '2', w1.Content().(*handler.TestHandler).TestComponent.Ch)
 
 		assert.True(t, m.SwapContentUp())
 
-		assert.Equal(t, '2', w2.Content().(*TestHandler).Ch)
-		assert.Equal(t, '1', w1.Content().(*TestHandler).Ch)
+		assert.Equal(t, '2', w2.Content().(*handler.TestHandler).TestComponent.Ch)
+		assert.Equal(t, '1', w1.Content().(*handler.TestHandler).TestComponent.Ch)
 	})
 
 	t.Run("does not swap floating window content", func(t *testing.T) {
-		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		leftHandler := &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '1'}}
 		width, height := 12, 4
 		_, m := prepareTest(width, height, true, leftHandler)
 
-		w2 := m.FloatingWindow(NewTestFloating(0, 0), component.FloatingConfig{})
+		w2 := m.FloatingWindow(handler.NewTestFloating(0, 0), component.FloatingConfig{})
 		m.SetFocus(w2)
 
 		assert.False(t, m.SwapContentUp())
@@ -280,11 +282,11 @@ func TestSwapContent(t *testing.T) {
 	})
 
 	t.Run("does not tile content into floating window", func(t *testing.T) {
-		leftHandler := &TestHandler{TestComponent: component.TestComponent{Ch: '1'}}
+		leftHandler := &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: '1'}}
 		width, height := 12, 4
 		_, m := prepareTest(width, height, true, leftHandler)
 
-		_ = m.FloatingWindow(NewTestFloating(0, 0), component.FloatingConfig{})
+		_ = m.FloatingWindow(handler.NewTestFloating(0, 0), component.FloatingConfig{})
 
 		assert.False(t, m.SwapContentUp())
 		assert.False(t, m.SwapContentDown())
@@ -294,16 +296,16 @@ func TestSwapContent(t *testing.T) {
 }
 
 func TestWindowShiftFocusFocusPrev(t *testing.T) {
-	leftHandler := NewTestHandler()
+	leftHandler := handler.NewTestHandler()
 	width, height := 12, 4
 	_, m := prepareTest(width, height, true, leftHandler)
 	orig := m.Focus()
 
-	rightHandler := NewTestHandler()
+	rightHandler := handler.NewTestHandler()
 	_, ok := m.SplitVertical(m.Focus(), rightHandler)
 	require.True(t, ok)
 
-	_, ok = m.SplitVertical(orig, NewTestHandler())
+	_, ok = m.SplitVertical(orig, handler.NewTestHandler())
 	require.True(t, ok)
 
 	assert.True(t, m.ShiftFocus())
@@ -311,11 +313,11 @@ func TestWindowShiftFocusFocusPrev(t *testing.T) {
 }
 
 func TestWindowManagerSetFocusContent(t *testing.T) {
-	leftHandler := NewTestHandler()
+	leftHandler := handler.NewTestHandler()
 	width, height := 8, 4
 	writer, wm := prepareTest(width, height, true, leftHandler)
 
-	rightHandler := NewTestHandler()
+	rightHandler := handler.NewTestHandler()
 	_, ok := wm.SplitVertical(wm.Focus(), rightHandler)
 	require.True(t, ok)
 
@@ -336,7 +338,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 
 	handlertest.TestHandler(t, wm, cases, writer)
 
-	fb := component.FrameCharSet{}
+	fb := compapi.FrameCharSet{}
 	fb.TopLeft = '╔'
 	fb.BottomRight = '╝'
 	fb.BottomLeft = '╚'
@@ -347,7 +349,7 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 	fb.HorizontalTop = '═'
 	fb.HorizontalBottom = '═'
 
-	wm.SetFrameCharSet(component.FrameCharSetDefault(), fb)
+	wm.SetFrameCharSet(compapi.FrameCharSetDefault(), fb)
 
 	cases = []handlertest.SingleTestCase{
 		{
@@ -365,16 +367,16 @@ func TestWindowManagerSetFocusContent(t *testing.T) {
 func TestWindowManagerInit(t *testing.T) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = false
-	wm := NewWindowManager(NewTestHandler(), cfg)
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
 	require.NotNil(t, wm.Focus())
 }
 
 func TestWindowManagerSetAttr(t *testing.T) {
-	wm := NewWindowManager(NewTestHandler(), DefaultWindowManagerConfig())
+	wm := NewWindowManager(handler.NewTestHandler(), DefaultWindowManagerConfig())
 	cyan := tcell.ColorNavy
 	red := tcell.ColorRed
 
-	wm.SplitHorizontal(wm.Focus(), NewTestHandler())
+	wm.SplitHorizontal(wm.Focus(), handler.NewTestHandler())
 	wm.SetAttr(term.Attributes{Bg: cyan, Fg: red}, term.Attributes{Bg: red, Fg: cyan})
 
 	w1 := wm.Focus()
@@ -383,7 +385,7 @@ func TestWindowManagerSetAttr(t *testing.T) {
 	assert.Equal(t, red, b.Bg)
 	assert.Equal(t, cyan, b.Fg)
 
-	w1.SetContent(NewTestHandler())
+	w1.SetContent(handler.NewTestHandler())
 	b, ok = w1.FrameAttr()
 	require.True(t, ok)
 	assert.Equal(t, red, b.Bg)
@@ -395,7 +397,7 @@ func TestWindowManagerSetAttr(t *testing.T) {
 	assert.Equal(t, cyan, b.Bg)
 	assert.Equal(t, red, b.Fg)
 
-	w1.SetContent(NewTestHandler())
+	w1.SetContent(handler.NewTestHandler())
 	b, ok = w1.FrameAttr()
 	require.True(t, ok)
 	assert.Equal(t, cyan, b.Bg)
@@ -407,9 +409,9 @@ func testWindowManagerClose(
 	frame bool,
 	split func(*WindowManager, Window, tui.Handler) (Window, bool),
 ) {
-	h1 := NewTestHandler()
+	h1 := handler.NewTestHandler()
 	h1.Ch = 'C'
-	h2 := NewTestHandler()
+	h2 := handler.NewTestHandler()
 	h2.Ch = 'D'
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
@@ -427,9 +429,9 @@ func testWindowManagerCloseLast(
 	frame bool,
 	split func(*WindowManager, Window, tui.Handler) (Window, bool),
 ) {
-	h1 := NewTestHandler()
+	h1 := handler.NewTestHandler()
 	h1.Ch = 'C'
-	h2 := NewTestHandler()
+	h2 := handler.NewTestHandler()
 	h2.Ch = 'D'
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
@@ -468,20 +470,20 @@ func TestWindowManagerClose(t *testing.T) {
 func testWindowManagerContent(t *testing.T, frame bool) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
-	wm := NewWindowManager(NewTestHandler(), cfg)
-	node2, ok := wm.SplitHorizontal(wm.Focus(), NewTestHandler())
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	node2, ok := wm.SplitHorizontal(wm.Focus(), handler.NewTestHandler())
 	require.True(t, ok)
 
 	c := node2.Content()
-	_, ok = c.(*TestHandler)
+	_, ok = c.(*handler.TestHandler)
 	require.True(t, ok)
 
-	prev := node2.SetContent(NewTestHandler())
-	_, ok = prev.(*TestHandler)
+	prev := node2.SetContent(handler.NewTestHandler())
+	_, ok = prev.(*handler.TestHandler)
 	require.True(t, ok)
 
 	c = node2.Content()
-	_, ok = c.(*TestHandler)
+	_, ok = c.(*handler.TestHandler)
 	require.True(t, ok)
 }
 
@@ -498,7 +500,7 @@ func testWindowManagerCursorShow(
 	t *testing.T, frame bool,
 	input, expected term.Coordinates,
 ) {
-	handler := NewTestHandler()
+	handler := handler.NewTestHandler()
 	handler.CursorPos = input
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
@@ -514,7 +516,7 @@ func testWindowManagerCursorHide(
 	t *testing.T, frame bool,
 	input term.Coordinates,
 ) {
-	handler := NewTestHandler()
+	handler := handler.NewTestHandler()
 	handler.CursorPos = input
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
@@ -580,7 +582,7 @@ func TestHandlerWindowZeroValue(t *testing.T) {
 	t.Run("SetContent", func(t *testing.T) {
 		var win Window
 		assert.PanicsWithValue(t, errCalledZeroValuedWin, func() {
-			win.SetContent(NewTestHandler())
+			win.SetContent(handler.NewTestHandler())
 		})
 	})
 	t.Run("Size", func(t *testing.T) {
@@ -613,8 +615,8 @@ func (w *testWindowSubscriber) OnFocus(prev, focus Window) {
 }
 
 func TestWindowManagerSubscribe(t *testing.T) {
-	h1 := NewTestHandler()
-	h2 := NewTestHandler()
+	h1 := handler.NewTestHandler()
+	h2 := handler.NewTestHandler()
 	wm := NewWindowManager(h1, DefaultWindowManagerConfig())
 	mock := new(testWindowSubscriber)
 
@@ -648,7 +650,7 @@ func TestWindowManagerSubscribe(t *testing.T) {
 func TestWindowManagerSplit(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
-	h1 := TestHandler{TestComponent: component.TestComponent{Ch: 'A'}}
+	h1 := handler.TestHandler{TestComponent: compapi.TestComponent{Ch: 'A'}}
 	wm := NewWindowManager(&h1, DefaultWindowManagerConfig())
 	w1 := wm.Focus()
 	wm.Resize(20, 8)
@@ -663,8 +665,8 @@ func TestWindowManagerSplit(t *testing.T) {
 	var w2 Window
 	var w3 Window
 	var ok bool
-	h2 := TestHandler{TestComponent: component.TestComponent{Ch: 'B'}}
-	h3 := TestHandler{TestComponent: component.TestComponent{Ch: 'C'}}
+	h2 := handler.TestHandler{TestComponent: compapi.TestComponent{Ch: 'B'}}
+	h3 := handler.TestHandler{TestComponent: compapi.TestComponent{Ch: 'C'}}
 
 	tests := []comptest.TestCase{
 		{
@@ -740,8 +742,8 @@ C──────────────────D
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			hf := &TestHandler{TestComponent: component.TestComponent{Ch: 'F'}}
-			wfloat := wm.FloatingWindow(StaticFloating(hf, 2, 2), component.FloatingConfig{})
+			hf := &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: 'F'}}
+			wfloat := wm.FloatingWindow(handler.StaticFloating(hf, 2, 2), component.FloatingConfig{})
 			wm.SetFocus(wfloat)
 			hf.HandleOverride = func(ev term.Event) (bool, bool) {
 				// test that tiled window doesn't attempt to close last node
@@ -783,8 +785,8 @@ C──────────────────D
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			hf := &TestHandler{TestComponent: component.TestComponent{Ch: 'F'}}
-			wfloat := wm.FloatingWindow(StaticFloating(hf, 2, 2), component.FloatingConfig{})
+			hf := &handler.TestHandler{TestComponent: compapi.TestComponent{Ch: 'F'}}
+			wfloat := wm.FloatingWindow(handler.StaticFloating(hf, 2, 2), component.FloatingConfig{})
 			wm.SetFocus(wfloat)
 			hf.HandleOverride = func(ev term.Event) (bool, bool) {
 				// test close itself and focus left
@@ -810,7 +812,7 @@ C──────────────────D
 			// test that Dimensions are updated for a floating win
 			buf := cell.NewBuffer()
 			buf.WriteString("1234")
-			hf := Nop(component.Buffer(buf, component.StringResponsiveConfig{}))
+			hf := handler.NopFromComponent(component.Buffer(buf, compapi.StringResponsiveConfig{}))
 			wfloat := wm.FloatingWindow(FloatingBuffer(hf, buf), component.FloatingConfig{})
 			wm.SetFocus(wfloat)
 			buf.WriteString("1234")
@@ -830,20 +832,31 @@ C────────DCCCCCCCCC│
 }
 
 type scrollableHandler struct {
-	component.Scrollable
-	tui.Handler
+	compapi.Scrollable
+}
+
+func (t scrollableHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	return term.Coordinates{}, 0, false
+}
+
+func (t scrollableHandler) Selection() (string, bool) {
+	return "", false
+}
+
+func (t scrollableHandler) Handle(ev term.Event) (bool, bool) {
+	return false, false
 }
 
 func TestWindowManagerScrollBar(t *testing.T) {
 	buf2 := cell.NewBuffer()
 	buf2.WriteString("a\nb\nc\n")
 	comp2 := component.NewScroll(buf2)
-	rightHandler := scrollableHandler{Scrollable: comp2, Handler: Nop(comp2)}
+	rightHandler := scrollableHandler{Scrollable: comp2}
 
 	buf1 := cell.NewBuffer()
 	buf1.WriteString("A\nB\nC\n")
 	comp1 := component.NewScroll(buf1)
-	leftHandler := scrollableHandler{Scrollable: comp1, Handler: Nop(comp1)}
+	leftHandler := scrollableHandler{Scrollable: comp1}
 
 	width, height := 12, 4
 	writer, wm := prepareTest(width, height, true, leftHandler)

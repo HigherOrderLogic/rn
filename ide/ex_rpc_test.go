@@ -33,16 +33,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/browser/browserrpc"
+	tbrowserrpc "unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/ide/plugin"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
@@ -104,12 +105,6 @@ func (h *safeHandler) Selection() (string, bool) {
 	return h.Handler.Selection()
 }
 
-func (h *safeHandler) Man() tui.Manual {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return h.Handler.Man()
-}
-
 func (h *safeHandler) Close() error {
 	return h.Handler.Close()
 }
@@ -148,7 +143,7 @@ func newTestRPCBrowser(t *testing.T,
 
 		var serverMutex sync.Mutex
 		grpcServer := grpc.NewServer()
-		server := browserrpc.NewServer(ex.Browser(), &serverMutex)
+		server := tbrowserrpc.NewServer(ex.Browser(), &serverMutex)
 		server.SetSyncMode()
 		browserrpc.RegisterWindowManagerServer(grpcServer, server)
 		browserrpc.RegisterNotificationsServer(grpcServer, server)

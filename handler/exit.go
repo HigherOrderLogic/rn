@@ -24,8 +24,8 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 // KeyExit wraps a tui.Component which exits upon receiveing key.
@@ -59,8 +59,4 @@ func (e *keyExit) Cursor() (pos term.Coordinates, style term.CursorStyle, show b
 
 func (e *keyExit) Selection() (string, bool) {
 	return "", false
-}
-
-func (e *keyExit) Man() tui.Manual {
-	return tui.Manual{}
 }

@@ -24,8 +24,8 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 type withComponent struct {

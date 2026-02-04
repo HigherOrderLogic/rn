@@ -33,12 +33,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/workspace/workspacetest"
@@ -767,7 +766,7 @@ func assertEqualScreenBuf(t *testing.T, p screenBuffer, expected string) {
 		writer.Flush()
 		assert.Equal(t, expected, writer.String())
 	} else {
-		assert.Equal(t, expected, cell.CellsToString(p.(*vtescreen.AltBuffer).Cells.RawCells()))
+		assert.Equal(t, expected, term.CellsToString(p.(*vtescreen.AltBuffer).Cells.RawCells()))
 	}
 }
 
@@ -775,9 +774,9 @@ func resetBuffer(t *testing.T, p *parserHandler, to string) {
 	t.Helper()
 	writeToBuffer(p, to)
 	if prim, ok := p.sync.buf.(*vtescreen.PrimaryBuffer); ok {
-		require.Equal(t, to, cell.CellsToString(prim.Cells.RawCells()))
+		require.Equal(t, to, term.CellsToString(prim.Cells.RawCells()))
 	} else {
-		require.Equal(t, to, cell.CellsToString(p.sync.buf.(*vtescreen.AltBuffer).Cells.RawCells()))
+		require.Equal(t, to, term.CellsToString(p.sync.buf.(*vtescreen.AltBuffer).Cells.RawCells()))
 	}
 }
 

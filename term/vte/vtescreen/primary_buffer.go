@@ -29,7 +29,7 @@ import (
 
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte/vteparser"
 )
 

@@ -28,10 +28,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Component wraps a tui.Component with a Shader.

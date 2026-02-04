@@ -30,11 +30,9 @@ import (
 	"io"
 
 	"github.com/unstablebuild/blue/document"
-	"unstable.build/go-tui/browser"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"unstable.build/go-tui/component/notifications"
 )
-
-var _ browser.Notifications = (*workspaceNotifications)(nil)
 
 type notifier interface {
 	Notify(level notifications.Level, msg string) string
@@ -66,17 +64,17 @@ type storedNotification struct {
 
 // Notify formats the given msg and args and displays it on next Draw.
 func (c *workspaceNotifications) Notify(
-	level notifications.Level, msg string, args ...any,
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
-	return c.notifier.Notify(level, fmt.Sprintf(msg, args...)), nil
+	return c.notifier.Notify(notifications.Level(level), fmt.Sprintf(msg, args...)), nil
 }
 
 // NotifyOnce behaves like Notify, but only sends this notification once.
 func (c *workspaceNotifications) NotifyOnce(
-	level notifications.Level, msg string, args ...any,
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	ctx := context.Background()
-	id := c.notifier.ID(level, fmt.Sprintf(msg, args...))
+	id := c.notifier.ID(notifications.Level(level), fmt.Sprintf(msg, args...))
 	var value storedNotification
 	value.ID = id
 	err := c.storage.Create(ctx, id, value)
@@ -86,7 +84,7 @@ func (c *workspaceNotifications) NotifyOnce(
 	if err != nil {
 		return "", fmt.Errorf("storage create: %v", err)
 	}
-	return c.notifier.Notify(level, fmt.Sprintf(msg, args...)), nil
+	return c.notifier.Notify(notifications.Level(level), fmt.Sprintf(msg, args...)), nil
 }
 
 // UpdateNotificationProgress satisfies browser.Notifications.

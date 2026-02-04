@@ -27,8 +27,8 @@ import (
 	"context"
 	"os"
 
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/config/configrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/config/configrpc"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )

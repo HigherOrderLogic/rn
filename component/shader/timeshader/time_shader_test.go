@@ -29,7 +29,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // nopShader is useful to assert the frame it has been given upon Shade()

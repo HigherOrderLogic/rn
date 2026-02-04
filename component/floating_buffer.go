@@ -24,13 +24,15 @@
 package component
 
 import (
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 )
 
 // FloatingBuffer wraps a tui.Component and uses the contents of buffer
 // do determine the best dimensions for the given component.
-func FloatingBuffer(c tui.Component, buffer *cell.Buffer) Floating {
+func FloatingBuffer(c tui.Component, buffer *cell.Buffer) component.Floating {
 	return floatingBuffer{Component: c, buffer: buffer}
 }
 
@@ -40,7 +42,7 @@ type floatingBuffer struct {
 }
 
 func (f floatingBuffer) Dimensions() (width, height int) {
-	width = cell.CalculateOptimalWidth(f.buffer.RawCells())
+	width = term.CalculateOptimalWidth(f.buffer.RawCells())
 	height = f.buffer.Rows()
 	return
 }

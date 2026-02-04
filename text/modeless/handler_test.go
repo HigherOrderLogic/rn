@@ -30,13 +30,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
+	tterm "unstable.build/go-tui/term"
 )
 
 func TestCursorExternalEdit(t *testing.T) {
@@ -423,7 +424,7 @@ func TestSublimeKeyBindingsMacOS(t *testing.T) {
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
-			seq, err := term.ParseKeys(test.keycomb)
+			seq, err := tterm.ParseKeys(test.keycomb)
 			require.NoError(t, err)
 
 			clip := clipboard.NewInMemory()

@@ -27,9 +27,9 @@ import (
 	"io"
 	"sync"
 
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/config/configrpc"
-	"unstable.build/go-tui/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/config/configrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/go-tui/rpc"
 )
 

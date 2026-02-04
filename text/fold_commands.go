@@ -29,8 +29,8 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // SubscribeFoldCommands returns a slice of fold list related commands

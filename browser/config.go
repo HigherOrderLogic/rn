@@ -26,12 +26,12 @@ package browser
 import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
 )
 
 // DefaultConfig returns the default Config.
@@ -101,17 +101,17 @@ type logNotifications struct {
 }
 
 func (n logNotifications) Notify(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	var l log.Level
 	switch level {
-	case notifications.LevelWarn:
+	case browserapi.LevelWarn:
 		l = log.WarnLevel
-	case notifications.LevelError:
+	case browserapi.LevelError:
 		l = log.ErrorLevel
-	case notifications.LevelInfo:
+	case browserapi.LevelInfo:
 		l = log.InfoLevel
-	case notifications.LevelSuccess:
+	case browserapi.LevelSuccess:
 		l = log.InfoLevel
 	}
 	log.WithField(logging.KeyClass, "notifications").Logf(l, msg, args...)
@@ -119,7 +119,7 @@ func (n logNotifications) Notify(
 }
 
 func (n logNotifications) NotifyOnce(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	return n.Notify(level, msg, args...)
 }

@@ -38,11 +38,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	gomock "go.uber.org/mock/gomock"
-	"unstable.build/go-tui/api/workspaceapi"
-	workspaceapitest "unstable.build/go-tui/api/workspaceapi/workspacetest"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/workspace/workspaceapitest"
 )
 
 const sampleSnippet = `

@@ -31,10 +31,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte/vtetest"
 	"unstable.build/go-tui/workspace"
 )
@@ -341,13 +341,13 @@ type nopNotifications struct {
 }
 
 func (nopNotifications) Notify(
-	level notifications.Level, msg string, args ...any,
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return "", nil
 }
 
 func (nopNotifications) NotifyOnce(
-	level notifications.Level, msg string, args ...any,
+	level browserapi.NotificationLevel, msg string, args ...any,
 ) (string, error) {
 	return "", nil
 }

@@ -33,24 +33,24 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler/handlerrpc"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
-
-	"unstable.build/go-tui/handler/handlerrpc"
+	thandlerrpc "unstable.build/go-tui/handler/handlerrpc"
 )
 
 // Server serves a Browser over GRPC.
 type Server struct {
-	UnimplementedEventPublisherServer
-	UnimplementedNotificationsServer
-	UnimplementedResourceOpenerServer
-	UnimplementedWindowManagerServer
+	browserrpc.UnimplementedEventPublisherServer
+	browserrpc.UnimplementedNotificationsServer
+	browserrpc.UnimplementedResourceOpenerServer
+	browserrpc.UnimplementedWindowManagerServer
 
 	syncMode bool
 
@@ -91,7 +91,7 @@ func (s *Server) log(level log.Level, msg string, args ...any) {
 }
 
 // Split satisfies BrowserServer
-func (s *Server) Split(srv WindowManager_SplitServer) error {
+func (s *Server) Split(srv browserrpc.WindowManager_SplitServer) error {
 	msg, err := srv.Recv()
 	if err != nil {
 		return fmt.Errorf("receive initial request: %w", err)
@@ -107,14 +107,14 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 	var client clientIfc
 	if uri == "" {
 		if s.syncMode {
-			client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
-				func() *SplitWindowMessage {
-					return new(SplitWindowMessage)
+			client = thandlerrpc.NewSyncClientStream(s.serverCtx, srv,
+				func() *browserrpc.SplitWindowMessage {
+					return new(browserrpc.SplitWindowMessage)
 				})
 		} else {
-			client = handlerrpc.NewClientStream(s.serverCtx, srv,
-				func() *SplitWindowMessage {
-					return new(SplitWindowMessage)
+			client = thandlerrpc.NewClientStream(s.serverCtx, srv,
+				func() *browserrpc.SplitWindowMessage {
+					return new(browserrpc.SplitWindowMessage)
 				}, s.browser.PublishEvent)
 		}
 		handler = &streamHandler{mu: s.browser, Handler: client}
@@ -150,7 +150,7 @@ func (s *Server) Split(srv WindowManager_SplitServer) error {
 }
 
 // Bar satisfies BrowserServer
-func (s *Server) Bar(srv WindowManager_BarServer) error {
+func (s *Server) Bar(srv browserrpc.WindowManager_BarServer) error {
 	msg, err := srv.Recv()
 	if err != nil {
 		return fmt.Errorf("receive bar request: %w", err)
@@ -161,14 +161,14 @@ func (s *Server) Bar(srv WindowManager_BarServer) error {
 	}
 	var client clientIfc
 	if s.syncMode {
-		client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
-			func() *SplitWindowMessage {
-				return new(SplitWindowMessage)
+		client = thandlerrpc.NewSyncClientStream(s.serverCtx, srv,
+			func() *browserrpc.SplitWindowMessage {
+				return new(browserrpc.SplitWindowMessage)
 			})
 	} else {
-		client = handlerrpc.NewClientStream(s.serverCtx, srv,
-			func() *BarMessage {
-				return new(BarMessage)
+		client = thandlerrpc.NewClientStream(s.serverCtx, srv,
+			func() *browserrpc.BarMessage {
+				return new(browserrpc.BarMessage)
 			}, s.browser.PublishEvent)
 	}
 
@@ -192,22 +192,22 @@ func (s *Server) Bar(srv WindowManager_BarServer) error {
 
 // Notify satisfies BrowserServer
 func (s *Server) Notify(
-	ctx context.Context, req *NotifyRequest,
-) (*NotifyResponse, error) {
+	ctx context.Context, req *browserrpc.NotifyRequest,
+) (*browserrpc.NotifyResponse, error) {
 	return s.notify(ctx, req, false)
 }
 
 // NotifyOnce satisfies BrowserServer
 func (s *Server) NotifyOnce(
-	ctx context.Context, req *NotifyRequest,
-) (*NotifyResponse, error) {
+	ctx context.Context, req *browserrpc.NotifyRequest,
+) (*browserrpc.NotifyResponse, error) {
 	return s.notify(ctx, req, true)
 }
 
 // UpdateNotificationProgress satisfies BrowserServer
 func (s *Server) UpdateNotificationProgress(
-	ctx context.Context, req *UpdateNotificationProgressRequest,
-) (*UpdateNotificationProgressResponse, error) {
+	ctx context.Context, req *browserrpc.UpdateNotificationProgressRequest,
+) (*browserrpc.UpdateNotificationProgressResponse, error) {
 	id := req.GetId()
 	total := req.GetTotal()
 	progress := req.GetProgress()
@@ -227,13 +227,13 @@ func (s *Server) UpdateNotificationProgress(
 		return nil, err
 	}
 
-	return &UpdateNotificationProgressResponse{}, nil
+	return &browserrpc.UpdateNotificationProgressResponse{}, nil
 }
 
 // Open satisfies BrowserServer
 func (s *Server) Open(
-	ctx context.Context, req *OpenResourceRequest,
-) (*OpenResourceResponse, error) {
+	ctx context.Context, req *browserrpc.OpenResourceRequest,
+) (*browserrpc.OpenResourceResponse, error) {
 	uri, err := workspaceapi.ParseURI(req.GetResource())
 	if err != nil {
 		return nil, err
@@ -247,13 +247,13 @@ func (s *Server) Open(
 		return nil, err
 	}
 
-	return &OpenResourceResponse{Uri: uri.String()}, nil
+	return &browserrpc.OpenResourceResponse{Uri: uri.String()}, nil
 }
 
 // Publish satisfies BrowserServer
 func (s *Server) Publish(
-	ctx context.Context, req *PublishRequest,
-) (*PublishResponse, error) {
+	ctx context.Context, req *browserrpc.PublishRequest,
+) (*browserrpc.PublishResponse, error) {
 	ev, err := req.GetEv().ToModel()
 	if err != nil {
 		s.log(log.WarnLevel, "error converting rpc event to model: %v", err)
@@ -268,13 +268,13 @@ func (s *Server) Publish(
 	}
 	s.log(log.TraceLevel, "publish event: %v", ev)
 
-	return new(PublishResponse), nil
+	return new(browserrpc.PublishResponse), nil
 }
 
 // Focus satisfies BrowserServer
 func (s *Server) Focus(
-	ctx context.Context, req *FocusRequest,
-) (*FocusResponse, error) {
+	ctx context.Context, req *browserrpc.FocusRequest,
+) (*browserrpc.FocusResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
@@ -283,7 +283,7 @@ func (s *Server) Focus(
 		return nil, err
 	}
 
-	res := &FocusResponse{
+	res := &browserrpc.FocusResponse{
 		WindowId: win.WindowID(),
 	}
 
@@ -292,8 +292,8 @@ func (s *Server) Focus(
 
 // CloseWindow satisfies BrowserServer.
 func (s *Server) CloseWindow(
-	ctx context.Context, req *WindowCloseRequest,
-) (*WindowCloseResponse, error) {
+	ctx context.Context, req *browserrpc.WindowCloseRequest,
+) (*browserrpc.WindowCloseResponse, error) {
 	id := req.GetWindowId()
 	if id == 0 {
 		return nil, fmt.Errorf("missing request window id: %d", id)
@@ -306,7 +306,7 @@ func (s *Server) CloseWindow(
 	// mimic idempotent close behaviour
 	win, ok := s.browser.Window(id)
 	if !ok {
-		return new(WindowCloseResponse), nil
+		return new(browserrpc.WindowCloseResponse), nil
 	}
 
 	err := win.Close()
@@ -314,11 +314,11 @@ func (s *Server) CloseWindow(
 		return nil, err
 	}
 
-	return new(WindowCloseResponse), nil
+	return new(browserrpc.WindowCloseResponse), nil
 }
 
 // Floating satisfies BrowserServer
-func (s *Server) Floating(srv WindowManager_FloatingServer) error {
+func (s *Server) Floating(srv browserrpc.WindowManager_FloatingServer) error {
 	msg, err := srv.Recv()
 	if err != nil {
 		return fmt.Errorf("receive initial request: %w", err)
@@ -330,20 +330,20 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 
 	var client clientIfc
 	if s.syncMode {
-		client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
-			func() *SplitWindowMessage {
-				return new(SplitWindowMessage)
+		client = thandlerrpc.NewSyncClientStream(s.serverCtx, srv,
+			func() *browserrpc.SplitWindowMessage {
+				return new(browserrpc.SplitWindowMessage)
 			})
 	} else {
-		client = handlerrpc.NewClientStream(s.serverCtx, srv,
-			func() *FloatingWindowMessage {
-				return new(FloatingWindowMessage)
+		client = thandlerrpc.NewClientStream(s.serverCtx, srv,
+			func() *browserrpc.FloatingWindowMessage {
+				return new(browserrpc.FloatingWindowMessage)
 			}, s.browser.PublishEvent)
 	}
 
 	at := req.GetOffset().ToModel()
 	alignment := component.Alignment(req.GetAlignment())
-	cfg := component.FloatingConfig{Offset: at, Alignment: alignment}
+	cfg := browserapi.FloatingConfig{Offset: at, Alignment: alignment}
 
 	// NOTE: intercept the first calls to Dimensions and Resize
 	// so send install response before stream starts exchanging
@@ -363,7 +363,7 @@ func (s *Server) Floating(srv WindowManager_FloatingServer) error {
 }
 
 // Tab satisfies BrowserServer
-func (s *Server) Tab(srv WindowManager_TabServer) error {
+func (s *Server) Tab(srv browserrpc.WindowManager_TabServer) error {
 	msg, err := srv.Recv()
 	if err != nil {
 		return fmt.Errorf("receive initial request: %w", err)
@@ -388,14 +388,14 @@ func (s *Server) Tab(srv WindowManager_TabServer) error {
 
 	var client clientIfc
 	if s.syncMode {
-		client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
-			func() *SplitWindowMessage {
-				return new(SplitWindowMessage)
+		client = thandlerrpc.NewSyncClientStream(s.serverCtx, srv,
+			func() *browserrpc.SplitWindowMessage {
+				return new(browserrpc.SplitWindowMessage)
 			})
 	} else {
-		client = handlerrpc.NewClientStream(s.serverCtx, srv,
-			func() *TabMessage {
-				return new(TabMessage)
+		client = thandlerrpc.NewClientStream(s.serverCtx, srv,
+			func() *browserrpc.TabMessage {
+				return new(browserrpc.TabMessage)
 			}, s.browser.PublishEvent)
 	}
 	handler := &streamHandler{mu: s.browser, Handler: client}
@@ -418,7 +418,7 @@ func (s *Server) Tab(srv WindowManager_TabServer) error {
 }
 
 // SetContent satisfies BrowserServer.
-func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
+func (s *Server) SetContent(srv browserrpc.WindowManager_SetContentServer) error {
 	msg, err := srv.Recv()
 	if err != nil {
 		return fmt.Errorf("receive initial request: %w", err)
@@ -434,14 +434,14 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 	var client clientIfc
 	if uri == "" {
 		if s.syncMode {
-			client = handlerrpc.NewSyncClientStream(s.serverCtx, srv,
-				func() *SplitWindowMessage {
-					return new(SplitWindowMessage)
+			client = thandlerrpc.NewSyncClientStream(s.serverCtx, srv,
+				func() *browserrpc.SplitWindowMessage {
+					return new(browserrpc.SplitWindowMessage)
 				})
 		} else {
-			client = handlerrpc.NewClientStream(s.serverCtx, srv,
-				func() *WindowSetContentMessage {
-					return new(WindowSetContentMessage)
+			client = thandlerrpc.NewClientStream(s.serverCtx, srv,
+				func() *browserrpc.WindowSetContentMessage {
+					return new(browserrpc.WindowSetContentMessage)
 				}, s.browser.PublishEvent)
 		}
 		handler = &streamHandler{mu: s.browser, Handler: client}
@@ -477,22 +477,22 @@ func (s *Server) SetContent(srv WindowManager_SetContentServer) error {
 
 // Close satisfies BrowserServer.
 func (s *Server) Close(
-	ctx context.Context, req *WindowCloseRequest,
-) (*WindowCloseResponse, error) {
+	ctx context.Context, req *browserrpc.WindowCloseRequest,
+) (*browserrpc.WindowCloseResponse, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
 
 	win, ok := s.browser.Window(req.GetWindowId())
 	if !ok || win.Closed() {
 		// close is idempotent
-		return new(WindowCloseResponse), nil
+		return new(browserrpc.WindowCloseResponse), nil
 	}
 
 	err := win.Close()
 	if err != nil {
 		return nil, err
 	}
-	return new(WindowCloseResponse), nil
+	return new(browserrpc.WindowCloseResponse), nil
 }
 
 // Stop closes all resources associated with this server.
@@ -550,7 +550,7 @@ func (s *Server) scheduleOrRespond(
 }
 
 func (s *Server) setBrowserMessage(
-	level notifications.Level, msg string, once bool,
+	level browserapi.NotificationLevel, msg string, once bool,
 ) (string, error) {
 	s.browser.Lock()
 	defer s.browser.Unlock()
@@ -562,15 +562,15 @@ func (s *Server) setBrowserMessage(
 }
 
 func (s *Server) notify(
-	ctx context.Context, req *NotifyRequest, once bool,
-) (*NotifyResponse, error) {
+	ctx context.Context, req *browserrpc.NotifyRequest, once bool,
+) (*browserrpc.NotifyResponse, error) {
 	msg := sanitizeLine(req.GetMsg())
-	level := notifications.Level(req.GetLevel())
+	level := browserapi.NotificationLevel(req.GetLevel())
 	switch level {
-	case notifications.LevelInfo,
-		notifications.LevelSuccess,
-		notifications.LevelWarn,
-		notifications.LevelError:
+	case browserapi.LevelInfo,
+		browserapi.LevelSuccess,
+		browserapi.LevelWarn,
+		browserapi.LevelError:
 	default:
 		return nil, status.Error(codes.InvalidArgument, "invalid level")
 	}
@@ -578,34 +578,34 @@ func (s *Server) notify(
 	if err != nil {
 		return nil, err
 	}
-	resp := new(NotifyResponse)
+	resp := new(browserrpc.NotifyResponse)
 	resp.Id = id
 	return resp, nil
 }
 
-func protoToModelOrientation(p Orientation) (o browserapi.Orientation) {
+func protoToModelOrientation(p browserrpc.Orientation) (o browserapi.Orientation) {
 	switch p {
-	case Orientation_Default:
+	case browserrpc.Orientation_Default:
 		o = browserapi.OrientationDefault
-	case Orientation_Top:
+	case browserrpc.Orientation_Top:
 		o = browserapi.OrientationTop
-	case Orientation_Bottom:
+	case browserrpc.Orientation_Bottom:
 		o = browserapi.OrientationBottom
-	case Orientation_Left:
+	case browserrpc.Orientation_Left:
 		o = browserapi.OrientationLeft
-	case Orientation_Right:
+	case browserrpc.Orientation_Right:
 		o = browserapi.OrientationRight
 	}
 	return
 }
 
-func protoToModelBarFrame(p BarRequest_Frame) (o browserapi.BarFrame) {
+func protoToModelBarFrame(p browserrpc.BarRequest_Frame) (o browserapi.BarFrame) {
 	switch p {
-	case BarRequest_Default:
+	case browserrpc.BarRequest_Default:
 		o = browserapi.BarFrameDefault
-	case BarRequest_Always:
+	case browserrpc.BarRequest_Always:
 		o = browserapi.BarFrameAlways
-	case BarRequest_Never:
+	case browserrpc.BarRequest_Never:
 		o = browserapi.BarFrameNever
 	}
 	return

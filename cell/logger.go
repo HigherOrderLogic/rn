@@ -31,7 +31,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 type logger struct {

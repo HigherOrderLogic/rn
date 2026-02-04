@@ -26,7 +26,7 @@ package shader
 import (
 	"math"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // TransitionCut jumps from one shader to the other without an interpolation.

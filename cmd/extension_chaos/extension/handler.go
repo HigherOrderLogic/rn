@@ -31,19 +31,19 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/api/browserapi/browserext"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 )
 
 const (
@@ -199,7 +199,7 @@ func (h *chaosCommandHandler) handleNewChaosHandler(
 	ctx context.Context, cmd textapi.Command,
 ) error {
 	comp := component.NewStringWithConfig(copy, component.StringConfig{
-		Alignment: component.SpanAlignmentCentered,
+		Alignment: component.AlignmentCentered,
 	})
 
 	panic := len(cmd.Args) == 0 || cmd.Args[0] == "panic"
@@ -266,13 +266,6 @@ func (h *chaosHandler) Cursor() (
 		time.Sleep(h.sleepTime)
 	}
 	return
-}
-
-func (h *chaosHandler) Man() tui.Manual {
-	if !h.panic {
-		time.Sleep(h.sleepTime)
-	}
-	return tui.Manual{}
 }
 
 func (h *chaosHandler) Close() error {

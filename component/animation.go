@@ -30,9 +30,10 @@ import (
 	"fmt"
 	"time"
 
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 )
 
 const (
@@ -41,7 +42,7 @@ const (
 )
 
 var _ tui.Component = (*Animation)(nil)
-var _ WithAttributes = (*Animation)(nil)
+var _ component.WithAttributes = (*Animation)(nil)
 
 // ProgressAnimationFrames returns the frames and sequence numbers of the default
 // progress animation. It only needs 2 term.Cells in terms of width and 1 cell in height.
@@ -162,7 +163,7 @@ func EncodeAnimation(a *Animation, width, height int) []byte {
 // of frames on loop at the specified fps.
 type Animation struct {
 	interrupter   term.Interrupter
-	frames        []WithAttributes
+	frames        []component.WithAttributes
 	sequence      []int
 	fps           int
 	i             int
@@ -192,10 +193,10 @@ func (a *Animation) Init(
 	interrupter term.Interrupter,
 	frames []string, sequence []int, fps int,
 ) {
-	components := make([]WithAttributes, len(frames))
+	components := make([]component.WithAttributes, len(frames))
 	for i, frame := range frames {
-		components[i] = NewStringWithConfig(frame, StringConfig{
-			Alignment: SpanAlignmentCentered,
+		components[i] = component.NewStringWithConfig(frame, component.StringConfig{
+			Alignment: component.AlignmentCentered,
 		})
 	}
 	a.InitWithComponents(context.Background(), interrupter, components, sequence, fps)
@@ -206,7 +207,7 @@ func (a *Animation) Init(
 // interrupter.Interrupt. See Init for more details.
 func (a *Animation) InitWithComponents(
 	ctx context.Context, interrupter term.Interrupter,
-	frames []WithAttributes, sequence []int, fps int,
+	frames []component.WithAttributes, sequence []int, fps int,
 ) {
 	// assert frames and sequence are consistent with each other
 	// so we panic on Init to indicate programmer error

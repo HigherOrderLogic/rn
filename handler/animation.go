@@ -26,10 +26,10 @@ package handler
 import (
 	"context"
 
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // AnimationPlayer returns a tui.Handler that wraps a component.Animation
@@ -111,8 +111,4 @@ func (p *player) Cursor() (pos term.Coordinates, style term.CursorStyle, show bo
 
 func (p *player) Selection() (string, bool) {
 	return "", false
-}
-
-func (p *player) Man() tui.Manual {
-	return tui.Manual{}
 }

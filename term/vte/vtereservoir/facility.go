@@ -29,13 +29,13 @@ import (
 	"github.com/ernestrc/go-multierror"
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 )
 

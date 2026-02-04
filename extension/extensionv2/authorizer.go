@@ -28,7 +28,7 @@ import (
 	"fmt"
 
 	blueauth "github.com/unstablebuild/blue/auth"
-	"unstable.build/go-tui/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 )
 
 // Extension represents an authenticated extension which is

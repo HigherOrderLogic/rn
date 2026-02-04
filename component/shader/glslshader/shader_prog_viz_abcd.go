@@ -25,7 +25,7 @@ package glslshader
 
 import (
 	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // ProgressVizABCD shows the process percentage as the first 10 letters of the

@@ -28,9 +28,9 @@ import (
 	"errors"
 	"sync"
 
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Service abstracts methods to perform Git operations.

@@ -24,8 +24,8 @@
 package ide
 
 import (
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/extension"
 )

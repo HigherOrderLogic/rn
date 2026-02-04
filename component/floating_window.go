@@ -26,28 +26,29 @@ package component
 import (
 	"unsafe"
 
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 type floatingNode struct {
 	desiredOffset               term.Coordinates // desired offset
-	alignment                   Alignment        // desired alignment
+	alignment                   component.Alignment        // desired alignment
 	maxWidth, maxHeight         int              // window space size
 	desiredWidth, desiredHeight int              // content desired Dimensions size
 	userWidth, userHeight       int
-	minimized                   Alignment
+	minimized                   component.Alignment
 	minimizedPadding            int
 
 	realWidth, realHeight int              // calculated upon Resize, considering trimming
 	realOffset            term.Coordinates // calculated offset with alignment
 
 	wm      *WindowManager
-	content Virtual[Floating]
+	content component.Virtual[component.Floating]
 }
 
 func newFloatingNode(
-	wm *WindowManager, content Floating,
+	wm *WindowManager, content component.Floating,
 	cfg FloatingConfig,
 	maxWidth, maxHeight int,
 ) *floatingNode {
@@ -73,9 +74,9 @@ func (w *floatingNode) Width() int {
 		return w.realWidth
 	}
 	switch w.minimized {
-	case SpanAlignmentTop, SpanAlignmentBottom:
+	case component.AlignmentTop, component.AlignmentBottom:
 		return w.wm.minimizedPos[w.ID()].length()
-	case SpanAlignmentLeft, SpanAlignmentRight:
+	case component.AlignmentLeft, component.AlignmentRight:
 		return 1 + w.minimizedPadding
 	default:
 		panic("invalid minimize alignment")
@@ -87,9 +88,9 @@ func (w *floatingNode) Height() int {
 		return w.realHeight
 	}
 	switch w.minimized {
-	case SpanAlignmentTop, SpanAlignmentBottom:
+	case component.AlignmentTop, component.AlignmentBottom:
 		return 1 + w.minimizedPadding
-	case SpanAlignmentLeft, SpanAlignmentRight:
+	case component.AlignmentLeft, component.AlignmentRight:
 		return w.wm.minimizedPos[w.ID()].length()
 	default:
 		panic("invalid minimize alignment")
@@ -124,9 +125,9 @@ func (w *floatingNode) SetContentResize(c tui.Component, resize bool) (
 	var ok bool
 
 	if w.wm.config.Frame {
-		_, ok = c.(*Frame).Content().(Floating)
+		_, ok = c.(*component.Frame).Content().(component.Floating)
 	} else {
-		_, ok = c.(Floating)
+		_, ok = c.(component.Floating)
 	}
 
 	if !ok {
@@ -140,7 +141,7 @@ func (w *floatingNode) SetContentResize(c tui.Component, resize bool) (
 	if f, ok := prev.(prevNodeFloating); ok {
 		prev = f.Component // unwrap
 	}
-	w.content.C = c.(Floating)
+	w.content.C = c.(component.Floating)
 	if resize {
 		w.updateDesiredDimensions()
 		w.resize()
@@ -207,18 +208,18 @@ func (w *floatingNode) resize() {
 	horizontalDiff := max(0, w.maxWidth-w.desiredWidth)
 
 	var offset term.Coordinates
-	if w.alignment&SpanAlignmentVerticallyCentered != 0 {
+	if w.alignment&component.AlignmentVerticallyCentered != 0 {
 		offset.Y = verticalDiff / 2
-	} else if w.alignment&SpanAlignmentBottom != 0 {
+	} else if w.alignment&component.AlignmentBottom != 0 {
 		offset.Y = verticalDiff
 		offset.Y -= w.desiredOffset.Y
 	} else {
 		offset.Y += w.desiredOffset.Y
 	}
 
-	if w.alignment&SpanAlignmentHorizontallyCentered != 0 {
+	if w.alignment&component.AlignmentHorizontallyCentered != 0 {
 		offset.X = horizontalDiff / 2
-	} else if w.alignment&SpanAlignmentRight != 0 {
+	} else if w.alignment&component.AlignmentRight != 0 {
 		offset.X = horizontalDiff
 		offset.X -= w.desiredOffset.X
 	} else {

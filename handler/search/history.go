@@ -31,6 +31,8 @@ import (
 
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/retry"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"unstable.build/go-tui/localstorage/bluestore"
 )
 
 var retryStrategy = retry.SequentialStrategy(30 * time.Millisecond)
@@ -55,7 +57,7 @@ type History struct {
 
 // NewHistory allocates storage for a new instance of History and initializes it.
 func NewHistory(
-	store document.Service, documentID string, maxHistory int,
+	store storageapi.Service, documentID string, maxHistory int,
 ) *History {
 	ret := new(History)
 	ret.Init(store, documentID, maxHistory)
@@ -64,14 +66,14 @@ func NewHistory(
 
 // Init initializes this history with the given store, documentID and maximum history.
 func (h *History) Init(
-	store document.Service, documentID string, maxHistory int,
+	store storageapi.Service, documentID string, maxHistory int,
 ) {
 	if documentID == "" || store == nil || maxHistory == 0 {
 		err := fmt.Sprintf("invalid Init args: documentID=%q, store=%v, max=%d",
 			documentID, store, maxHistory)
 		panic(err)
 	}
-	h.store = store
+	h.store = bluestore.AdaptFrom(store)
 	h.docID = documentID
 	h.timeout = defaultStoreTimeout
 	h.max = maxHistory

@@ -26,7 +26,7 @@ package cell
 import (
 	"context"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // undoer adds undo and redo methods to a otherwise, irreversible cell.writer.

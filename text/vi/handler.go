@@ -34,12 +34,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -206,11 +206,6 @@ func (vi *viHandlerImpl) Draw(w term.Writer) {
 	vi.less.Draw(w)
 	locations := vi.cursor.SortedLocations()
 	text.DrawLocations(locations, vi.less.Scroll(), w)
-}
-
-// Man satisfies tui.Handler
-func (vi *viHandlerImpl) Man() tui.Manual {
-	panic("TODO")
 }
 
 // Cursor satisfies tui.Handler

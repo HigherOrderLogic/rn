@@ -30,7 +30,7 @@ import (
 	"text/template/parse"
 
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // AllowedFuncs returns a list of allowed functions to pass to parse.Parse

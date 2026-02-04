@@ -36,11 +36,12 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/workspacerpc"
+	tworkspacerpc "unstable.build/go-tui/workspace/workspacerpc"
 )
 
 var logger = log.New()
@@ -108,7 +109,7 @@ func TestReaderWriterListener(t *testing.T) {
 		scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
 		require.NoError(t, err)
 
-		server := workspacerpc.NewServer(scheme, new(sync.Mutex))
+		server := tworkspacerpc.NewServer(scheme, new(sync.Mutex))
 		workspacerpc.RegisterSchemeServer(grpcServer, server)
 		go func() {
 			inWrite.Close()

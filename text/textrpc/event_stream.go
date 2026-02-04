@@ -29,35 +29,32 @@ import (
 	"fmt"
 	"io"
 	"sync"
-	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	codes "google.golang.org/grpc/codes"
-	status "google.golang.org/grpc/status"
-	"unstable.build/go-tui/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
 	"unstable.build/go-tui/debug"
 )
 
 var _ textapi.EventHandler = (*eventStreamClient)(nil)
 
 const (
-	handleReceiveMessageTimeout = 3 * time.Second
 	eventChanBuffer             = 100
 )
 
 type eventStreamClient struct {
 	ctx       context.Context
 	cancelCtx func()
-	stream    Editor_SubscribeEventServer
-	ch        chan *EditorEvent
+	stream    textrpc.Editor_SubscribeEventServer
+	ch        chan *textrpc.EditorEvent
 }
 
 func newEventStreamClient(
-	ctx context.Context, stream Editor_SubscribeEventServer, locker sync.Locker,
+	ctx context.Context, stream textrpc.Editor_SubscribeEventServer, locker sync.Locker,
 ) *eventStreamClient {
 	ctx, cancel := context.WithCancel(ctx)
-	ch := make(chan *EditorEvent, eventChanBuffer)
+	ch := make(chan *textrpc.EditorEvent, eventChanBuffer)
 	ret := &eventStreamClient{
 		stream:    stream,
 		ctx:       ctx,
@@ -133,80 +130,4 @@ func (e *eventStreamClient) log(level log.Level, msg string, args ...interface{}
 	}
 	log.WithFields(log.Fields{logging.KeyClass: "textrpc.eventStreamClient"}).
 		Logf(level, msg, args...)
-}
-
-type eventStreamServer struct {
-	stream    Editor_SubscribeEventClient
-	parentCtx context.Context
-	handler   textapi.EventHandler
-}
-
-func newEventStreamServer(
-	parentCtx context.Context, stream Editor_SubscribeEventClient,
-	handler textapi.EventHandler,
-) eventStreamServer {
-	return eventStreamServer{
-		stream:    stream,
-		parentCtx: parentCtx,
-		handler:   handler,
-	}
-}
-
-func (s eventStreamServer) log(level log.Level, msg string, args ...interface{}) {
-	log.WithFields(log.Fields{logging.KeyClass: "textrpc.eventStreamServer"}).
-		Logf(level, msg, args...)
-}
-
-func (s eventStreamServer) receiveEvents() {
-	defer s.log(log.TraceLevel, "done receiving events")
-	for {
-		protoEv, err := s.stream.Recv()
-		if err != nil {
-			if !errors.Is(err, io.EOF) && status.Code(err) != codes.Canceled {
-				s.log(log.ErrorLevel, "stream recv error: %v", err)
-			}
-			break
-		}
-
-		var ev textapi.Event
-		if err := fromProto(&ev, protoEv); err != nil {
-			s.log(log.ErrorLevel, "decode proto event: %v", err)
-			continue
-		}
-
-		// set a timeout to prevent a deadlock via client stream buffer exhaustion
-		ctx, cancel := context.WithTimeout(s.parentCtx, handleReceiveMessageTimeout)
-		s.log(log.TraceLevel, "handle %v", ev.Type)
-		exit := s.handler.Handle(ctx, ev)
-		if err := ctx.Err(); err != nil {
-			s.log(log.ErrorLevel, "could not dispatch event %v in time: %v", ev.Type, err)
-			select {
-			case <-s.parentCtx.Done():
-				cancel()
-				return
-			default:
-			}
-		}
-		cancel()
-		if exit {
-			break
-		}
-	}
-
-	// do not attempt to send unsubscribe if client is closing
-	select {
-	case <-s.parentCtx.Done():
-		return
-	default:
-	}
-
-	req := SubscribeEventRequest{Unsubscribe: true}
-	s.log(log.TraceLevel, "send unsubscribe")
-	err := s.stream.Send(&req)
-	if err != nil {
-		s.log(log.ErrorLevel, "send unsubscribe: %v", err)
-	}
-	if err := s.stream.CloseSend(); err != nil {
-		s.log(log.ErrorLevel, "stream close send: %v", err)
-	}
 }

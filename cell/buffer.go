@@ -29,7 +29,7 @@ import (
 	"math"
 	"strings"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // A Buffer offers a high level API to manipulate a matrix of term.Cell.

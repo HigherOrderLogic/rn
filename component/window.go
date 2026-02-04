@@ -26,8 +26,9 @@ package component
 import (
 	"errors"
 
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 var errCalledZeroValuedWin = "called method on zero-valued Window"
@@ -148,7 +149,7 @@ func (w Window) Content() (c tui.Component) {
 	}
 
 	if w.wm.config.Frame {
-		c = w.node.Content().(*Frame).Content()
+		c = w.node.Content().(*component.Frame).Content()
 	} else {
 		c = w.node.Content()
 	}
@@ -159,8 +160,8 @@ func (w Window) Content() (c tui.Component) {
 // Frame returns this window's frame and true or nil and
 // false if this window belongs to a window manager configured
 // without frames.
-func (w Window) Frame() (*Frame, bool) {
-	frame, ok := w.node.Content().(*Frame)
+func (w Window) Frame() (*component.Frame, bool) {
+	frame, ok := w.node.Content().(*component.Frame)
 	return frame, ok
 }
 
@@ -186,9 +187,9 @@ func (w Window) SetContentResize(content tui.Component, resize bool) (
 	if w.wm.config.Frame && !resize {
 		// frame needs a Resize but avoid resizing content
 		// as per resize arg.
-		frame := w.wm.withFrame(Nop())
+		frame := w.wm.withFrame(component.Nop())
 		frame.Resize(w.Width(), w.Height())
-		frame.content.C = content
+		frame.SetContentResize(content, false)
 		content = frame
 	} else if w.wm.config.Frame {
 		content = w.wm.withFrame(content)
@@ -196,7 +197,7 @@ func (w Window) SetContentResize(content tui.Component, resize bool) (
 	prev = w.node.SetContentResize(content, resize)
 
 	if w.wm.config.Frame {
-		prev = prev.(*Frame).Content()
+		prev = prev.(*component.Frame).Content()
 	}
 	return
 }
@@ -211,7 +212,7 @@ func (w Window) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
 	if !w.wm.config.Frame {
 		return term.Attributes{}, false
 	}
-	f := w.node.Content().(*Frame)
+	f := w.node.Content().(*component.Frame)
 	ret := f.Attributes
 	f.Attributes = attr
 	return ret, true
@@ -219,14 +220,14 @@ func (w Window) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
 
 // SetFrameCharSet sets a Window's Frame attributes. This can be reset by calling
 // SetDefaultFrameCharSet which sets the default attributes for all windows.
-func (w Window) SetFrameCharSet(b FrameCharSet) bool {
+func (w Window) SetFrameCharSet(b component.FrameCharSet) bool {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
 	if !w.wm.config.Frame {
 		return false
 	}
-	w.node.Content().(*Frame).FrameCharSet = b
+	w.node.Content().(*component.Frame).FrameCharSet = b
 	return true
 }
 
@@ -240,13 +241,13 @@ func (w Window) FrameAttr() (attr term.Attributes, ok bool) {
 		return
 	}
 	ok = true
-	attr = w.node.Content().(*Frame).Attributes
+	attr = w.node.Content().(*component.Frame).Attributes
 	return
 }
 
 // FrameCharSet return this Window's configured FrameCharSet or false
 // if this Window belongs to a WindowManager configured to not use borders.
-func (w Window) FrameCharSet() (b FrameCharSet, ok bool) {
+func (w Window) FrameCharSet() (b component.FrameCharSet, ok bool) {
 	if w.wm == nil {
 		panic(errCalledZeroValuedWin)
 	}
@@ -254,7 +255,7 @@ func (w Window) FrameCharSet() (b FrameCharSet, ok bool) {
 		return
 	}
 	ok = true
-	b = w.node.Content().(*Frame).FrameCharSet
+	b = w.node.Content().(*component.Frame).FrameCharSet
 	return
 }
 
@@ -436,7 +437,7 @@ func (w Window) IsFloating() bool {
 }
 
 // IsMinimized returns true if this is a floating window and it's minimized.
-func (w Window) IsMinimized() (Alignment, bool) {
+func (w Window) IsMinimized() (component.Alignment, bool) {
 	if !w.IsFloating() {
 		return 0, false
 	}
@@ -455,7 +456,7 @@ func (w Window) MinimizeUp(padding int) bool {
 		return false
 	}
 	n.wm.minimizedDirty = true
-	n.minimized = SpanAlignmentTop
+	n.minimized = component.AlignmentTop
 	n.minimizedPadding = padding
 	return ok
 }
@@ -471,7 +472,7 @@ func (w Window) MinimizeDown(padding int) bool {
 		return false
 	}
 	n.wm.minimizedDirty = true
-	n.minimized = SpanAlignmentBottom
+	n.minimized = component.AlignmentBottom
 	n.minimizedPadding = padding
 	return ok
 }
@@ -487,7 +488,7 @@ func (w Window) MinimizeLeft(padding int) bool {
 		return false
 	}
 	n.wm.minimizedDirty = true
-	n.minimized = SpanAlignmentLeft
+	n.minimized = component.AlignmentLeft
 	n.minimizedPadding = padding
 	return ok
 }
@@ -503,7 +504,7 @@ func (w Window) MinimizeRight(padding int) bool {
 		return false
 	}
 	n.wm.minimizedDirty = true
-	n.minimized = SpanAlignmentRight
+	n.minimized = component.AlignmentRight
 	n.minimizedPadding = padding
 	return ok
 }

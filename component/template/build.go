@@ -27,10 +27,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/cell/graphemecluster"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
 // Build builds a component from a template string, value
@@ -44,7 +44,7 @@ func Build(
 	}
 	attrs.Attrs |= defAttrs.Attrs
 	cfg := component.StringConfig{
-		Alignment: component.SpanAlignmentCentered,
+		Alignment: component.AlignmentCentered,
 	}
 	cfg.Attributes = attrs
 	if cfg.Attributes.Bg == 0 {

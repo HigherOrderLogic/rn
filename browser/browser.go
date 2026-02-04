@@ -26,13 +26,12 @@ package browser
 import (
 	"io"
 
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 // Floating is a Handler used for Floating windows.
@@ -118,7 +117,7 @@ type WindowManager interface {
 
 	// Floating creates a new floating window at coordinates,
 	// with static width and height.
-	Floating(h Floating, cfg component.FloatingConfig) (Window, error)
+	Floating(h Floating, cfg browserapi.FloatingConfig) (Window, error)
 
 	// Bar creates a status bar with Orientation and Handler.
 	// Bars differ from Split and Floating windows in that they can't
@@ -152,8 +151,8 @@ type TabManager interface {
 // Notifications is the interface that wraps methods to display
 // messages to the user.
 type Notifications interface {
-	Notify(level notifications.Level, msg string, args ...interface{}) (string, error)
-	NotifyOnce(level notifications.Level, msg string, args ...interface{}) (string, error)
+	Notify(level browserapi.NotificationLevel, msg string, args ...interface{}) (string, error)
+	NotifyOnce(level browserapi.NotificationLevel, msg string, args ...interface{}) (string, error)
 	UpdateNotificationProgress(id, message string, progress, total int64) error
 }
 

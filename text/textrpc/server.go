@@ -32,12 +32,13 @@ import (
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 )
 
@@ -47,7 +48,7 @@ var (
 
 // Server serves an Editor over GRPC.
 type Server struct {
-	UnimplementedEditorServer
+	textrpc.UnimplementedEditorServer
 
 	ctx       context.Context
 	cancelCtx func()
@@ -79,8 +80,8 @@ func (s *Server) Init(
 }
 
 // Edit satisfies EditorServer
-func (s *Server) Edit(ctx context.Context, in *EditRequest) (
-	*EditResponse, error,
+func (s *Server) Edit(ctx context.Context, in *textrpc.EditRequest) (
+	*textrpc.EditResponse, error,
 ) {
 	uri, err := NewURIFromProto(in.GetResourceName())
 	if err != nil {
@@ -96,12 +97,12 @@ func (s *Server) Edit(ctx context.Context, in *EditRequest) (
 		return nil, err
 	}
 
-	return &EditResponse{}, nil
+	return &textrpc.EditResponse{}, nil
 }
 
 // Editor satisfies EditorServer
-func (s *Server) Editor(ctx context.Context, in *EditorRequest) (
-	*EditorResponse, error,
+func (s *Server) Editor(ctx context.Context, in *textrpc.EditorRequest) (
+	*textrpc.EditorResponse, error,
 ) {
 	uri, err := NewURIFromProto(in.GetResourceName())
 	if err != nil {
@@ -116,14 +117,14 @@ func (s *Server) Editor(ctx context.Context, in *EditorRequest) (
 		return nil, err
 	}
 
-	return &EditorResponse{}, nil
+	return &textrpc.EditorResponse{}, nil
 }
 
 // SubscribeEvent satisfies EditorServer
-func (s *Server) SubscribeEvent(stream Editor_SubscribeEventServer) error {
+func (s *Server) SubscribeEvent(stream textrpc.Editor_SubscribeEventServer) error {
 	defer s.log(log.TraceLevel, "stream event completed: stream=%p", stream)
 
-	var req SubscribeEventRequest
+	var req textrpc.SubscribeEventRequest
 	err := stream.RecvMsg(&req)
 	s.log(log.TraceLevel, "Subscribe: received request: %v: %v", req.GetType(), err)
 	if err != nil {
@@ -158,14 +159,14 @@ func (s *Server) SubscribeEvent(stream Editor_SubscribeEventServer) error {
 }
 
 // SubscribeCommand satisfies EditorServer
-func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
-	var msg ClientCommandMessage
+func (s *Server) SubscribeCommand(srv textrpc.Editor_SubscribeCommandServer) error {
+	var msg textrpc.ClientCommandMessage
 	err := srv.RecvMsg(&msg)
 	if err != nil {
 		return fmt.Errorf("receive subscribe command request: %w", err)
 	}
 	req := msg.GetRequest()
-	if msg.GetType() != ClientCommandMessage_Request || req == nil {
+	if msg.GetType() != textrpc.ClientCommandMessage_Request || req == nil {
 		return errors.New("receive subscribe command request: missing request")
 	}
 
@@ -189,7 +190,7 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 			case errMsg := <-clientStream.handleCommand:
 				if errMsg != "" {
 					s.editor.Lock()
-					_, err := s.editor.Notify(notifications.LevelError, errMsg)
+					_, err := s.editor.Notify(browserapi.LevelError, errMsg)
 					if err != nil {
 						s.log(log.ErrorLevel, "%s", errMsg)
 						s.log(log.WarnLevel, "notify: %v", err)
@@ -202,8 +203,9 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 		}
 	})
 
-	resp := SubscribeCommandResponse{}
-	respMsg := ServerCommandMessage{Type: ServerCommandMessage_Response, Response: &resp}
+	resp := textrpc.SubscribeCommandResponse{}
+	respMsg := textrpc.ServerCommandMessage{
+		Type: textrpc.ServerCommandMessage_Response, Response: &resp}
 	if err := srv.SendMsg(&respMsg); err != nil {
 		return fmt.Errorf("send bar install response: %w", err)
 	}
@@ -228,8 +230,8 @@ func (s *Server) SubscribeCommand(srv Editor_SubscribeCommandServer) error {
 }
 
 // SetLocationList satisfies EditorServer
-func (s *Server) SetLocationList(ctx context.Context, in *SetLocationListRequest) (
-	*SetLocationListResponse, error,
+func (s *Server) SetLocationList(ctx context.Context, in *textrpc.SetLocationListRequest) (
+	*textrpc.SetLocationListResponse, error,
 ) {
 	locs := in.GetLocations()
 	id := in.GetListId()
@@ -245,26 +247,26 @@ func (s *Server) SetLocationList(ctx context.Context, in *SetLocationListRequest
 
 	h.SetLocationList(textapi.LocationPriority(pri),
 		id, text.LocationSlice(getLocations(locs)))
-	return new(SetLocationListResponse), nil
+	return new(textrpc.SetLocationListResponse), nil
 }
 
 // MoveToNextLocation satisfies EditorServer
-func (s *Server) MoveToNextLocation(ctx context.Context, in *MoveToLocationRequest) (
-	res *MoveToLocationResponse, err error,
+func (s *Server) MoveToNextLocation(ctx context.Context, in *textrpc.MoveToLocationRequest) (
+	res *textrpc.MoveToLocationResponse, err error,
 ) {
 	return s.moveToLocation(ctx, in, true)
 }
 
 // MoveToPrevLocation satisfies EditorServer
-func (s *Server) MoveToPrevLocation(ctx context.Context, in *MoveToLocationRequest) (
-	res *MoveToLocationResponse, err error,
+func (s *Server) MoveToPrevLocation(ctx context.Context, in *textrpc.MoveToLocationRequest) (
+	res *textrpc.MoveToLocationResponse, err error,
 ) {
 	return s.moveToLocation(ctx, in, false)
 }
 
 // SetDefaultAttributes satisfies EditorServer
-func (s *Server) SetDefaultAttributes(ctx context.Context, in *SetDefaultAttributesRequest) (
-	*SetDefaultAttributesResponse, error,
+func (s *Server) SetDefaultAttributes(ctx context.Context, in *textrpc.SetDefaultAttributesRequest) (
+	*textrpc.SetDefaultAttributesResponse, error,
 ) {
 	attrs := in.GetAttributes()
 
@@ -277,12 +279,12 @@ func (s *Server) SetDefaultAttributes(ctx context.Context, in *SetDefaultAttribu
 	}
 
 	h.SetDefaultAttributes(attrs.ToModel())
-	return new(SetDefaultAttributesResponse), nil
+	return new(textrpc.SetDefaultAttributesResponse), nil
 }
 
 // SetCursor satisfies EditorServer
-func (s *Server) SetCursor(ctx context.Context, in *SetCursorRequest) (
-	*SetCursorResponse, error,
+func (s *Server) SetCursor(ctx context.Context, in *textrpc.SetCursorRequest) (
+	*textrpc.SetCursorResponse, error,
 ) {
 	pos := in.GetPos()
 
@@ -295,12 +297,12 @@ func (s *Server) SetCursor(ctx context.Context, in *SetCursorRequest) (
 	}
 
 	h.SetCursorAtScroll(pos.ToModel())
-	return new(SetCursorResponse), nil
+	return new(textrpc.SetCursorResponse), nil
 }
 
 // Cursor satisfies EditorServer
-func (s *Server) Cursor(ctx context.Context, in *CursorRequest) (
-	*CursorResponse, error,
+func (s *Server) Cursor(ctx context.Context, in *textrpc.CursorRequest) (
+	*textrpc.CursorResponse, error,
 ) {
 	s.editor.Lock()
 	defer s.editor.Unlock()
@@ -314,12 +316,12 @@ func (s *Server) Cursor(ctx context.Context, in *CursorRequest) (
 	var protoPos termrpc.Coordinates
 	protoPos.FromModel(pos)
 
-	return &CursorResponse{Pos: &protoPos}, nil
+	return &textrpc.CursorResponse{Pos: &protoPos}, nil
 }
 
 // EditCell satisfies EditorServer
-func (s *Server) EditCell(ctx context.Context, in *EditCellRequest) (
-	*EditCellResponse, error,
+func (s *Server) EditCell(ctx context.Context, in *textrpc.EditCellRequest) (
+	*textrpc.EditCellResponse, error,
 ) {
 	start := in.GetStart().ToModel()
 	end := in.GetEnd().ToModel()
@@ -338,7 +340,7 @@ func (s *Server) EditCell(ctx context.Context, in *EditCellRequest) (
 	protoFrom.FromModel(from)
 	protoTo.FromModel(to)
 
-	res := &EditCellResponse{
+	res := &textrpc.EditCellResponse{
 		From: &protoFrom,
 		To:   &protoTo,
 		Old:  old,
@@ -347,8 +349,8 @@ func (s *Server) EditCell(ctx context.Context, in *EditCellRequest) (
 }
 
 // RawCells satisfies EditorServer
-func (s *Server) RawCells(ctx context.Context, in *RawCellsRequest) (
-	*RawCellsResponse, error,
+func (s *Server) RawCells(ctx context.Context, in *textrpc.RawCellsRequest) (
+	*textrpc.RawCellsResponse, error,
 ) {
 	s.editor.Lock()
 	defer s.editor.Unlock()
@@ -399,7 +401,7 @@ func (s *Server) editHandler(
 	return nil
 }
 
-func (s *Server) getHandler(call string, uri *URI) (text.Handler, bool) {
+func (s *Server) getHandler(call string, uri *textrpc.URI) (text.Handler, bool) {
 	muri, err := NewURIFromProto(uri)
 	if err != nil {
 		return nil, false
@@ -412,8 +414,8 @@ func (s *Server) getHandler(call string, uri *URI) (text.Handler, bool) {
 }
 
 func (s *Server) moveToLocation(
-	ctx context.Context, in *MoveToLocationRequest, next bool,
-) (res *MoveToLocationResponse, err error) {
+	ctx context.Context, in *textrpc.MoveToLocationRequest, next bool,
+) (res *textrpc.MoveToLocationResponse, err error) {
 	id := in.GetListId()
 
 	s.editor.Lock()
@@ -434,11 +436,11 @@ func (s *Server) moveToLocation(
 		return
 	}
 
-	res = new(MoveToLocationResponse)
+	res = new(textrpc.MoveToLocationResponse)
 	return res, nil
 }
 
-func makeStdMan(rpcMan *CommandManual) textapi.CommandManual {
+func makeStdMan(rpcMan *textrpc.CommandManual) textapi.CommandManual {
 	var cmds []textapi.CommandManual
 	for _, cmd := range rpcMan.GetCommands() {
 		cmds = append(cmds, makeStdMan(cmd))
@@ -451,7 +453,7 @@ func makeStdMan(rpcMan *CommandManual) textapi.CommandManual {
 	}
 }
 
-func getLocations(locs []*SetLocationListRequest_Location) (ret []textapi.Location) {
+func getLocations(locs []*textrpc.SetLocationListRequest_Location) (ret []textapi.Location) {
 	for _, loc := range locs {
 		ret = append(ret, textapi.Location{
 			Attr:    loc.GetAttr().ToModel(),

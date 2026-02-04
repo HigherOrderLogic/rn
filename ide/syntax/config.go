@@ -28,8 +28,8 @@ import (
 
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Config configures a tree parser.

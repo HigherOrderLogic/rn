@@ -24,9 +24,9 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 var _ tui.Handler = (*Tabs)(nil)
@@ -96,9 +96,4 @@ func (t *Tabs) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 // Selection satisfies tui.Handler but always returns false.
 func (t *Tabs) Selection() (string, bool) {
 	return "", false
-}
-
-// Man just delegates Man call to underlying handler.
-func (t *Tabs) Man() tui.Manual {
-	panic("TODO")
 }

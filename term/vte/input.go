@@ -26,7 +26,7 @@ package vte
 import (
 	"fmt"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func getModifierStr(ev term.Event) string {

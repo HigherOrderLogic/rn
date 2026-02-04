@@ -33,14 +33,14 @@ import (
 	"github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
-
-	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	tcomponent "unstable.build/go-tui/component"
+	thandler "unstable.build/go-tui/handler"
 )
 
 var _ browserapi.Handler = (*Component)(nil)
@@ -53,15 +53,15 @@ var _ browserapi.Handler = (*Component)(nil)
 // to a call to Handle. Conversely, tui.Handlers installed via NewTab
 // will remain as a tab and can be managed independently from windows.
 type Component struct {
-	tabs      handler.Tabs
-	wm        handler.WindowManager
-	union     handler.FrameUnion
+	tabs      thandler.Tabs
+	wm        thandler.WindowManager
+	union     thandler.FrameUnion
 	width     int
 	height    int
 	nextSplit browserapi.Orientation
 
 	dirtyTabs   bool
-	focusWindow handler.Window
+	focusWindow thandler.Window
 	config      Config
 	buffers     []*Tab
 	windows     map[uint64]*browserWindow
@@ -122,7 +122,9 @@ func (c *Component) Init(config Config) {
 	// if tab bar offset is set, the remove frame from tabs
 	// and install via union and no frame unioning.
 	if config.TabBarOffset > 0 {
-		vtabs := &handler.Virtual[*handler.Tabs]{Virtual: component.Virtual[*handler.Tabs]{C: &c.tabs}}
+		vtabs := &handler.Virtual[*thandler.Tabs]{
+			Virtual: component.Virtual[*thandler.Tabs]{C: &c.tabs},
+		}
 		vtabs.Move(term.Coordinates{X: config.TabBarOffset})
 		c.tabs.SetBorder(false)
 		c.union.UnionTopFrame(vtabs, c.tabsSize(), false)
@@ -403,7 +405,7 @@ func (c *Component) SetContentToTab(win Window, tabIdx int) bool {
 
 // RemoveAllTabs removes all tabs but the last one.
 func (c *Component) RemoveAllTabs() {
-	c.wm.Iterate(func(w handler.Window) {
+	c.wm.Iterate(func(w thandler.Window) {
 		win, ok := c.findWindow(w.ID())
 		if !ok {
 			panic("corrupted browser: could not find WindowManager window")
@@ -493,13 +495,13 @@ func (c *Component) Split(
 	}
 	switch o {
 	case browserapi.OrientationRight:
-		return c.splitRegular((*handler.WindowManager).SplitVertical, win, h)
+		return c.splitRegular((*thandler.WindowManager).SplitVertical, win, h)
 	case browserapi.OrientationLeft:
-		return c.splitInverted((*handler.WindowManager).SplitVertical, win, h)
+		return c.splitInverted((*thandler.WindowManager).SplitVertical, win, h)
 	case browserapi.OrientationTop:
-		return c.splitInverted((*handler.WindowManager).SplitHorizontal, win, h)
+		return c.splitInverted((*thandler.WindowManager).SplitHorizontal, win, h)
 	case browserapi.OrientationBottom:
-		return c.splitRegular((*handler.WindowManager).SplitHorizontal, win, h)
+		return c.splitRegular((*thandler.WindowManager).SplitHorizontal, win, h)
 	default:
 		panic("not a valid orientation")
 	}
@@ -508,13 +510,16 @@ func (c *Component) Split(
 // Floating opens a new floating window at the given coordinates,
 // with the given height and width.
 func (c *Component) Floating(
-	h Floating, cfg component.FloatingConfig,
+	h Floating, cfg browserapi.FloatingConfig,
 ) Window {
 	if h == nil {
 		panic("nil Floating handler")
 	}
 	h = c.newBrowserContent(h).(Floating)
-	win := c.newWindow(c.wm.FloatingWindow(h, cfg))
+	win := c.newWindow(c.wm.FloatingWindow(h, tcomponent.FloatingConfig{
+		Alignment: cfg.Alignment,
+		Offset:    cfg.Offset,
+	}))
 	c.wm.SetFocus(win.win)
 	return win
 }
@@ -550,7 +555,7 @@ func (c *Component) Bar(cfg browserapi.BarConfig, h tui.Handler) {
 	}
 }
 
-func (c *Component) notify(level notifications.Level, msg string, args ...interface{}) {
+func (c *Component) notify(level browserapi.NotificationLevel, msg string, args ...interface{}) {
 	_, _ = c.config.Notifications.Notify(level, fmt.Sprintf(msg, args...))
 }
 
@@ -781,7 +786,7 @@ func (c *Component) Selection() (string, bool) {
 func (c *Component) Prompt(
 	message string, options []string,
 	bindings []term.KeyComb,
-	promptHandler handler.PromptHandler,
+	promptHandler thandler.PromptHandler,
 ) Window {
 	if len(options) == 0 || (len(bindings) != 0 && len(options) != len(bindings)) {
 		panic("Prompt given invalid options and/or bindings")
@@ -794,7 +799,7 @@ func (c *Component) Prompt(
 		c:       c,
 		message: message,
 	}
-	promptConfig := handler.PromptConfig{
+	promptConfig := thandler.PromptConfig{
 		PromptConfig: component.PromptConfig{
 			Message:              message,
 			Options:              options,
@@ -811,9 +816,9 @@ func (c *Component) Prompt(
 		promptConfig.Frame = component.FrameCharSetDefault()
 	}
 
-	prompt := handler.NewPrompt(promptConfig)
-	floatingConfig := component.FloatingConfig{
-		Alignment: component.SpanAlignmentCentered,
+	prompt := thandler.NewPrompt(promptConfig)
+	floatingConfig := browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
 	}
 
 	win := c.Floating(prompt, floatingConfig)
@@ -822,7 +827,7 @@ func (c *Component) Prompt(
 }
 
 // Subscribe subscribes sub to window focus events.
-func (c *Component) Subscribe(sub handler.WindowSubscriber) {
+func (c *Component) Subscribe(sub thandler.WindowSubscriber) {
 	c.wm.Subscribe(sub)
 }
 
@@ -842,7 +847,7 @@ func (c *Component) CloseOtherWindows(win Window) (retErr error) {
 		return errors.New("cannot close all tiled windows")
 	}
 	var ok bool
-	c.wm.Iterate(func(w handler.Window) {
+	c.wm.Iterate(func(w thandler.Window) {
 		if w.ID() == win.WindowID() {
 			return
 		}
@@ -872,16 +877,11 @@ func (c *Component) Close() (ret error) {
 	c.buffers = c.buffers[:0]
 	c.wm.UnsubscribeAll()
 
-	c.wm.Iterate(func(w handler.Window) {
+	c.wm.Iterate(func(w thandler.Window) {
 		// call Close on all browser handlers
 		_ = c.newWindow(w).Close()
 	})
 	return ret
-}
-
-// Man satisfies tui.Handler
-func (c *Component) Man() tui.Manual {
-	panic("TODO")
 }
 
 func (c *Component) log(level log.Level, msg string, args ...interface{}) {
@@ -892,7 +892,7 @@ func (c *Component) log(level log.Level, msg string, args ...interface{}) {
 }
 
 func (c *Component) setError(err error) {
-	c.notify(notifications.LevelError, "%s", err)
+	c.notify(browserapi.LevelError, "%s", err)
 }
 
 func (c *Component) focus() *browserWindow {
@@ -1066,7 +1066,7 @@ func (c *Component) getFreeTab(hint tui.Handler) (browserapi.Handler, bool) {
 }
 
 func (c *Component) splitRegular(
-	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	split func(*thandler.WindowManager, thandler.Window, tui.Handler) (thandler.Window, bool),
 	splitWindow Window,
 	newHandler browserapi.Handler,
 ) (*browserWindow, bool) {
@@ -1079,7 +1079,7 @@ func (c *Component) splitRegular(
 }
 
 func (c *Component) splitInverted(
-	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	split func(*thandler.WindowManager, thandler.Window, tui.Handler) (thandler.Window, bool),
 	splitWindow Window,
 	newHandler browserapi.Handler,
 ) (*browserWindow, bool) {
@@ -1126,7 +1126,7 @@ func (c *Component) newWindowContent(h browserapi.Handler) (browserapi.Handler, 
 }
 
 func (c *Component) split(
-	split func(*handler.WindowManager, handler.Window, tui.Handler) (handler.Window, bool),
+	split func(*thandler.WindowManager, thandler.Window, tui.Handler) (thandler.Window, bool),
 	splitWin Window, h browserapi.Handler,
 ) *browserWindow {
 	h, isTab := c.newWindowContent(h)
@@ -1153,7 +1153,7 @@ func (c *Component) tabsSize() int {
 	return 1
 }
 
-func (c *Component) newWindow(win handler.Window) *browserWindow {
+func (c *Component) newWindow(win thandler.Window) *browserWindow {
 	browserWin := &browserWindow{
 		parent: c,
 		win:    win,
@@ -1192,7 +1192,7 @@ func (c *Component) findWindow(winID uint64) (*browserWindow, bool) {
 }
 
 func (c *Component) overwriteFocusWindowUnion(w term.Writer) {
-	if !c.config.Frame || c.focusWindow == (handler.Window{}) || c.wm.SizeTiles() == 1 {
+	if !c.config.Frame || c.focusWindow == (thandler.Window{}) || c.wm.SizeTiles() == 1 {
 		return
 	}
 	topleft := c.focusWindow.Position()
@@ -1260,7 +1260,7 @@ func (c *Component) wallpaper() browserapi.Handler {
 	// if wallpaper is being set as a default on a floating window
 	floating := component.StaticFloating(instance, 80, 40)
 	return &browserContent{
-		Handler: NopFloatingHandler(handler.NopFloatingHandler(floating)),
+		Handler: NopFloatingHandler(handler.NopFloatingFromComponent(floating)),
 		c:       c,
 	}
 }
@@ -1304,7 +1304,7 @@ func (c *Component) unwrapContent(content browserapi.Handler) browserapi.Handler
 type clearOnClosePromptHandler struct {
 	c       *Component
 	message string
-	root    handler.PromptHandler
+	root    thandler.PromptHandler
 }
 
 func (c clearOnClosePromptHandler) OnSelect(idx int, option string) {
@@ -1424,7 +1424,7 @@ func (c *browserScrollableContent) MaxSeekOffset() int {
 // override union attrs of focus window
 type wmSubscriber Component
 
-func (s *wmSubscriber) OnFocus(prev, focus handler.Window) {
+func (s *wmSubscriber) OnFocus(prev, focus thandler.Window) {
 	c := (*Component)(s)
 	c.focusWindow = focus
 }

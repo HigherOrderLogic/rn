@@ -26,7 +26,7 @@ package vteparser
 import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui/cell/graphemecluster"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 )
 
 // HandlerWithLogging wraps a Handler and adds trace logging.

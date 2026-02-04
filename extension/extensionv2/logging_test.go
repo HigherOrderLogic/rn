@@ -32,7 +32,7 @@ import (
 	logtest "github.com/sirupsen/logrus/hooks/test"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 const data = `{"address":"0x1400037cfc0","class":"firstmover.pubsub","level":"trace","lock":"/Users/ernestrc/.sixdev/.dbextension/ai/.dblock","msg":"client is waiting to receive a message for topic \"__pubsubinternal\"","pid":"31527","time":"2025-08-06T18:43:43+02:00"}

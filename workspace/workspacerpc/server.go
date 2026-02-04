@@ -35,10 +35,11 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 )
 
@@ -48,10 +49,10 @@ var (
 
 // Server is a workspace server implementation which processes one request at a time.
 type Server struct {
-	UnimplementedSchemeServer
-	UnimplementedExecutorServer
-	UnimplementedTerminalServer
-	UnimplementedFilesServer
+	workspacerpc.UnimplementedSchemeServer
+	workspacerpc.UnimplementedExecutorServer
+	workspacerpc.UnimplementedTerminalServer
+	workspacerpc.UnimplementedFilesServer
 	ctx       context.Context
 	cancelCtx func()
 
@@ -78,13 +79,13 @@ func (s *Server) Init(scheme schemeapi.Scheme, locker sync.Locker) {
 }
 
 // StartCommand satisfies ExecutorServer
-func (s *Server) StartCommand(stream Executor_StartCommandServer) error {
-	var req CommandPayload
+func (s *Server) StartCommand(stream workspacerpc.Executor_StartCommandServer) error {
+	var req workspacerpc.CommandPayload
 	err := stream.RecvMsg(&req)
 	if err != nil {
 		return fmt.Errorf("recv start command msg: %v", err)
 	}
-	if req.Type != CommandPayload_TypeStart || req.Start == nil {
+	if req.Type != workspacerpc.CommandPayload_TypeStart || req.Start == nil {
 		return fmt.Errorf("unexpected first stream message: %v", req.Type)
 	}
 	start := req.Start
@@ -118,7 +119,7 @@ func (s *Server) StartCommand(stream Executor_StartCommandServer) error {
 }
 
 // Signal satisfies ExecutorServer
-func (s *Server) Signal(ctx context.Context, req *SignalRequest) (*SignalResponse, error) {
+func (s *Server) Signal(ctx context.Context, req *workspacerpc.SignalRequest) (*workspacerpc.SignalResponse, error) {
 	pid := req.GetPid()
 	signal := req.GetSig()
 	s.locker.Lock()
@@ -128,13 +129,13 @@ func (s *Server) Signal(ctx context.Context, req *SignalRequest) (*SignalRespons
 	if err != nil {
 		return nil, err
 	}
-	resp := new(SignalResponse)
+	resp := new(workspacerpc.SignalResponse)
 	return resp, nil
 }
 
 // URI satisfies SchemeServer
-func (s *Server) URI(ctx context.Context, req *URIRequest) (
-	*URIResponse, error,
+func (s *Server) URI(ctx context.Context, req *workspacerpc.URIRequest) (
+	*workspacerpc.URIResponse, error,
 ) {
 	root := req.GetRoot()
 	
@@ -153,14 +154,14 @@ func (s *Server) URI(ctx context.Context, req *URIRequest) (
 	if err != nil {
 		return nil, err
 	}
-	resp := new(URIResponse)
+	resp := new(workspacerpc.URIResponse)
 	resp.Uri = uri.String()
 	return resp, nil
 }
 
 // ReadDir satisfies SchemeServer.
-func (s *Server) ReadDir(ctx context.Context, req *ReadDirRequest) (
-	*ReadDirResponse, error,
+func (s *Server) ReadDir(ctx context.Context, req *workspacerpc.ReadDirRequest) (
+	*workspacerpc.ReadDirResponse, error,
 ) {
 	dir := req.GetDir()
 	root := req.GetRoot()
@@ -183,7 +184,7 @@ func (s *Server) ReadDir(ctx context.Context, req *ReadDirRequest) (
 		isPermission := errors.Is(err, os.ErrPermission)
 		is := isExist || isNotExist || isPermission
 		if is {
-			resp := new(ReadDirResponse)
+			resp := new(workspacerpc.ReadDirResponse)
 			resp.IsExistErr = isExist
 			resp.IsNotExistErr = isNotExist
 			resp.IsPermissionErr = isPermission
@@ -191,10 +192,10 @@ func (s *Server) ReadDir(ctx context.Context, req *ReadDirRequest) (
 		}
 		return nil, err
 	}
-	resp := new(ReadDirResponse)
-	rpcEntries := make([]*DirEntry, len(entries))
+	resp := new(workspacerpc.ReadDirResponse)
+	rpcEntries := make([]*workspacerpc.DirEntry, len(entries))
 	for i, entry := range entries {
-		rpcEntries[i] = &DirEntry{
+		rpcEntries[i] = &workspacerpc.DirEntry{
 			Name:  entry.Name(),
 			Mode:  int32(entry.Type()),
 			IsDir: entry.IsDir(),
@@ -205,8 +206,8 @@ func (s *Server) ReadDir(ctx context.Context, req *ReadDirRequest) (
 }
 
 // MkdirAll satisfies SchemeServer.
-func (s *Server) MkdirAll(ctx context.Context, req *MkdirAllRequest) (
-	*MkdirAllResponse, error,
+func (s *Server) MkdirAll(ctx context.Context, req *workspacerpc.MkdirAllRequest) (
+	*workspacerpc.MkdirAllResponse, error,
 ) {
 	path := req.GetPath()
 	mode := req.GetMode()
@@ -226,19 +227,19 @@ func (s *Server) MkdirAll(ctx context.Context, req *MkdirAllRequest) (
 	if err != nil {
 		isPermission := errors.Is(err, os.ErrPermission)
 		if isPermission {
-			resp := new(MkdirAllResponse)
+			resp := new(workspacerpc.MkdirAllResponse)
 			resp.IsPermissionErr = isPermission
 			return resp, nil
 		}
 		return nil, err
 	}
-	resp := new(MkdirAllResponse)
+	resp := new(workspacerpc.MkdirAllResponse)
 	return resp, nil
 }
 
 // Open satisfies SchemeServer.
-func (s *Server) Open(ctx context.Context, req *OpenRequest) (
-	*OpenResponse, error,
+func (s *Server) Open(ctx context.Context, req *workspacerpc.OpenRequest) (
+	*workspacerpc.OpenResponse, error,
 ) {
 	filename := req.GetFilename()
 
@@ -260,7 +261,7 @@ func (s *Server) Open(ctx context.Context, req *OpenRequest) (
 		isNotExist := errors.Is(err, os.ErrNotExist)
 		isPerm := errors.Is(err, os.ErrPermission)
 		if isExist || isNotExist || isPerm {
-			resp := new(OpenResponse)
+			resp := new(workspacerpc.OpenResponse)
 			resp.IsExistErr = isExist
 			resp.IsNotExistErr = isNotExist
 			resp.IsPermissionErr = isPerm
@@ -269,15 +270,15 @@ func (s *Server) Open(ctx context.Context, req *OpenRequest) (
 		return nil, err
 	}
 
-	resp := new(OpenResponse)
+	resp := new(workspacerpc.OpenResponse)
 	resp.Fd = uint32(f.Fd())
 	resp.Filename = f.Name()
 	return resp, nil
 }
 
 // Remove satisfies SchemeServer.
-func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
-	*RemoveResponse, error,
+func (s *Server) Remove(ctx context.Context, req *workspacerpc.RemoveRequest) (
+	*workspacerpc.RemoveResponse, error,
 ) {
 	filename := req.GetFilename()
 	s.locker.Lock()
@@ -299,7 +300,7 @@ func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
 		isPermission := errors.Is(err, os.ErrPermission)
 		is := isExist || isNotExist || isPermission
 		if is {
-			resp := new(RemoveResponse)
+			resp := new(workspacerpc.RemoveResponse)
 			resp.IsExistErr = isExist
 			resp.IsNotExistErr = isNotExist
 			resp.IsPermissionErr = isPermission
@@ -307,12 +308,12 @@ func (s *Server) Remove(ctx context.Context, req *RemoveRequest) (
 		}
 		return nil, err
 	}
-	return new(RemoveResponse), nil
+	return new(workspacerpc.RemoveResponse), nil
 }
 
 // Rename satisfies SchemeServer.
-func (s *Server) Rename(ctx context.Context, req *RenameRequest) (
-	*RenameResponse, error,
+func (s *Server) Rename(ctx context.Context, req *workspacerpc.RenameRequest) (
+	*workspacerpc.RenameResponse, error,
 ) {
 	filename := req.GetFilename()
 	s.locker.Lock()
@@ -334,7 +335,7 @@ func (s *Server) Rename(ctx context.Context, req *RenameRequest) (
 		isPermission := errors.Is(err, os.ErrPermission)
 		is := isExist || isNotExist || isPermission
 		if is {
-			resp := new(RenameResponse)
+			resp := new(workspacerpc.RenameResponse)
 			resp.IsExistErr = isExist
 			resp.IsNotExistErr = isNotExist
 			resp.IsPermissionErr = isPermission
@@ -342,12 +343,12 @@ func (s *Server) Rename(ctx context.Context, req *RenameRequest) (
 		}
 		return nil, err
 	}
-	return new(RenameResponse), nil
+	return new(workspacerpc.RenameResponse), nil
 }
 
 // ReadLink satisfies SchemeServer.
-func (s *Server) ReadLink(ctx context.Context, req *ReadLinkRequest) (
-	*ReadLinkResponse, error,
+func (s *Server) ReadLink(ctx context.Context, req *workspacerpc.ReadLinkRequest) (
+	*workspacerpc.ReadLinkResponse, error,
 ) {
 	filename := req.GetFilename()
 	s.locker.Lock()
@@ -366,14 +367,14 @@ func (s *Server) ReadLink(ctx context.Context, req *ReadLinkRequest) (
 	if err != nil {
 		return nil, err
 	}
-	resp := new(ReadLinkResponse)
+	resp := new(workspacerpc.ReadLinkResponse)
 	resp.Filename = fil
 	return resp, nil
 }
 
 // NewPty satisfies SchemeServer.
-func (s *Server) NewPty(ctx context.Context, req *NewPtyRequest) (
-	*NewPtyResponse, error,
+func (s *Server) NewPty(ctx context.Context, req *workspacerpc.NewPtyRequest) (
+	*workspacerpc.NewPtyResponse, error,
 ) {
 	s.locker.Lock()
 	defer s.locker.Unlock()
@@ -383,7 +384,7 @@ func (s *Server) NewPty(ctx context.Context, req *NewPtyRequest) (
 		return nil, err
 	}
 
-	ret := &NewPtyResponse{
+	ret := &workspacerpc.NewPtyResponse{
 		Master:   pty.Master.Name(),
 		MasterFd: uint32(pty.Master.Fd()),
 		Slave:    pty.Slave.Name(),
@@ -393,8 +394,8 @@ func (s *Server) NewPty(ctx context.Context, req *NewPtyRequest) (
 }
 
 // SetPtySize satisfies SchemeServer.
-func (s *Server) SetPtySize(ctx context.Context, req *SetPtySizeRequest) (
-	*SetPtySizeResponse, error,
+func (s *Server) SetPtySize(ctx context.Context, req *workspacerpc.SetPtySizeRequest) (
+	*workspacerpc.SetPtySizeResponse, error,
 ) {
 	s.locker.Lock()
 	defer s.locker.Unlock()
@@ -411,7 +412,7 @@ func (s *Server) SetPtySize(ctx context.Context, req *SetPtySizeRequest) (
 	if err != nil {
 		return nil, err
 	}
-	return new(SetPtySizeResponse), nil
+	return new(workspacerpc.SetPtySizeResponse), nil
 }
 
 // Stop closes all resources associated with this server.
@@ -421,7 +422,7 @@ func (s *Server) Stop() error {
 }
 
 // Read satisfies FilesServer
-func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, error) {
+func (s *Server) Read(ctx context.Context, req *workspacerpc.ReadRequest) (*workspacerpc.ReadResponse, error) {
 	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -441,7 +442,7 @@ func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, err
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read error: %s", err)
 	}
-	resp := new(ReadResponse)
+	resp := new(workspacerpc.ReadResponse)
 	resp.Data = buf[:n]
 	resp.N = int64(n)
 	resp.IsEof = err == io.EOF
@@ -450,7 +451,7 @@ func (s *Server) Read(ctx context.Context, req *ReadRequest) (*ReadResponse, err
 }
 
 // ReadAt satisfies FilesServer
-func (s *Server) ReadAt(ctx context.Context, req *ReadRequest) (*ReadResponse, error) {
+func (s *Server) ReadAt(ctx context.Context, req *workspacerpc.ReadRequest) (*workspacerpc.ReadResponse, error) {
 	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -470,7 +471,7 @@ func (s *Server) ReadAt(ctx context.Context, req *ReadRequest) (*ReadResponse, e
 	if err != nil && err != io.EOF {
 		return nil, fmt.Errorf("read error: %s", err)
 	}
-	resp := new(ReadResponse)
+	resp := new(workspacerpc.ReadResponse)
 	resp.Data = buf[:n]
 	resp.N = int64(n)
 	resp.IsEof = err == io.EOF
@@ -479,7 +480,7 @@ func (s *Server) ReadAt(ctx context.Context, req *ReadRequest) (*ReadResponse, e
 }
 
 // Write satisfies FilesServer
-func (s *Server) Write(ctx context.Context, req *WriteRequest) (*WriteResponse, error) {
+func (s *Server) Write(ctx context.Context, req *workspacerpc.WriteRequest) (*workspacerpc.WriteResponse, error) {
 	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -498,13 +499,13 @@ func (s *Server) Write(ctx context.Context, req *WriteRequest) (*WriteResponse, 
 	if err != nil {
 		return nil, fmt.Errorf("write error: %s", err)
 	}
-	resp := new(WriteResponse)
+	resp := new(workspacerpc.WriteResponse)
 	resp.N = int64(n)
 	return resp, nil
 }
 
 // Close satisfies FilesServer
-func (s *Server) Close(ctx context.Context, req *CloseFileRequest) (*CloseFileResponse, error) {
+func (s *Server) Close(ctx context.Context, req *workspacerpc.CloseFileRequest) (*workspacerpc.CloseFileResponse, error) {
 	s.locker.Lock()
 	bfs := s.s
 	if root := req.GetRoot(); root != "" {
@@ -519,7 +520,7 @@ func (s *Server) Close(ctx context.Context, req *CloseFileRequest) (*CloseFileRe
 	if f == nil {
 		// idempotent close
 		s.locker.Unlock()
-		return new(CloseFileResponse), nil
+		return new(workspacerpc.CloseFileResponse), nil
 	}
 	// unlock after close, which in some cases
 	// might do some cleanups that require synchronization
@@ -528,12 +529,12 @@ func (s *Server) Close(ctx context.Context, req *CloseFileRequest) (*CloseFileRe
 	if err != nil {
 		return nil, fmt.Errorf("close error: %s", err)
 	}
-	return new(CloseFileResponse), nil
+	return new(workspacerpc.CloseFileResponse), nil
 }
 
 // Sync satisfies FilesServer.
-func (s *Server) Sync(ctx context.Context, req *SyncRequest) (
-	*SyncResponse, error,
+func (s *Server) Sync(ctx context.Context, req *workspacerpc.SyncRequest) (
+	*workspacerpc.SyncResponse, error,
 ) {
 	s.locker.Lock()
 	bfs := s.s
@@ -553,12 +554,12 @@ func (s *Server) Sync(ctx context.Context, req *SyncRequest) (
 	if err != nil {
 		return nil, err
 	}
-	return new(SyncResponse), nil
+	return new(workspacerpc.SyncResponse), nil
 }
 
 // Truncate satisfies FilesServer.
-func (s *Server) Truncate(ctx context.Context, req *TruncateRequest) (
-	*TruncateResponse, error,
+func (s *Server) Truncate(ctx context.Context, req *workspacerpc.TruncateRequest) (
+	*workspacerpc.TruncateResponse, error,
 ) {
 	s.locker.Lock()
 	bfs := s.s
@@ -578,12 +579,12 @@ func (s *Server) Truncate(ctx context.Context, req *TruncateRequest) (
 	if err != nil {
 		return nil, err
 	}
-	return new(TruncateResponse), nil
+	return new(workspacerpc.TruncateResponse), nil
 }
 
 // Seek satisfies FilesServer.
-func (s *Server) Seek(ctx context.Context, req *SeekRequest) (
-	*SeekResponse, error,
+func (s *Server) Seek(ctx context.Context, req *workspacerpc.SeekRequest) (
+	*workspacerpc.SeekResponse, error,
 ) {
 	s.locker.Lock()
 	bfs := s.s
@@ -603,14 +604,14 @@ func (s *Server) Seek(ctx context.Context, req *SeekRequest) (
 	if err != nil {
 		return nil, err
 	}
-	resp := new(SeekResponse)
+	resp := new(workspacerpc.SeekResponse)
 	resp.NewOffset = newOffset
 	return resp, nil
 }
 
 // Stat satisfies FilesServer.
-func (s *Server) Stat(ctx context.Context, req *StatRequest) (
-	*StatResponse, error,
+func (s *Server) Stat(ctx context.Context, req *workspacerpc.StatRequest) (
+	*workspacerpc.StatResponse, error,
 ) {
 	var err error
 	var fs os.FileInfo
@@ -636,7 +637,7 @@ func (s *Server) Stat(ctx context.Context, req *StatRequest) (
 		isPermission := errors.Is(err, os.ErrPermission)
 		is := isExist || isNotExist || isPermission
 		if is {
-			resp := new(StatResponse)
+			resp := new(workspacerpc.StatResponse)
 			resp.IsExistErr = isExist
 			resp.IsNotExistErr = isNotExist
 			resp.IsPermissionErr = isPermission
@@ -644,7 +645,7 @@ func (s *Server) Stat(ctx context.Context, req *StatRequest) (
 		}
 		return nil, err
 	}
-	resp := new(StatResponse)
+	resp := new(workspacerpc.StatResponse)
 	resp.Name = fs.Name()
 	resp.Size = fs.Size()
 	resp.Mode = int32(fs.Mode())
@@ -656,7 +657,7 @@ func (s *Server) Stat(ctx context.Context, req *StatRequest) (
 
 // Watch satisfies SchemeServer.
 func (s *Server) Watch(
-	req *WatchRequest, stream grpc.ServerStreamingServer[WatchMessage],
+	req *workspacerpc.WatchRequest, stream grpc.ServerStreamingServer[workspacerpc.WatchMessage],
 ) error {
 	if req.GetPath() == "" {
 		return errors.New("path cannot be empty")
@@ -696,9 +697,9 @@ func (s *Server) Watch(
 		_ = bfs.StopWatch(id)
 	}()
 
-	resp := WatchMessage{
-		Type: WatchMessage_TypeResponse,
-		Response: &WatchResponse{
+	resp := workspacerpc.WatchMessage{
+		Type: workspacerpc.WatchMessage_TypeResponse,
+		Response: &workspacerpc.WatchResponse{
 			Id: int64(id),
 		}}
 	if err := stream.Send(&resp); err != nil {
@@ -714,22 +715,22 @@ func (s *Server) Watch(
 				return nil
 			}
 
-			var protoEv Event
+			var protoEv workspacerpc.Event
 			switch ev.Event() {
 			case schemeapi.Create:
-				protoEv = Event_Create
+				protoEv = workspacerpc.Event_Create
 			case schemeapi.Write:
-				protoEv = Event_Write
+				protoEv = workspacerpc.Event_Write
 			case schemeapi.Rename:
-				protoEv = Event_Rename
+				protoEv = workspacerpc.Event_Rename
 			case schemeapi.Remove:
-				protoEv = Event_Remove
+				protoEv = workspacerpc.Event_Remove
 			}
 			// this can be an error only in windows
 			isDir, _ := ev.IsDir()
-			msg := WatchMessage{
-				Type: WatchMessage_TypeData,
-				Data: &WatchData{
+			msg := workspacerpc.WatchMessage{
+				Type: workspacerpc.WatchMessage_TypeData,
+				Data: &workspacerpc.WatchData{
 					Uri:   ev.URI().String(),
 					Event: protoEv,
 					IsDir: isDir,
@@ -742,8 +743,8 @@ func (s *Server) Watch(
 }
 
 // StopWatch satisfies SchemeServer.
-func (s *Server) StopWatch(ctx context.Context, req *StopWatchRequest) (
-	*StopWatchResponse, error,
+func (s *Server) StopWatch(ctx context.Context, req *workspacerpc.StopWatchRequest) (
+	*workspacerpc.StopWatchResponse, error,
 ) {
 	s.locker.Lock()
 	defer s.locker.Unlock()
@@ -756,19 +757,19 @@ func (s *Server) StopWatch(ctx context.Context, req *StopWatchRequest) (
 	cancel()
 	delete(s.watchpoints, id)
 
-	return new(StopWatchResponse), nil
+	return new(workspacerpc.StopWatchResponse), nil
 }
 
 // Root satisfies SchemeServer.
-func (s *Server) Root(ctx context.Context, req *RootRequest) (*RootResponse, error) {
+func (s *Server) Root(ctx context.Context, req *workspacerpc.RootRequest) (*workspacerpc.RootResponse, error) {
 	s.locker.Lock()
 	defer s.locker.Unlock()
 	root := s.s.Root()
-	return &RootResponse{Path: root}, nil
+	return &workspacerpc.RootResponse{Path: root}, nil
 }
 
 // Symlink satisfies SchemeServer.
-func (s *Server) Symlink(ctx context.Context, req *SymlinkRequest) (*SymlinkResponse, error) {
+func (s *Server) Symlink(ctx context.Context, req *workspacerpc.SymlinkRequest) (*workspacerpc.SymlinkResponse, error) {
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
@@ -785,11 +786,11 @@ func (s *Server) Symlink(ctx context.Context, req *SymlinkRequest) (*SymlinkResp
 	if err != nil {
 		return nil, err
 	}
-	return new(SymlinkResponse), nil
+	return new(workspacerpc.SymlinkResponse), nil
 }
 
 // TempFile satisfies SchemeServer.
-func (s *Server) TempFile(ctx context.Context, req *TempFileRequest) (*TempFileResponse, error) {
+func (s *Server) TempFile(ctx context.Context, req *workspacerpc.TempFileRequest) (*workspacerpc.TempFileResponse, error) {
 	s.locker.Lock()
 	defer s.locker.Unlock()
 
@@ -806,18 +807,18 @@ func (s *Server) TempFile(ctx context.Context, req *TempFileRequest) (*TempFileR
 	if err != nil {
 		return nil, err
 	}
-	resp := new(TempFileResponse)
+	resp := new(workspacerpc.TempFileResponse)
 	resp.Fd = uint32(f.Fd())
 	resp.Filename = f.Name()
 	return resp, nil
 }
 
 // Join satisfies SchemeServer.
-func (s *Server) Join(ctx context.Context, req *JoinRequest) (*JoinResponse, error) {
+func (s *Server) Join(ctx context.Context, req *workspacerpc.JoinRequest) (*workspacerpc.JoinResponse, error) {
 	s.locker.Lock()
 	defer s.locker.Unlock()
 	res := s.s.Join(req.GetElem()...)
-	return &JoinResponse{Filename: res}, nil
+	return &workspacerpc.JoinResponse{Filename: res}, nil
 }
 
 func (s *Server) log(
@@ -830,7 +831,7 @@ func (s *Server) log(
 		Logf(level, msg, args...)
 }
 
-func getOpenRequestFlag(req *OpenRequest) int {
+func getOpenRequestFlag(req *workspacerpc.OpenRequest) int {
 	var flag int
 	if req.O_RDONLY {
 		flag = os.O_RDONLY

@@ -24,8 +24,8 @@
 package workspace
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
 )
 
 // NewUnixFileView returns newly initialized UnixFileView.
@@ -82,5 +82,5 @@ func (b UnixFileView) String() string {
 	if !b.EndsWithEOL() {
 		return b.view.String()
 	}
-	return cell.CellsToString(b.RawCells())
+	return term.CellsToString(b.RawCells())
 }

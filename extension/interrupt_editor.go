@@ -26,7 +26,7 @@ package extension
 import (
 	"context"
 
-	"unstable.build/go-tui/text/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
 )
 
 // this structure wraps a text.Editor to

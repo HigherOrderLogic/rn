@@ -44,12 +44,11 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component/notifications"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -198,7 +197,7 @@ func (m *Manager) InstallPackageVersion(
 		return fmt.Errorf("store package version: %w", err)
 	}
 
-	notificationID, err := m.n.Notify(notifications.LevelInfo,
+	notificationID, err := m.n.Notify(browserapi.LevelInfo,
 		"downloading version %s of package %s", version, pkgID)
 	if err != nil {
 		m.cleanupFile(tarfile)
@@ -538,7 +537,7 @@ func (m *Manager) download(
 		_ = m.n.UpdateNotificationProgress(notificationID,
 			"downloaded version of package", 1, 1)
 	}
-	_, err = m.n.Notify(notifications.LevelSuccess,
+	_, err = m.n.Notify(browserapi.LevelSuccess,
 		"downloaded version %s of package %s", version, pkgID)
 	if err != nil {
 		m.log(log.WarnLevel, "notify: %v", err)
@@ -591,7 +590,7 @@ func (m *Manager) notifyError(
 ) {
 	newMsg := fmt.Sprintf("downloading version %s of "+
 		"package %s failed: %v", version, pkgID, err)
-	if _, err := m.n.Notify(notifications.LevelError, newMsg); err != nil {
+	if _, err := m.n.Notify(browserapi.LevelError, newMsg); err != nil {
 		m.log(log.WarnLevel, "notify: %v", err)
 	}
 	if err := m.n.UpdateNotificationProgress(notificationID, newMsg, 1, 1); err != nil {

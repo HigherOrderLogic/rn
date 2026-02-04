@@ -24,9 +24,9 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 // FrameUnion wraps a component.FrameUnion to satisfy tui.Handler by
@@ -153,9 +153,4 @@ func (u *FrameUnion) Cursor() (pos term.Coordinates, style term.CursorStyle, sho
 // Selection returns the main component's selection.
 func (u *FrameUnion) Selection() (string, bool) {
 	return u.main.Selection()
-}
-
-// Man satisfies tui.Handler.
-func (u *FrameUnion) Man() tui.Manual {
-	return tui.Manual{}
 }

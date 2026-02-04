@@ -30,12 +30,13 @@ import (
 	"time"
 
 	"github.com/unstablebuild/blue/bluectx"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/workspace"
-	"unstable.build/go-tui/workspace/workspacerpc"
+	tworkspacerpc "unstable.build/go-tui/workspace/workspacerpc"
 )
 
 type workspaceResourceServer struct {
@@ -62,7 +63,7 @@ func (s *workspaceResourceServer) Register(
 		Workspace: s.b,
 	}
 	w.ctx, w.cancelCtx = context.WithCancel(context.Background())
-	server := workspacerpc.NewServer(w, lock)
+	server := tworkspacerpc.NewServer(w, lock)
 	switch s.p {
 	case extensionapi.PermissionFileSystem:
 		if !rpc.IsRegistered(registrar, workspacerpc.Files_ServiceDesc) {
@@ -98,7 +99,7 @@ type trackingWorkspace struct {
 	workspace.Workspace
 	ctx       context.Context
 	cancelCtx func()
-	server    *workspacerpc.Server
+	server    *tworkspacerpc.Server
 }
 
 func (w *trackingWorkspace) Command(ctx context.Context, cmd workspaceapi.Cmd) (

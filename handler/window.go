@@ -26,9 +26,10 @@ package handler
 import (
 	"errors"
 
-	"unstable.build/go-tui"
+	compapi "github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
 var errCalledZeroValuedWin = "called method on zero-valued Window"
@@ -51,7 +52,7 @@ func (w Window) Content() tui.Handler {
 // Frame returns this window's frame component and true or nil and
 // false if this window belongs to a window manager configured
 // without frames.
-func (w Window) Frame() (*component.Frame, bool) {
+func (w Window) Frame() (*compapi.Frame, bool) {
 	return w.Window.Frame()
 }
 

@@ -28,9 +28,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/workspace"
 )
 

@@ -23,7 +23,7 @@
 
 package handlerrpctest
 
-import handlerrpc "unstable.build/go-tui/handler/handlerrpc"
+import handlerrpc "github.com/unstablebuild/rune-go-sdk/handler/handlerrpc"
 
 // SetDraw satisfies handlerrpc.StreamMessage.
 func (m *TestMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
@@ -35,12 +35,6 @@ func (m *TestMessage) SetDraw(r *handlerrpc.DrawStreamResponse) {
 func (m *TestMessage) SetHandle(r *handlerrpc.HandleStreamResponse) {
 	m.Handle = r
 	m.Type = handlerrpc.MessageType_Handle
-}
-
-// SetMan satisfies handlerrpc.StreamMessage.
-func (m *TestMessage) SetMan(r *handlerrpc.ManStreamResponse) {
-	m.Man = r
-	m.Type = handlerrpc.MessageType_Man
 }
 
 // SetClose satisfies handlerrpc.StreamMessage.

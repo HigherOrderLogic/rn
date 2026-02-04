@@ -24,10 +24,11 @@
 package component
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
 )
 
 var (
@@ -61,29 +62,29 @@ type Tabs struct {
 	nonFocusAttr   term.Attributes
 	backgroundAttr term.Attributes
 	frameAttr      term.Attributes
-	frameBorders   FrameCharSet
+	frameBorders   component.FrameCharSet
 	separator      string
 	dirty          bool
 }
 
 func newListFrame(
 	scrollAttr, frameAttr term.Attributes, buf *cell.Buffer, border bool,
-	frameBorders FrameCharSet,
+	frameBorders component.FrameCharSet,
 ) (content tui.Component) {
 	scroll := new(Scroll)
 	scroll.InitPerformance(buf)
 	scroll.Attributes = scrollAttr
 	background := term.Cell{Attributes: scroll.Attributes}
-	spanCfg := SpanConfig{
-		ContentAlignment: SpanAlignmentCentered,
+	spanCfg := component.SpanConfig{
+		ContentAlignment: component.AlignmentCentered,
 		PadVertical:      -1,
 	}
-	span := WithBackground(NewSpan(scroll, spanCfg), background)
+	span := component.WithBackground(component.NewSpan(scroll, spanCfg), background)
 	if !border {
 		return span
 	}
 
-	f := NewFrame(span)
+	f := component.NewFrame(span)
 	f.FrameCharSet = frameBorders
 	f.Attributes = frameAttr
 	return f
@@ -101,7 +102,7 @@ func (t *Tabs) Init() {
 	t.border = true
 	t.focusAttr = defaultFocusAttr
 	t.nonFocusAttr = defaultNonFocusAttr
-	t.frameBorders = FrameCharSetDefault()
+	t.frameBorders = component.FrameCharSetDefault()
 	t.fileListBuf = new(cell.Buffer)
 	t.fileListBuf.InitPerformance(1, 10, ' ')
 	t.fileListFrame = newListFrame(
@@ -146,7 +147,7 @@ func (t *Tabs) SetNameSeparator(separator string) {
 
 // SetFrameCharSet defines the characters used to draw a frame border.
 // Note that this has no effect if border is set to false on this Tabs.
-func (t *Tabs) SetFrameCharSet(fb FrameCharSet) {
+func (t *Tabs) SetFrameCharSet(fb component.FrameCharSet) {
 	t.frameBorders = fb
 	t.fileListFrame = newListFrame(
 		t.backgroundAttr, t.frameAttr, t.fileListBuf, t.border, t.frameBorders)
@@ -407,7 +408,7 @@ func (t *Tabs) prepareFileList() {
 	t.offsetIdx = 0
 	lenSeparator := len(t.separator)
 	var effectiveWidth int
-	if frame, ok := t.fileListFrame.(*Frame); ok {
+	if frame, ok := t.fileListFrame.(*component.Frame); ok {
 		effectiveWidth, _ = frame.ContentSize()
 	} else {
 		effectiveWidth = t.width

@@ -27,10 +27,10 @@ import (
 	"context"
 	"os"
 
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/workspace/workspacerpc"
 )
 
 func dial(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (

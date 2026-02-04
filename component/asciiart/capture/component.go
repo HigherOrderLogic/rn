@@ -31,12 +31,12 @@ import (
 
 	"github.com/pion/mediadevices/pkg/io/video"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const defaultFPS = 30

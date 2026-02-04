@@ -8,10 +8,10 @@ package handlerrpctest
 
 import (
 	context "context"
+	handlerrpc "github.com/unstablebuild/rune-go-sdk/handler/handlerrpc"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
-	handlerrpc "unstable.build/go-tui/handler/handlerrpc"
 )
 
 // This is a compile-time assertion to ensure that this generated file

@@ -33,19 +33,20 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler/handlerrpc"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	grpc "google.golang.org/grpc"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/termrpc"
 )
 
-var _ tui.Handler = (*SyncClientStream[StreamMessage])(nil)
+var _ tui.Handler = (*SyncClientStream[handlerrpc.StreamMessage])(nil)
 
 // SyncClientStream implements a tui.Handler (+handler.Floating) server over
 // a grpc.ServerStream, synchronously. This should only be used in tests.
-type SyncClientStream[T StreamMessage] struct {
+type SyncClientStream[T handlerrpc.StreamMessage] struct {
 	ctx       context.Context
 	stream    grpc.ServerStream
 	closeChan chan error
@@ -55,14 +56,14 @@ type SyncClientStream[T StreamMessage] struct {
 	newT      func() T
 
 	respPending    atomic.Bool
-	respPendingMsg *ServerMessage
+	respPendingMsg *handlerrpc.ServerMessage
 }
 
 // NewSyncClientStream allocates storage for a new SyncClientStream and initializes it
 // with the given grpc.ServerStream and type parameter constructor. The given locker
 // is used to unlock before I/O is performed; if no synchronization is needed
 // then a nop locker should be used.
-func NewSyncClientStream[T StreamMessage](
+func NewSyncClientStream[T handlerrpc.StreamMessage](
 	ctx context.Context, srv grpc.ServerStream, newT func() T,
 ) *SyncClientStream[T] {
 	return &SyncClientStream[T]{
@@ -77,7 +78,7 @@ func NewSyncClientStream[T StreamMessage](
 // on the next tui.Handler method call to this ClientStream.
 //
 // This method must only be called once.
-func (s *SyncClientStream[T]) ScheduleResponse(resp *ServerMessage) {
+func (s *SyncClientStream[T]) ScheduleResponse(resp *handlerrpc.ServerMessage) {
 	if !s.respPending.CompareAndSwap(false, true) {
 		panic("cannot call ScheduleResponse twice")
 	}
@@ -110,8 +111,8 @@ func (s *SyncClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
 		s.closeStream(fmt.Errorf("convert ev to proto ev: %w", err))
 		return false, false
 	}
-	req := HandleStreamRequest{Event: &tev}
-	sendMsg := ServerMessage{Type: MessageType_Handle, Handle: &req}
+	req := handlerrpc.HandleStreamRequest{Event: &tev}
+	sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Handle, Handle: &req}
 	if err := s.stream.SendMsg(&sendMsg); err != nil {
 		s.closeStream(fmt.Errorf("send handle message: %w", err))
 		return
@@ -123,7 +124,7 @@ func (s *SyncClientStream[T]) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	if tpe := recvMsg.GetType(); tpe != MessageType_Handle {
+	if tpe := recvMsg.GetType(); tpe != handlerrpc.MessageType_Handle {
 		err := fmt.Errorf("receive handle message: received extraneous msg: %v", tpe)
 		s.closeStream(err)
 		return
@@ -144,8 +145,8 @@ func (s *SyncClientStream[T]) Cursor() (c term.Coordinates, cs term.CursorStyle,
 			return
 		}
 	}
-	var req CursorStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Cursor, Cursor: &req}
+	var req handlerrpc.CursorStreamRequest
+	sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Cursor, Cursor: &req}
 	err := s.stream.SendMsg(&sendMsg)
 	if err != nil {
 		err := fmt.Errorf("send cursor message: %w", err)
@@ -159,7 +160,7 @@ func (s *SyncClientStream[T]) Cursor() (c term.Coordinates, cs term.CursorStyle,
 		return
 	}
 
-	if tpe := recvMsg.GetType(); tpe != MessageType_Cursor {
+	if tpe := recvMsg.GetType(); tpe != handlerrpc.MessageType_Cursor {
 		err := fmt.Errorf("receive cursor message: received extraneous msg: %v", tpe)
 		s.closeStream(err)
 		return
@@ -185,8 +186,8 @@ func (s *SyncClientStream[T]) Selection() (string, bool) {
 			return "", false
 		}
 	}
-	var req SelectionStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Selection, Selection: &req}
+	var req handlerrpc.SelectionStreamRequest
+	sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Selection, Selection: &req}
 	err := s.stream.SendMsg(&sendMsg)
 	if err != nil {
 		err := fmt.Errorf("send selection message: %w", err)
@@ -200,7 +201,7 @@ func (s *SyncClientStream[T]) Selection() (string, bool) {
 		return "", false
 	}
 
-	if tpe := recvMsg.GetType(); tpe != MessageType_Selection {
+	if tpe := recvMsg.GetType(); tpe != handlerrpc.MessageType_Selection {
 		err := fmt.Errorf("receive selection message: received extraneous msg: %v", tpe)
 		s.closeStream(err)
 		return "", false
@@ -208,45 +209,6 @@ func (s *SyncClientStream[T]) Selection() (string, bool) {
 
 	selection := recvMsg.GetSelection()
 	return selection.GetText(), selection.GetOk()
-}
-
-// Man satisfies Handler.
-func (s *SyncClientStream[T]) Man() tui.Manual {
-	pending := s.respPending.CompareAndSwap(true, false)
-	if pending {
-		if err := s.stream.SendMsg(s.respPendingMsg); err != nil {
-			s.closeStream(fmt.Errorf("send install response: %w", err))
-			return tui.Manual{}
-		}
-	}
-	var req ManStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Man, Man: &req}
-	err := s.stream.SendMsg(&sendMsg)
-	if err != nil {
-		err := fmt.Errorf("send man message: %w", err)
-		s.closeStream(err)
-		return tui.Manual{}
-	}
-
-	recvMsg := s.newT()
-	if err := s.stream.RecvMsg(recvMsg); err != nil {
-		s.closeStream(fmt.Errorf("receive man message: %w", err))
-		return tui.Manual{}
-	}
-
-	if tpe := recvMsg.GetType(); tpe != MessageType_Man {
-		err := fmt.Errorf("receive man message: received extraneous msg: %v", tpe)
-		s.closeStream(err)
-		return tui.Manual{}
-	}
-
-	tuiMan, err := recvMsg.GetMan().GetMan().ToModel()
-	if err != nil {
-		s.closeStream(fmt.Errorf("man to model: %w", err))
-		return tui.Manual{}
-	}
-
-	return tuiMan
 }
 
 // Resize satisfies Handler.
@@ -262,10 +224,10 @@ func (s *SyncClientStream[T]) Resize(width, height int) {
 	s.height.Store(int32(height))
 	s.width.Store(int32(width))
 
-	var req ResizeStreamRequest
+	var req handlerrpc.ResizeStreamRequest
 	req.Width = int32(width)
 	req.Height = int32(height)
-	sendMsg := ServerMessage{Type: MessageType_Resize, Resize: &req}
+	sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Resize, Resize: &req}
 	err := s.stream.SendMsg(&sendMsg)
 	if err != nil {
 		err := fmt.Errorf("send resize message: %w", err)
@@ -280,9 +242,9 @@ func (s *SyncClientStream[T]) Draw(w term.Writer) {
 		width := int(s.width.Load())
 		height := int(s.height.Load())
 		comp := component.NewStringWithConfig(smtgWrongCopy,
-			component.StringConfig{Alignment: component.SpanAlignmentCentered})
+			component.StringConfig{Alignment: component.AlignmentCentered})
 		comp.Resize(width, height)
-		draw := NewDrawResponse(w.Context(), comp, width, height)
+		draw := handlerrpc.NewDrawResponse(w.Context(), comp, width, height)
 		doDraw(w, draw.GetRows())
 		return
 	}
@@ -293,8 +255,8 @@ func (s *SyncClientStream[T]) Draw(w term.Writer) {
 			return
 		}
 	}
-	var req DrawStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Draw, Draw: &req}
+	var req handlerrpc.DrawStreamRequest
+	sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Draw, Draw: &req}
 	err := s.stream.SendMsg(&sendMsg)
 	if err != nil {
 		err := fmt.Errorf("send draw message: %w", err)
@@ -308,7 +270,7 @@ func (s *SyncClientStream[T]) Draw(w term.Writer) {
 		return
 	}
 
-	if tpe := recvMsg.GetType(); tpe != MessageType_Draw {
+	if tpe := recvMsg.GetType(); tpe != handlerrpc.MessageType_Draw {
 		err := fmt.Errorf("receive draw message: received extraneous msg: %v", tpe)
 		s.closeStream(err)
 		return
@@ -326,8 +288,8 @@ func (s *SyncClientStream[T]) Dimensions() (width int, height int) {
 			return
 		}
 	}
-	var req DimensionsStreamRequest
-	sendMsg := ServerMessage{Type: MessageType_Dimensions, Dimensions: &req}
+	var req handlerrpc.DimensionsStreamRequest
+	sendMsg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Dimensions, Dimensions: &req}
 	err := s.stream.SendMsg(&sendMsg)
 	if err != nil {
 		err := fmt.Errorf("send dimensions message: %w", err)
@@ -341,7 +303,7 @@ func (s *SyncClientStream[T]) Dimensions() (width int, height int) {
 		return
 	}
 
-	if tpe := recvMsg.GetType(); tpe != MessageType_Dimensions {
+	if tpe := recvMsg.GetType(); tpe != handlerrpc.MessageType_Dimensions {
 		err := fmt.Errorf("receive dimensions message: received extraneous msg: %v", tpe)
 		s.closeStream(err)
 		return
@@ -354,8 +316,8 @@ func (s *SyncClientStream[T]) Dimensions() (width int, height int) {
 
 // Close satisfies Handler.
 func (s *SyncClientStream[T]) Close() error {
-	var req CloseStreamRequest
-	msg := ServerMessage{Type: MessageType_Close, Close: &req}
+	var req handlerrpc.CloseStreamRequest
+	msg := handlerrpc.ServerMessage{Type: handlerrpc.MessageType_Close, Close: &req}
 	err := s.stream.SendMsg(&msg)
 	if err != nil {
 		err = fmt.Errorf("send close message: %w", err)

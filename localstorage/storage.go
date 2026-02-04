@@ -32,9 +32,8 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/document/docmarshal"
-	"github.com/unstablebuild/blue/document/firstmover"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/localstorage/schemedoc"
 	"unstable.build/go-tui/workspace"
@@ -75,15 +74,7 @@ func New(ctx context.Context, dir string, marshaler docmarshal.Marshaler) docume
 			return
 		}
 
-		// place lock path at parent dir of .db
-		lockPath := filepath.Join(dir, ".dblock")
-
-		cfg := firstmover.DefaultConfig()
-		cfg.Marshaler = marshaler
-		cfg.CloseError = schemedoc.ErrClosing
-		svc := firstmover.New(storage, lockPath, cfg)
-
-		ret.service = svc
+		ret.service = storage
 	})
 	return ret
 }

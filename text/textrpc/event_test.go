@@ -29,19 +29,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
-	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
 
 var (
 	uri      workspaceapi.URI
-	protoURI URI
+	protoURI textrpc.URI
 )
 
 func init() {
@@ -201,15 +202,15 @@ func main() {
 func TestEventProto(t *testing.T) {
 	tsuite := []struct {
 		in  textapi.Event
-		out EditorEvent
+		out textrpc.EditorEvent
 	}{
 		{
 			in: textapi.Event{
 				Type:    textapi.EventTypeOpen,
 				Content: "Ageispolis",
 			},
-			out: EditorEvent{
-				Type:    EditorEvent_TypeOpen,
+			out: textrpc.EditorEvent{
+				Type:    textrpc.EditorEvent_TypeOpen,
 				Content: "Ageispolis",
 			},
 		},
@@ -219,8 +220,8 @@ func TestEventProto(t *testing.T) {
 				Start: term.Coordinates{Y: 8},
 				End:   term.Coordinates{Y: 9},
 			},
-			out: EditorEvent{
-				Type:  EditorEvent_TypeHidden,
+			out: textrpc.EditorEvent{
+				Type:  textrpc.EditorEvent_TypeHidden,
 				Start: &termrpc.Coordinates{Y: 8},
 				End:   &termrpc.Coordinates{Y: 9},
 			},
@@ -230,8 +231,8 @@ func TestEventProto(t *testing.T) {
 				Type:  textapi.EventTypeVisible,
 				Start: term.Coordinates{Y: 8},
 			},
-			out: EditorEvent{
-				Type:  EditorEvent_TypeVisible,
+			out: textrpc.EditorEvent{
+				Type:  textrpc.EditorEvent_TypeVisible,
 				Start: &termrpc.Coordinates{Y: 8},
 			},
 		},
@@ -239,12 +240,12 @@ func TestEventProto(t *testing.T) {
 			in: textapi.Event{
 				Type: textapi.EventTypeFocus,
 				URI:  uri,
-				Resource: Token{
+				Resource: textrpc.Token{
 					URI: uri,
 				},
 			},
-			out: EditorEvent{
-				Type:         EditorEvent_TypeFocus,
+			out: textrpc.EditorEvent{
+				Type:         textrpc.EditorEvent_TypeFocus,
 				ResourceName: &protoURI,
 			},
 		},
@@ -252,10 +253,10 @@ func TestEventProto(t *testing.T) {
 			in: textapi.Event{
 				Type:     textapi.EventTypeUnfocus,
 				URI:      uri,
-				Resource: Token{URI: uri},
+				Resource: textrpc.Token{URI: uri},
 			},
-			out: EditorEvent{
-				Type:         EditorEvent_TypeUnfocus,
+			out: textrpc.EditorEvent{
+				Type:         textrpc.EditorEvent_TypeUnfocus,
 				ResourceName: &protoURI,
 			},
 		},
@@ -267,8 +268,8 @@ func TestEventProto(t *testing.T) {
 				From:  term.Coordinates{X: 5, Y: 6},
 				To:    term.Coordinates{X: 7, Y: 8},
 			},
-			out: EditorEvent{
-				Type:  EditorEvent_TypeScroll,
+			out: textrpc.EditorEvent{
+				Type:  textrpc.EditorEvent_TypeScroll,
 				Start: &termrpc.Coordinates{X: 1, Y: 2},
 				End:   &termrpc.Coordinates{X: 3, Y: 4},
 				From:  &termrpc.Coordinates{X: 5, Y: 6},
@@ -293,7 +294,7 @@ func TestEventProto(t *testing.T) {
 	})
 }
 
-func assertEqualProto(t *testing.T, expected, actual EditorEvent) {
+func assertEqualProto(t *testing.T, expected, actual textrpc.EditorEvent) {
 	assert.Equal(t, expected.Type, actual.Type)
 	assert.Equal(t, expected.ResourceName.GetUri(), actual.ResourceName.GetUri())
 	assert.Equal(t, expected.Start.GetX(), actual.Start.GetX())

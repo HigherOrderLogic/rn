@@ -43,11 +43,14 @@ import (
 	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	handlerapi "github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
@@ -56,7 +59,6 @@ import (
 	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/ide/vctrl/gogit"
 	"unstable.build/go-tui/localstorage"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
 	"unstable.build/go-tui/text/vi"
@@ -388,7 +390,7 @@ func (h *workspaceManagerHandler) Resize(width, height int) {
 
 	drawBar := h.drawBar()
 	if drawBar {
-		height -= h.barSize()
+		height = max(0, height-h.barSize())
 	}
 	var barFocusIdx int
 	for i, w := range h.workspaces {
@@ -482,10 +484,6 @@ func (h *workspaceManagerHandler) Cursor() (term.Coordinates, term.CursorStyle, 
 
 func (h *workspaceManagerHandler) Selection() (string, bool) {
 	return h.focusHandler().Selection()
-}
-
-func (h *workspaceManagerHandler) Man() tui.Manual {
-	return h.focusHandler().Man()
 }
 
 func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg ideConfig) {
@@ -822,7 +820,7 @@ func (h *workspaceManagerHandler) logNonFatalErrs(
 	}
 	if all != nil {
 		log.Warn(all)
-		_, _ = browser.Notify(notifications.LevelError, "Config decode error: %v", all)
+		_, _ = browser.Notify(browserapi.LevelError, "Config decode error: %v", all)
 	}
 }
 
@@ -1032,7 +1030,7 @@ func (h *workspaceManagerHandler) initTabs(
 	h.bar.SetNameSeparator(cfg.tabNameSeparator())
 	var bar tui.Handler = &h.bar
 	if workspacesBarOffset != 0 {
-		v := new(handler.Virtual[*handler.Tabs])
+		v := new(handlerapi.Virtual[*handler.Tabs])
 		v.C = &h.bar
 		v.Move(term.Coordinates{X: workspacesBarOffset})
 		bar = v

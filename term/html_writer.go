@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 )
 
@@ -37,18 +38,18 @@ const (
 
 // HTMLWriter implements term.Writer by rendering an HTML representation.
 type HTMLWriter struct {
-	cellbuf       []Cell
+	cellbuf       []term.Cell
 	buffer        bytes.Buffer
 	cursor        int
 	width, height int
-	defaultAttr   Attributes
+	defaultAttr   term.Attributes
 	cursorStyle   string
 }
 
 // NewHTMLWriter allocates storage for a new HTMLWriter and initializes it.
 func NewHTMLWriter(width, height int) (t *HTMLWriter) {
 	t = new(HTMLWriter)
-	t.defaultAttr = Attributes{Bg: tcell.ColorBlack, Fg: tcell.ColorWhite}
+	t.defaultAttr = term.Attributes{Bg: tcell.ColorBlack, Fg: tcell.ColorWhite}
 	t.Resize(width, height)
 	t.cursorStyle = defaultCursorStyle
 	return
@@ -62,11 +63,11 @@ func (w *HTMLWriter) SetCursorStyle(style string) {
 // Resize satisfies Writer.
 func (w *HTMLWriter) Resize(width, height int) {
 	w.width, w.height = width, height
-	w.cellbuf = make([]Cell, width*height)
+	w.cellbuf = make([]term.Cell, width*height)
 }
 
 // SetCell satisfies Writer.
-func (w *HTMLWriter) SetCell(pos Coordinates, cell Cell) {
+func (w *HTMLWriter) SetCell(pos term.Coordinates, cell term.Cell) {
 	if outOfBounds(w.height, w.width, pos) {
 		return
 	}
@@ -75,15 +76,15 @@ func (w *HTMLWriter) SetCell(pos Coordinates, cell Cell) {
 }
 
 // UnionAttributes satisfies Writer.
-func (w *HTMLWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+func (w *HTMLWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
 	if outOfBounds(w.height, w.width, pos) {
 		return
 	}
 	idx := pos.Y*w.width + pos.X
-	w.cellbuf[idx].Attributes = AttributesUnion(w.cellbuf[idx].Attributes, attr)
+	w.cellbuf[idx].Attributes = term.AttributesUnion(w.cellbuf[idx].Attributes, attr)
 }
 
-func (w *HTMLWriter) convertToCSS(attr Attributes, ignoreDefault bool) (
+func (w *HTMLWriter) convertToCSS(attr term.Attributes, ignoreDefault bool) (
 	css string, needsFg, needsBg bool,
 ) {
 	var builder strings.Builder
@@ -143,7 +144,7 @@ func (w *HTMLWriter) convertToCSS(attr Attributes, ignoreDefault bool) (
 		needsBg || !ignoreDefault
 }
 
-func (w *HTMLWriter) writeCellStyle(i int, c Cell) bool {
+func (w *HTMLWriter) writeCellStyle(i int, c term.Cell) bool {
 	if w.cursor == i {
 		w.buffer.WriteString("<span style=\"")
 		w.buffer.WriteString(w.cursorStyle)
@@ -151,7 +152,8 @@ func (w *HTMLWriter) writeCellStyle(i int, c Cell) bool {
 		return true
 	}
 
-	styleStr, needsFg, needsBg := w.convertToCSS(Attributes{Bg: c.Bg, Fg: c.Fg}, true)
+	styleStr, needsFg, needsBg := w.convertToCSS(
+		term.Attributes{Bg: c.Attributes.Bg, Fg: c.Attributes.Fg}, true)
 	if !needsFg && !needsBg {
 		return false
 	}
@@ -220,15 +222,15 @@ func (w *HTMLWriter) Flush() (err error) {
 }
 
 // Clear satisfies Writer.
-func (w *HTMLWriter) Clear(attr Attributes) error {
-	w.cellbuf = make([]Cell, w.width*w.height)
+func (w *HTMLWriter) Clear(attr term.Attributes) error {
+	w.cellbuf = make([]term.Cell, w.width*w.height)
 	w.buffer.Reset()
 	w.defaultAttr = attr
 	return nil
 }
 
 // SetCursor satisfies Writer.
-func (w *HTMLWriter) SetCursor(pos Coordinates) {
+func (w *HTMLWriter) SetCursor(pos term.Coordinates) {
 	i := pos.X + pos.Y*w.width
 	if i < len(w.cellbuf) {
 		w.cursor = i
@@ -240,4 +242,8 @@ func (w *HTMLWriter) SetCursor(pos Coordinates) {
 // HTML returns the flushed contents of this writer in HTML.
 func (w *HTMLWriter) HTML() string {
 	return w.buffer.String()
+}
+
+func outOfBounds(height, width int, pos term.Coordinates) bool {
+	return pos.X >= width || pos.Y >= height || pos.X < 0 || pos.Y < 0
 }

@@ -26,7 +26,7 @@ package browser
 import (
 	"context"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // EventPublisherInterrupter wraps an EventPublisher to satisfy term.Interrupter.

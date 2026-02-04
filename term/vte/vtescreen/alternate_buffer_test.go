@@ -28,9 +28,8 @@ import (
 
 	"github.com/rivo/uniseg"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vteparser"
 
 	"github.com/stretchr/testify/assert"
@@ -694,12 +693,12 @@ func writeToAltBuffer(b *AltBuffer, str string) {
 }
 
 func assertEqualBuf(t *testing.T, p *AltBuffer, expected string) {
-	assert.Equal(t, expected, cell.CellsToString(p.Cells.RawCells()))
+	assert.Equal(t, expected, term.CellsToString(p.Cells.RawCells()))
 }
 
 func resetAltBuffer(t *testing.T, b *AltBuffer, to string) {
 	b.ResetLines(0, b.Height())
 	b.SetCursorAtScreen(term.Coordinates{}, false)
 	writeToAltBuffer(b, to)
-	require.Equal(t, to, cell.CellsToString(b.Cells.RawCells()))
+	require.Equal(t, to, term.CellsToString(b.Cells.RawCells()))
 }

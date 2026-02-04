@@ -28,10 +28,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
 )
 
 const content = `AAAXXBBBBB

@@ -30,15 +30,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	"github.com/unstablebuild/tcell/v3"
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
-	"unstable.build/go-tui/term/termrpc"
+	"unstable.build/go-tui/rpc/rpctest"
 	"unstable.build/go-tui/text"
 )
 
@@ -84,7 +85,7 @@ func TestSetLocationListRequest(t *testing.T) {
 	require.NoError(t, err)
 	t.Run("non-nil zero slice", func(t *testing.T) {
 		l := text.LocationSlice([]textapi.Location{})
-		expected := SetLocationListRequest{
+		expected := textrpc.SetLocationListRequest{
 			ResourceName: NewURI(uri),
 			ListId:       locID,
 			Locations:    nil,
@@ -95,7 +96,7 @@ func TestSetLocationListRequest(t *testing.T) {
 
 	t.Run("nil zero slice", func(t *testing.T) {
 		l := text.LocationSlice(nil)
-		expected := SetLocationListRequest{
+		expected := textrpc.SetLocationListRequest{
 			Priority:     2,
 			ResourceName: NewURI(uri),
 			ListId:       locID,
@@ -109,11 +110,11 @@ func TestSetLocationListRequest(t *testing.T) {
 			loc2,
 			loc3,
 		})
-		expected := SetLocationListRequest{
+		expected := textrpc.SetLocationListRequest{
 			ResourceName: NewURI(uri),
 			ListId:       locID,
 			Priority:     2,
-			Locations: []*SetLocationListRequest_Location{
+			Locations: []*textrpc.SetLocationListRequest_Location{
 				{
 					From: &termrpc.Coordinates{},
 					To:   &termrpc.Coordinates{X: 1, Y: 3},
@@ -147,11 +148,11 @@ func TestSetLocationListRequest(t *testing.T) {
 				Message: myMsg,
 			},
 		})
-		expected := SetLocationListRequest{
+		expected := textrpc.SetLocationListRequest{
 			Priority:     2,
 			ResourceName: NewURI(uri),
 			ListId:       locID,
-			Locations: []*SetLocationListRequest_Location{
+			Locations: []*textrpc.SetLocationListRequest_Location{
 				{
 					From: &termrpc.Coordinates{},
 					To:   &termrpc.Coordinates{X: 1, Y: 3},
@@ -212,15 +213,15 @@ var (
 )
 
 func newTestClient(ctrl *gomock.Controller) (
-	*rpc.MockClientConnInterface, *Client,
+	*rpctest.MockClientConnInterface, *Client,
 ) {
-	cc := rpc.NewMockClientConnInterface(ctrl)
+	cc := rpctest.NewMockClientConnInterface(ctrl)
 	c := NewClient(context.Background(), cc)
 	return cc, c
 }
 
 func expectClientEdit(
-	t *testing.T, mockCC *rpc.MockClientConnInterface,
+	t *testing.T, mockCC *rpctest.MockClientConnInterface,
 	expectedContent string, uri workspaceapi.URI,
 ) {
 	mockCC.EXPECT().
@@ -231,16 +232,42 @@ func expectClientEdit(
 		DoAndReturn(func(
 			ctx context.Context, method string, args interface{},
 			reply interface{}, opts ...grpc.CallOption) error {
-			editReq, ok := args.(*EditRequest)
+			editReq, ok := args.(*textrpc.EditRequest)
 			require.True(t, ok)
 
 			buf := EditRequestToBuffer(editReq)
 			assert.Equal(t, expectedContent, buf.String())
 			assert.Equal(t, uri.String(), editReq.ResourceName.GetUri())
 
-			_, ok = reply.(*EditResponse)
+			_, ok = reply.(*textrpc.EditResponse)
 			assert.True(t, ok)
 			return nil
 		}).
 		Times(1)
+}
+
+func makeLocationListRequest(
+	uri workspaceapi.URI, priority textapi.LocationPriority,
+	listID string, l textapi.LocationList,
+) textrpc.SetLocationListRequest {
+	req := textrpc.SetLocationListRequest{
+		ResourceName: NewURI(uri),
+		ListId:       listID,
+		Priority:     uint32(priority),
+	}
+
+	for loc, ok := l.Current(); ok; loc, ok = l.Next() {
+		var from, to termrpc.Coordinates
+		var attr termrpc.Attributes
+		from.FromModel(loc.From)
+		to.FromModel(loc.To)
+		attr.FromModel(loc.Attr)
+		req.Locations = append(req.Locations, &textrpc.SetLocationListRequest_Location{
+			From: &from,
+			To:   &to,
+			Attr: &attr,
+			Msg:  loc.Message,
+		})
+	}
+	return req // nolint:govet
 }

@@ -27,7 +27,7 @@ import (
 	"math"
 
 	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Incendium creates flames that turn screen into embers and ashes while sparks

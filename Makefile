@@ -59,15 +59,6 @@ generate: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 generate:
 	@ rm -rf **/*rpc*/*.pb.go
 	@ go generate ./...
-	@- mv browser/unstable.build/go-tui/browser/browserrpc/* browser/browserrpc
-	@- mv text/unstable.build/go-tui/text/textrpc/* text/textrpc
-	@- mv extension/unstable.build/go-tui/extension/extensionrpc/* extension/extensionrpc
-	@- mv workspace/unstable.build/go-tui/workspace/workspacerpc/* workspace/workspacerpc
-	@- mv term/unstable.build/go-tui/term/termrpc/* term/termrpc
-	@- mv handler/unstable.build/go-tui/handler/handlerrpc/* handler/handlerrpc
-	@- mv api/config/unstable.build/go-tui/api/config/configrpc/* api/config/configrpc
-	@- mv handler/handlerrpc/unstable.build/go-tui/handler/handlerrpc/handlerrpctest/* handler/handlerrpc/handlerrpctest
-	@ rm -rf **/unstable.build **/github.com **/**/unstable.build
 
 license:
 	@ bluectl license LICENSE `find . -name \*.go | grep -v gomock | grep -v .pb.go | xargs`

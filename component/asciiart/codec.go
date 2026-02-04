@@ -33,7 +33,7 @@ import (
 	"github.com/disintegration/imaging"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const (

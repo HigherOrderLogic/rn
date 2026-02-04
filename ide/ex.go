@@ -37,21 +37,24 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/handler"
+	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/idetask"
 	"unstable.build/go-tui/ide/plugin"
-	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/localstorage/bluestore"
+	tterm "unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
@@ -91,7 +94,7 @@ type ex struct {
 	tasks                *idetask.Manager
 	dispatchOnPreview    map[string]PreviewFunc
 	filepathCompleter    command.Completer
-	sequencer            handler.Sequencer
+	sequencer            thandler.Sequencer
 	publishEvent         func(term.Event) bool
 	cancelPartialReissue func()
 	ctxPartialReissue    context.Context
@@ -270,7 +273,7 @@ func (e *ex) doInit(
 		o(&e.config)
 	}
 
-	seqInterests := make([]handler.Sequence, 0,
+	seqInterests := make([]thandler.Sequence, 0,
 		len(e.config.CommandSequenceBindings))
 	for seq := range e.config.CommandSequenceBindings {
 		seqInterests = append(seqInterests, seq)
@@ -931,7 +934,7 @@ func (e *ex) pasteFromClipboard(args ...string) error {
 		return fmt.Errorf("clipboard paste: %w", err)
 	}
 	if len(data.Text) == 0 {
-		_, _ = e.Browser().Notify(notifications.LevelInfo, "nothing to paste")
+		_, _ = e.Browser().Notify(browserapi.LevelInfo, "nothing to paste")
 		return nil
 	}
 
@@ -956,17 +959,17 @@ func (e *ex) copyToClipboard(args ...string) error {
 	handler := e.focusHandler()
 	data, ok := handler.Selection()
 	if !ok {
-		_, _ = e.Browser().Notify(notifications.LevelInfo, "nothing to copy")
+		_, _ = e.Browser().Notify(browserapi.LevelInfo, "nothing to copy")
 		return nil
 	}
 	err := e.clip.Copy(clipboard.DefaultRegisterID, clipboard.Data{Text: data})
 	if err != nil {
-		_, _ = e.Browser().Notify(notifications.LevelError,
+		_, _ = e.Browser().Notify(browserapi.LevelError,
 			"failed to copy to clipboard: %v", err)
 		err = fmt.Errorf("clipboard copy: %w", err)
 		return err
 	}
-	_, _ = e.Browser().Notify(notifications.LevelSuccess, "copied to clipboard")
+	_, _ = e.Browser().Notify(browserapi.LevelSuccess, "copied to clipboard")
 	return nil
 }
 
@@ -1040,8 +1043,8 @@ func (e *ex) executePlugin(args ...string) error {
 	if err != nil {
 		return err
 	}
-	cfg := component.FloatingConfig{
-		Alignment: component.SpanAlignmentCentered,
+	cfg := browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
 	}
 	// there can be multiple floating windows open
 	// so instead of matching windows on tabclose,
@@ -1061,8 +1064,8 @@ func (e *ex) executePlugin(args ...string) error {
 
 func (e *ex) keydump(_ ...string) error {
 	h := browser.Keydump(e.clip, &e.comp)
-	cfg := component.FloatingConfig{
-		Alignment: component.SpanAlignmentCentered,
+	cfg := browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
 	}
 	_, err := e.comp.Floating(h, cfg)
 	return err
@@ -1103,9 +1106,9 @@ func (e *ex) newTask(args ...string) error {
 	}
 	switch sysArgv[1] {
 	case "right":
-		t.MinimizeAlignment = component.SpanAlignmentRight
+		t.MinimizeAlignment = component.AlignmentRight
 	case "left":
-		t.MinimizeAlignment = component.SpanAlignmentLeft
+		t.MinimizeAlignment = component.AlignmentLeft
 	default:
 		return fmt.Errorf("invalid orientation argument %q", sysArgv[1])
 	}
@@ -1218,8 +1221,8 @@ func (e *ex) toggleCompanionTerminal() error {
 		}
 		e.companionTerminal.OnFocusChange(false)
 	}
-	cfg := component.FloatingConfig{
-		Alignment: component.SpanAlignmentCentered,
+	cfg := browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
 	}
 	cth := companionTerminalHandler{
 		vth:      e.companionTerminal,
@@ -1436,8 +1439,8 @@ func (e *ex) handleEvent(ev term.Event) (
 		}
 	}
 
-	var seq handler.Sequence
-	var match handler.SequenceMatchResult
+	var seq thandler.Sequence
+	var match thandler.SequenceMatchResult
 	// err nil indicates that match is still valid as timer hasn't expired
 	// and it was not canceled yet or simply it hasn't even started and
 	// this is first event in sequence.
@@ -1448,7 +1451,7 @@ func (e *ex) handleEvent(ev term.Event) (
 	var cmdsAndArgs [][]string
 	var ok bool
 	switch match {
-	case handler.SequenceMatch:
+	case thandler.SequenceMatch:
 		cmdsAndArgs, ok = e.config.CommandSequenceBindings[seq]
 		if !ok {
 			panic("key sequencer matched but no command configured")
@@ -1457,7 +1460,7 @@ func (e *ex) handleEvent(ev term.Event) (
 			e.cancelPartialReissue()
 			e.cleanPartialReissueState()
 		}
-	case handler.SequencePartialMatch:
+	case thandler.SequencePartialMatch:
 		if e.cancelPartialReissue == nil {
 			// this is not a re-issue of a partial command, so set
 			// timer to re-issue if user doesn't complete sequence,
@@ -1557,7 +1560,7 @@ func (e *ex) openCommandPrompt() {
 	commandCfg.FrameAttr = e.config.FrameAttr
 	commandCfg.ShowManualAfter = e.config.CommandOverlay.ShowManualAfter
 	commandCfg.Sync = e.syncCommandPrompt
-	promptStorage := document.WithPartition(e.storage, "cprompt")
+	promptStorage := bluestore.AdaptTo(document.WithPartition(e.storage, "cprompt"))
 	cmd := command.NewPrompt(promptStorage, e, e, e, []command.Manual{}, commandCfg)
 
 	commandHandler := browser.FuncFloating(
@@ -1583,9 +1586,9 @@ func (e *ex) openCommandPrompt() {
 	e.resetCommandList(cmd)
 
 	e.cmdWin = e.cmdV.C.Floating(commandHandler,
-		component.FloatingConfig{
+		browserapi.FloatingConfig{
 			Offset:    term.Coordinates{Y: int(float64(e.height) * 0.2)},
-			Alignment: component.SpanAlignmentHorizontallyCentered,
+			Alignment: component.AlignmentHorizontallyCentered,
 		})
 	e.cmd = cmd
 }
@@ -1603,7 +1606,7 @@ func (e *ex) handlePrompt(ev term.Event) (exit, handled bool) {
 	if ok && len(cmdsAndArgs[0]) == 1 && cmdsAndArgs[0][0] == cmdClipboardPaste {
 		err := e.pasteFromClipboard()
 		if err != nil {
-			_, _ = e.Browser().Notify(notifications.LevelError, "%v", err)
+			_, _ = e.Browser().Notify(browserapi.LevelError, "%v", err)
 		}
 		return
 	}
@@ -1638,11 +1641,6 @@ func (e *ex) Selection() (string, bool) {
 	return e.focusHandler().Selection()
 }
 
-// Man satisfies tui.Handler.
-func (e *ex) Man() tui.Manual {
-	panic("TODO")
-}
-
 // Resize satisfies tui.Component
 func (e *ex) Resize(width, height int) {
 	e.height = height
@@ -1660,8 +1658,8 @@ func (e *ex) Resize(width, height int) {
 
 	// set correct width and height for dynamically resized
 	// components
-	width -= offset.X
-	height -= offset.Y
+	width = max(0, width-offset.X)
+	height = max(0, height-offset.Y)
 	e.cmdV.Resize(width, height)
 }
 
@@ -1674,7 +1672,7 @@ func (e *ex) Draw(w term.Writer) {
 		defer e.comp.SetDim(prev)
 
 		if e.config.Config.Dim {
-			e.comp.Draw(term.DimWriter(w))
+			e.comp.Draw(tterm.DimWriter(w))
 		} else {
 			e.comp.Draw(w)
 		}
@@ -1770,13 +1768,13 @@ func (e *tabSubscriber) OnFree(t *browser.Tab) {
 
 type windowSubscriber ex
 
-func (e *windowSubscriber) OnFocus(prev, curr handler.Window) {
+func (e *windowSubscriber) OnFocus(prev, curr thandler.Window) {
 	onFocusChange(prev, false)
 	onFocusChange(curr, true)
 }
 
-func onFocusChange(win handler.Window, isInFocus bool) {
-	if win == (handler.Window{}) {
+func onFocusChange(win thandler.Window, isInFocus bool) {
+	if win == (thandler.Window{}) {
 		return
 	}
 

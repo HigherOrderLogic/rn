@@ -33,14 +33,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser/browsertest"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
@@ -236,10 +234,10 @@ type nopBrowser struct {
 func (n nopBrowser) PublishEvent(term.Event) error {
 	return nil
 }
-func (n nopBrowser) Notify(level notifications.Level, msg string, args ...any) (string, error) {
+func (n nopBrowser) Notify(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
 	return "", nil
 }
-func (n nopBrowser) NotifyOnce(level notifications.Level, msg string, args ...any) (string, error) {
+func (n nopBrowser) NotifyOnce(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
 	return "", nil
 }
 func (n nopBrowser) UpdateNotificationProgress(id, message string, progress, total int64) error {
@@ -316,10 +314,6 @@ func (t *testVte) Cursor() (ret term.Coordinates, style term.CursorStyle, show b
 
 func (t *testVte) Selection() (string, bool) {
 	return "", false
-}
-
-func (t *testVte) Man() tui.Manual {
-	return tui.Manual{}
 }
 
 func (t *testVte) Dimensions() (int, int) {

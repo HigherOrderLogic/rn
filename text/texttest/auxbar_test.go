@@ -31,15 +31,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/comptest"
 	"unstable.build/go-tui/ide/vctrl"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -798,10 +797,6 @@ func (t *testHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 
 func (t *testHandler) Selection() (string, bool) {
 	return "", false
-}
-
-func (t *testHandler) Man() tui.Manual {
-	return tui.Manual{}
 }
 
 const copy = `package main

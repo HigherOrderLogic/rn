@@ -27,8 +27,8 @@ import (
 	"math"
 	"time"
 
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 var _ component.Responsive = (*notificationComp)(nil)
@@ -55,7 +55,7 @@ func newString(cfg Config, msg string) component.Responsive {
 	strConfig := component.StringResponsiveConfig{
 		NoSplitWords: true,
 		StringConfig: component.StringConfig{
-			Alignment:            component.SpanAlignmentCentered,
+			Alignment:            component.AlignmentCentered,
 			BackgroundRune:       ' ',
 			Attributes:           cfg.Attributes,
 			BackgroundAttributes: cfg.BackgroundAttributes,

@@ -26,7 +26,7 @@ package workspace
 import (
 	"os"
 
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // InvalidFile returns a File that always returns the given err.

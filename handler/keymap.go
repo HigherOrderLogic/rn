@@ -24,8 +24,8 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 type keyMappingHandler struct {
@@ -69,13 +69,4 @@ func (k keyMappingHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 // Selection delegates call to underlying handler.
 func (k keyMappingHandler) Selection() (string, bool) {
 	return k.inner.Selection()
-}
-
-// Man returns remapped Manual from underlying handler.
-func (k keyMappingHandler) Man() tui.Manual {
-	m := k.inner.Man()
-	for from, to := range k.mappings {
-		m.Keys[to] = m.Keys[from]
-	}
-	return m
 }

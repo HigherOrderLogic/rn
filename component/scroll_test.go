@@ -32,9 +32,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
 )
 
 func TestComponentScrollDrawEdgeCase(t *testing.T) {
@@ -842,7 +842,7 @@ Love isn't love 'til you give it_away.
 			if out != "" {
 				cells, _, ok := scroll.Buffer().Select(start, end)
 				require.True(t, ok)
-				assert.Equal(t, tcase.wantOut, cell.CellsToString(cells))
+				assert.Equal(t, tcase.wantOut, term.CellsToString(cells))
 			}
 		})
 	}

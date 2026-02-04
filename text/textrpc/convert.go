@@ -26,41 +26,42 @@ package textrpc
 import (
 	"fmt"
 
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/term/termrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
 )
 
-func protoTypeToModel(protoType EditorEvent_Type) (ev textapi.EventType, err error) {
+func protoTypeToModel(protoType textrpc.EditorEvent_Type) (ev textapi.EventType, err error) {
 	switch protoType {
-	case EditorEvent_TypeClose:
+	case textrpc.EditorEvent_TypeClose:
 		ev = textapi.EventTypeClose
-	case EditorEvent_TypeFlush:
+	case textrpc.EditorEvent_TypeFlush:
 		ev = textapi.EventTypeFlush
-	case EditorEvent_TypeOpen:
+	case textrpc.EditorEvent_TypeOpen:
 		ev = textapi.EventTypeOpen
-	case EditorEvent_TypeEdit:
+	case textrpc.EditorEvent_TypeEdit:
 		ev = textapi.EventTypeEdit
-	case EditorEvent_TypeScroll:
+	case textrpc.EditorEvent_TypeScroll:
 		ev = textapi.EventTypeScroll
-	case EditorEvent_TypeHidden:
+	case textrpc.EditorEvent_TypeHidden:
 		ev = textapi.EventTypeHidden
-	case EditorEvent_TypeVisible:
+	case textrpc.EditorEvent_TypeVisible:
 		ev = textapi.EventTypeVisible
-	case EditorEvent_TypeCursor:
+	case textrpc.EditorEvent_TypeCursor:
 		ev = textapi.EventTypeCursor
-	case EditorEvent_TypeSelection:
+	case textrpc.EditorEvent_TypeSelection:
 		ev = textapi.EventTypeSelection
-	case EditorEvent_TypeCreate:
+	case textrpc.EditorEvent_TypeCreate:
 		ev = textapi.EventTypeCreate
-	case EditorEvent_TypeChange:
+	case textrpc.EditorEvent_TypeChange:
 		ev = textapi.EventTypeChange
-	case EditorEvent_TypeFocus:
+	case textrpc.EditorEvent_TypeFocus:
 		ev = textapi.EventTypeFocus
-	case EditorEvent_TypeUnfocus:
+	case textrpc.EditorEvent_TypeUnfocus:
 		ev = textapi.EventTypeUnfocus
-	case EditorEvent_TypeRemove:
+	case textrpc.EditorEvent_TypeRemove:
 		ev = textapi.EventTypeRemove
-	case EditorEvent_TypeRename:
+	case textrpc.EditorEvent_TypeRename:
 		ev = textapi.EventTypeRename
 	default:
 		err = fmt.Errorf("failed to convert proto editor event: invalid type: %v",
@@ -70,23 +71,23 @@ func protoTypeToModel(protoType EditorEvent_Type) (ev textapi.EventType, err err
 	return
 }
 
-func fromProto(e *textapi.Event, pe *EditorEvent) (err error) {
+func fromProto(e *textapi.Event, pe *textrpc.EditorEvent) (err error) {
 	e.Type, err = protoTypeToModel(pe.GetType())
 	if err != nil {
 		return
 	}
 	if pe.GetResourceName().GetUri() != "" {
-		e.URI, err = NewURIFromProto(pe.GetResourceName())
+		e.URI, err = textrpc.NewURIFromProto(pe.GetResourceName())
 		if err != nil {
 			return
 		}
 	}
 	if pe.ResourceName != nil {
-		uri, err := NewURIFromProto(pe.GetResourceName())
+		uri, err := textrpc.NewURIFromProto(pe.GetResourceName())
 		if err != nil {
 			return err
 		}
-		e.Resource = Token{
+		e.Resource = textrpc.Token{
 			URI: uri,
 		}
 	}
@@ -98,46 +99,46 @@ func fromProto(e *textapi.Event, pe *EditorEvent) (err error) {
 	return nil
 }
 
-func protoType(e textapi.Event) EditorEvent_Type {
+func protoType(e textapi.Event) textrpc.EditorEvent_Type {
 	switch e.Type {
 	case textapi.EventTypeClose:
-		return EditorEvent_TypeClose
+		return textrpc.EditorEvent_TypeClose
 	case textapi.EventTypeFlush:
-		return EditorEvent_TypeFlush
+		return textrpc.EditorEvent_TypeFlush
 	case textapi.EventTypeOpen:
-		return EditorEvent_TypeOpen
+		return textrpc.EditorEvent_TypeOpen
 	case textapi.EventTypeEdit:
-		return EditorEvent_TypeEdit
+		return textrpc.EditorEvent_TypeEdit
 	case textapi.EventTypeScroll:
-		return EditorEvent_TypeScroll
+		return textrpc.EditorEvent_TypeScroll
 	case textapi.EventTypeHidden:
-		return EditorEvent_TypeHidden
+		return textrpc.EditorEvent_TypeHidden
 	case textapi.EventTypeVisible:
-		return EditorEvent_TypeVisible
+		return textrpc.EditorEvent_TypeVisible
 	case textapi.EventTypeChange:
-		return EditorEvent_TypeChange
+		return textrpc.EditorEvent_TypeChange
 	case textapi.EventTypeCreate:
-		return EditorEvent_TypeCreate
+		return textrpc.EditorEvent_TypeCreate
 	case textapi.EventTypeCursor:
-		return EditorEvent_TypeCursor
+		return textrpc.EditorEvent_TypeCursor
 	case textapi.EventTypeSelection:
-		return EditorEvent_TypeSelection
+		return textrpc.EditorEvent_TypeSelection
 	case textapi.EventTypeFocus:
-		return EditorEvent_TypeFocus
+		return textrpc.EditorEvent_TypeFocus
 	case textapi.EventTypeUnfocus:
-		return EditorEvent_TypeUnfocus
+		return textrpc.EditorEvent_TypeUnfocus
 	case textapi.EventTypeRename:
-		return EditorEvent_TypeRename
+		return textrpc.EditorEvent_TypeRename
 	case textapi.EventTypeRemove:
-		return EditorEvent_TypeRemove
+		return textrpc.EditorEvent_TypeRemove
 	default:
 		panic(fmt.Sprintf("failed to convert editor event to proto: invalid type: %v", e.Type))
 	}
 }
 
 // expects ev Resource to be a browser.Token
-func toProto(e textapi.Event) EditorEvent {
-	var ret EditorEvent
+func toProto(e textapi.Event) textrpc.EditorEvent {
+	var ret textrpc.EditorEvent
 	ret.Type = protoType(e)
 
 	ret.ResourceName = NewURI(e.URI)

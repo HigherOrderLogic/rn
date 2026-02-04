@@ -34,25 +34,24 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/api/browserapi/browserext"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
 	"unstable.build/go-tui/api/storageapi/storageext"
-	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/api/textapi/textext"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/api/workspaceapi/workspaceext"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text/modeless"
 )
 
@@ -138,7 +137,7 @@ func New(
 }
 
 type fuzzyFinderHandler struct {
-	s                    document.Service
+	s                    storageapi.Service
 	f                    browserapi.ResourceOpener
 	wm                   browserapi.WindowManager
 	p                    browserapi.EventPublisher
@@ -289,7 +288,7 @@ func (h *fuzzyFinderHandler) notifyError(msg string, args ...interface{}) error 
 		return nil
 	}
 
-	_, err := h.m.Notify(notifications.LevelError, msg, args...)
+	_, err := h.m.Notify(browserapi.LevelError, msg, args...)
 	return err
 }
 
@@ -596,10 +595,6 @@ func (h *fuzzyFinderHandler) Cursor() (
 	pos term.Coordinates, style term.CursorStyle, show bool,
 ) {
 	return h.listHandler.Cursor()
-}
-
-func (h *fuzzyFinderHandler) Man() tui.Manual {
-	return h.listHandler.Man()
 }
 
 func (h *fuzzyFinderHandler) Close() error {

@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 )
 
@@ -54,20 +55,20 @@ func newWriterNoCursor() *HTMLWriter {
 func TestHTMLWriter(t *testing.T) {
 	t.Run("writes a cell", func(t *testing.T) {
 		writer := NewHTMLWriter(1, 1)
-		writer.SetCell(Coordinates{}, Cell{Ch: 'a'})
+		writer.SetCell(term.Coordinates{}, term.Cell{Ch: 'a'})
 		expectInnerHTML(t, writer, "a", "")
 	})
 
 	t.Run("overwrites cells", func(t *testing.T) {
 		writer := NewHTMLWriter(1, 1)
-		writer.SetCell(Coordinates{}, Cell{Ch: 'a'})
-		writer.SetCell(Coordinates{}, Cell{Ch: 'b'})
+		writer.SetCell(term.Coordinates{}, term.Cell{Ch: 'a'})
+		writer.SetCell(term.Coordinates{}, term.Cell{Ch: 'b'})
 		expectInnerHTML(t, writer, "b", "")
 	})
 
 	t.Run("ignores out-of-bounds writes", func(t *testing.T) {
 		writer := NewHTMLWriter(1, 1)
-		writer.SetCell(Coordinates{Y: 1}, Cell{Ch: 'X'})
+		writer.SetCell(term.Coordinates{Y: 1}, term.Cell{Ch: 'X'})
 		expectInnerHTML(t, writer, " ", "")
 	})
 
@@ -75,7 +76,7 @@ func TestHTMLWriter(t *testing.T) {
 		needEscape := []rune{'&', '<', '>'}
 		writer := NewHTMLWriter(len(needEscape), 1)
 		for i, c := range needEscape {
-			writer.SetCell(Coordinates{X: i}, Cell{Ch: c})
+			writer.SetCell(term.Coordinates{X: i}, term.Cell{Ch: c})
 		}
 		expectInnerHTML(t, writer, "&amp", "&lt&gt")
 	})
@@ -85,31 +86,31 @@ func TestHTMLWriter(t *testing.T) {
 		t.SkipNow()
 
 		tsuite := []struct {
-			attr        Attributes
+			attr        term.Attributes
 			expectedCSS string
 		}{
-			{Attributes{}, "X"}, /* no style */
-			{Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorWhite}, "<span style=\"background:#FFFFFF;\">X</span>"}, /*white is default foreground */
-			{Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorBlack}, "<span style=\"color:#000000;\">X</span>"},      /* black is default background */
-			{Attributes{Fg: tcell.ColorBlue, Bg: tcell.ColorBlue}, "<span style=\"background:#0000FF;color:#0000FF;\">X</span>"},
-			{Attributes{Fg: tcell.ColorAqua, Bg: tcell.ColorAqua}, "<span style=\"background:#00FFFF;color:#00FFFF;\">X</span>"},
-			{Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorGreen}, "<span style=\"background:#00FF00;color:#00FF00;\">X</span>"},
-			{Attributes{Fg: tcell.ColorFuchsia, Bg: tcell.ColorFuchsia}, "<span style=\"background:#FF00FF;color:#FF00FF;\">X</span>"},
-			{Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorRed}, "<span style=\"background:#FF0000;color:#FF0000;\">X</span>"},
-			{Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorYellow}, "<span style=\"background:#FFFF00;color:#FFFF00;\">X</span>"},
-			{Attributes{Attrs: tcell.AttrBold}, "<span style=\"font-weight:bold;\">X</span>"},
-			{Attributes{Attrs: tcell.AttrUnderline}, "<span style=\"text-decoration:underline;\">X</span>"},
-			{Attributes{Attrs: tcell.AttrReverse}, "<span style=\"background:#FFFFFF;color:#000000;\">X</span>"},
-			{Attributes{Attrs: tcell.AttrBold | tcell.AttrReverse | tcell.AttrUnderline},
+			{term.Attributes{}, "X"}, /* no style */
+			{term.Attributes{Fg: tcell.ColorWhite, Bg: tcell.ColorWhite}, "<span style=\"background:#FFFFFF;\">X</span>"}, /*white is default foreground */
+			{term.Attributes{Fg: tcell.ColorBlack, Bg: tcell.ColorBlack}, "<span style=\"color:#000000;\">X</span>"},      /* black is default background */
+			{term.Attributes{Fg: tcell.ColorBlue, Bg: tcell.ColorBlue}, "<span style=\"background:#0000FF;color:#0000FF;\">X</span>"},
+			{term.Attributes{Fg: tcell.ColorAqua, Bg: tcell.ColorAqua}, "<span style=\"background:#00FFFF;color:#00FFFF;\">X</span>"},
+			{term.Attributes{Fg: tcell.ColorGreen, Bg: tcell.ColorGreen}, "<span style=\"background:#00FF00;color:#00FF00;\">X</span>"},
+			{term.Attributes{Fg: tcell.ColorFuchsia, Bg: tcell.ColorFuchsia}, "<span style=\"background:#FF00FF;color:#FF00FF;\">X</span>"},
+			{term.Attributes{Fg: tcell.ColorRed, Bg: tcell.ColorRed}, "<span style=\"background:#FF0000;color:#FF0000;\">X</span>"},
+			{term.Attributes{Fg: tcell.ColorYellow, Bg: tcell.ColorYellow}, "<span style=\"background:#FFFF00;color:#FFFF00;\">X</span>"},
+			{term.Attributes{Attrs: tcell.AttrBold}, "<span style=\"font-weight:bold;\">X</span>"},
+			{term.Attributes{Attrs: tcell.AttrUnderline}, "<span style=\"text-decoration:underline;\">X</span>"},
+			{term.Attributes{Attrs: tcell.AttrReverse}, "<span style=\"background:#FFFFFF;color:#000000;\">X</span>"},
+			{term.Attributes{Attrs: tcell.AttrBold | tcell.AttrReverse | tcell.AttrUnderline},
 				"<span style=\"font-weight:bold;text-decoration:underline;background:#FFFFFF;color:#000000;\">X</span>"},
-			{Attributes{Fg: tcell.ColorAqua, Bg: tcell.ColorAqua, Attrs: tcell.AttrBold},
+			{term.Attributes{Fg: tcell.ColorAqua, Bg: tcell.ColorAqua, Attrs: tcell.AttrBold},
 				"<span style=\"font-weight:bold;background:#00FFFF;color:#00FFFF;\">X</span>"},
 		}
 
 		for i, tcase := range tsuite {
 			t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 				writer := newWriterNoCursor()
-				writer.SetCell(Coordinates{}, Cell{Ch: 'X', Attributes: tcase.attr})
+				writer.SetCell(term.Coordinates{}, term.Cell{Ch: 'X', Attributes: tcase.attr})
 				expectedHTML := fmt.Sprintf(defaultBackgroundNoCursor, tcase.expectedCSS)
 				expectInnerHTMLWithCursor(t, writer, expectedHTML)
 			})
@@ -119,7 +120,7 @@ func TestHTMLWriter(t *testing.T) {
 
 func TestHTMLWriterClear(t *testing.T) {
 	writer := newWriterNoCursor()
-	writer.Clear(Attributes{Bg: tcell.ColorAqua, Fg: tcell.ColorFuchsia})
+	writer.Clear(term.Attributes{Bg: tcell.ColorAqua, Fg: tcell.ColorFuchsia})
 	expectedHTML := `<pre style="background:#00FFFF;color:#FF00FF;"> </pre>`
 	expectInnerHTMLWithCursor(t, writer, expectedHTML)
 }
@@ -127,21 +128,21 @@ func TestHTMLWriterClear(t *testing.T) {
 func TestHTMLWriterSetCursor(t *testing.T) {
 	t.Run("sets cursor", func(t *testing.T) {
 		writer := NewHTMLWriter(2, 2)
-		writer.SetCursor(Coordinates{Y: 1, X: 1})
+		writer.SetCursor(term.Coordinates{Y: 1, X: 1})
 		expectedHTML := "<pre style=\"background:#000000;color:#FFFFFF;\">  \n <span style=\"background: red;\"> </span></pre>"
 		expectInnerHTMLWithCursor(t, writer, expectedHTML)
 	})
 
 	t.Run("ignores out-of-bounds coordinates", func(t *testing.T) {
 		writer := NewHTMLWriter(2, 2)
-		writer.SetCursor(Coordinates{Y: 10, X: 1})
+		writer.SetCursor(term.Coordinates{Y: 10, X: 1})
 		expectedHTML := "<pre style=\"background:#000000;color:#FFFFFF;\">  \n  </pre>"
 		expectInnerHTMLWithCursor(t, writer, expectedHTML)
 	})
 
 	t.Run("ignores negative coordinates", func(t *testing.T) {
 		writer := NewHTMLWriter(2, 2)
-		writer.SetCursor(Coordinates{X: -1})
+		writer.SetCursor(term.Coordinates{X: -1})
 		expectedHTML := "<pre style=\"background:#000000;color:#FFFFFF;\">  \n  </pre>"
 		expectInnerHTMLWithCursor(t, writer, expectedHTML)
 	})

@@ -31,8 +31,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	tuiterm "unstable.build/go-tui/term"
 )
 
 // SequenceTestCase represents an input sequence and
@@ -196,7 +197,7 @@ func runTestCase(
 	err := w.Clear(term.Attributes{Fg: 0, Bg: 0})
 	require.NoError(t, err)
 
-	keys, err := term.ParseKeys(tcase.InputSequence)
+	keys, err := tuiterm.ParseKeys(tcase.InputSequence)
 	require.NoError(t, err)
 
 	for _, key := range keys {

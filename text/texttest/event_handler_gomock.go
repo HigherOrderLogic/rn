@@ -13,8 +13,8 @@ import (
 	context "context"
 	reflect "reflect"
 
+	textapi "github.com/unstablebuild/rune-go-sdk/api/textapi"
 	gomock "go.uber.org/mock/gomock"
-	textapi "unstable.build/go-tui/api/textapi"
 )
 
 // MockEventHandler is a mock of EventHandler interface.

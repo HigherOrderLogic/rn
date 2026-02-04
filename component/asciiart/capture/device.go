@@ -36,10 +36,10 @@ import (
 	"github.com/pion/mediadevices/pkg/prop"
 	"github.com/pion/webrtc/v3"
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component/asciiart"
-	"unstable.build/go-tui/term"
 )
 
 var _ (tui.Component) = (*Device)(nil)
@@ -140,7 +140,7 @@ func (d *Device) Init(
 		d.component = NewComponent(trackID, streamID, interrupter, fps, vidReader, cfg)
 	} else {
 		d.closedErr = component.NewStringWithConfig("no video track",
-			component.StringConfig{Alignment: component.SpanAlignmentCentered})
+			component.StringConfig{Alignment: component.AlignmentCentered})
 	}
 	return nil
 }
@@ -186,7 +186,7 @@ func (d *Device) onTrackEnded(track mediadevices.Track) func(error) {
 		// TODO if audio, overlay error
 		if track.Kind() == webrtc.RTPCodecTypeVideo {
 			d.closedErr = component.NewStringWithConfig(fmt.Sprintf("video track ended: %s", err),
-				component.StringConfig{Alignment: component.SpanAlignmentCentered})
+				component.StringConfig{Alignment: component.AlignmentCentered})
 		}
 	}
 }

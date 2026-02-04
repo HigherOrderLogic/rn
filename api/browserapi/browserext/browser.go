@@ -27,8 +27,8 @@ import (
 	"context"
 	"os"
 
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/browser/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/rpc"
 )

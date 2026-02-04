@@ -30,10 +30,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/template"
-	"unstable.build/go-tui/term"
+	tcomponent "unstable.build/go-tui/component"
 )
 
 // BarComponentType is one of the many supported
@@ -78,7 +79,7 @@ type BarConfig struct {
 
 // DefaultBarConfig returns the default plugin top bar configuration.
 func DefaultBarConfig() BarConfig {
-	defaultAnimationFrames, _ := component.SpinningSquareAnimationFrames()
+	defaultAnimationFrames, _ := tcomponent.SpinningSquareAnimationFrames()
 	// this is backwards compatible with implementation before dynamic layout
 	// so we don't need to refactor tests.
 	return BarConfig{
@@ -125,7 +126,7 @@ type pluginHandlerBar struct {
 	barCenter component.Virtual[component.Floating]
 	barRight  component.Virtual[component.Floating]
 
-	animation         *component.Animation
+	animation         *tcomponent.Animation
 	status            *component.FloatingReference
 	statusTemplate    BarComponent
 	statusAlignment   component.Alignment
@@ -186,15 +187,15 @@ func (e *pluginHandlerBar) initLayout(interrupter term.Interrupter) {
 	var barCenter []component.Floating
 	var barLeft []component.Floating
 	var barRight []component.Floating
-	alignment := component.SpanAlignmentLeft
+	alignment := component.AlignmentLeft
 	for _, comp := range e.Layout {
 		var toappend component.Floating
 		switch comp.Type {
 		case BarAlignRight:
-			alignment = component.SpanAlignmentRight
+			alignment = component.AlignmentRight
 			continue
 		case BarAlignCenter:
-			alignment = component.SpanAlignmentHorizontallyCentered
+			alignment = component.AlignmentHorizontallyCentered
 			continue
 		case BarStatusIcon:
 			var seq []int
@@ -202,7 +203,7 @@ func (e *pluginHandlerBar) initLayout(interrupter term.Interrupter) {
 				seq = append(seq, i)
 			}
 			e.statusTemplate = comp
-			e.animation = component.NewAnimation(interrupter, e.StatusAnimationFrames,
+			e.animation = tcomponent.NewAnimation(interrupter, e.StatusAnimationFrames,
 				seq, animationFPS)
 			e.animation.SetAttr(e.statusTemplate.Attributes)
 			e.statusAlignment = alignment
@@ -225,18 +226,18 @@ func (e *pluginHandlerBar) initLayout(interrupter term.Interrupter) {
 			toappend = e.elapsed
 		}
 		switch alignment {
-		case component.SpanAlignmentLeft:
+		case component.AlignmentLeft:
 			barLeft = append(barLeft, toappend)
-		case component.SpanAlignmentRight:
+		case component.AlignmentRight:
 			barRight = append(barRight, toappend)
-		case component.SpanAlignmentHorizontallyCentered:
+		case component.AlignmentHorizontallyCentered:
 			barCenter = append(barCenter, toappend)
 		}
 	}
 
-	e.barLeft.C = component.Inline(barLeft, component.SpanAlignmentLeft)
-	e.barCenter.C = component.Inline(barCenter, component.SpanAlignmentHorizontallyCentered)
-	e.barRight.C = component.Inline(barRight, component.SpanAlignmentRight)
+	e.barLeft.C = component.Inline(barLeft, component.AlignmentLeft)
+	e.barCenter.C = component.Inline(barCenter, component.AlignmentHorizontallyCentered)
+	e.barRight.C = component.Inline(barRight, component.AlignmentRight)
 }
 
 func (e *pluginHandlerBar) buildCommandAndArgs(commandAndArgs string) {

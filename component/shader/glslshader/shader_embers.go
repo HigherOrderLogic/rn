@@ -30,7 +30,7 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Embers are shows burning in ring-like blobs that turn into ashes as sparks

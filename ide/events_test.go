@@ -34,13 +34,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/cell"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/ide/vctrl"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
@@ -553,7 +552,7 @@ func assertBufferContent(t *testing.T, x *ex, file workspaceapi.URI, content str
 	ed, err := x.comp.Editor(file)
 	require.NoError(t, err)
 	cells := ed.CellView().RawCells()
-	assert.Equal(t, content, cell.CellsToString(cells))
+	assert.Equal(t, content, term.CellsToString(cells))
 }
 
 func assertTabRemoved(t *testing.T, x *ex, file workspaceapi.URI) {

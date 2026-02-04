@@ -31,8 +31,8 @@ import (
 
 	"github.com/ernestrc/go-multierror"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Handler is a subset of text.Handler.

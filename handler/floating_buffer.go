@@ -24,21 +24,23 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
+	compapi "github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
 // FloatingBuffer wraps a tui.Handler and uses the contents of buffer
 // do determine the best dimensions for the given handler.
-func FloatingBuffer(h tui.Handler, buffer *cell.Buffer) Floating {
+func FloatingBuffer(h tui.Handler, buffer *cell.Buffer) handler.Floating {
 	return floatingBuffer{h: h, Floating: component.FloatingBuffer(h, buffer)}
 }
 
 type floatingBuffer struct {
 	h tui.Handler
-	component.Floating
+	compapi.Floating
 }
 
 func (f floatingBuffer) Handle(ev term.Event) (exit, handled bool) {
@@ -51,8 +53,4 @@ func (f floatingBuffer) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 
 func (f floatingBuffer) Selection() (string, bool) {
 	return f.h.Selection()
-}
-
-func (f floatingBuffer) Man() tui.Manual {
-	return f.h.Man()
 }

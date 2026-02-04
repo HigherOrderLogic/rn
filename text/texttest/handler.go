@@ -24,11 +24,11 @@
 package texttest
 
 import (
-	textapi "unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	cell "unstable.build/go-tui/cell"
-	"unstable.build/go-tui/handler"
-	term "unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/text"
 )
 
@@ -44,7 +44,7 @@ type TestHandler struct {
 // NewTestHandler allocates storage for a new TestHandler and initializes it.
 func NewTestHandler() (t *TestHandler) {
 	t = new(TestHandler)
-	t.Ch = 'A'
+	t.TestHandler.Ch = 'A'
 	return t
 }
 

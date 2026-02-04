@@ -7,12 +7,13 @@
 package handlerrpctest
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
-	handlerrpc "unstable.build/go-tui/handler/handlerrpc"
+
+	handlerrpc "github.com/unstablebuild/rune-go-sdk/handler/handlerrpc"
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -99,7 +100,7 @@ type TestMessage struct {
 	Type          handlerrpc.MessageType               `protobuf:"varint,1,opt,name=type,proto3,enum=handler.MessageType" json:"type,omitempty"`
 	Draw          *handlerrpc.DrawStreamResponse       `protobuf:"bytes,2,opt,name=draw,proto3" json:"draw,omitempty"`
 	Handle        *handlerrpc.HandleStreamResponse     `protobuf:"bytes,3,opt,name=handle,proto3" json:"handle,omitempty"`
-	Man           *handlerrpc.ManStreamResponse        `protobuf:"bytes,4,opt,name=man,proto3" json:"man,omitempty"`
+	Man           any                                  `protobuf:"bytes,4,opt,name=man,proto3" json:"man,omitempty"`
 	Close         *handlerrpc.CloseStreamResponse      `protobuf:"bytes,5,opt,name=close,proto3" json:"close,omitempty"`
 	Cursor        *handlerrpc.CursorStreamResponse     `protobuf:"bytes,6,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	Selection     *handlerrpc.SelectionStreamResponse  `protobuf:"bytes,7,opt,name=selection,proto3" json:"selection,omitempty"`
@@ -157,13 +158,6 @@ func (x *TestMessage) GetDraw() *handlerrpc.DrawStreamResponse {
 func (x *TestMessage) GetHandle() *handlerrpc.HandleStreamResponse {
 	if x != nil {
 		return x.Handle
-	}
-	return nil
-}
-
-func (x *TestMessage) GetMan() *handlerrpc.ManStreamResponse {
-	if x != nil {
-		return x.Man
 	}
 	return nil
 }
@@ -255,7 +249,7 @@ var file_handlerrpctest_test_proto_goTypes = []any{
 	(handlerrpc.MessageType)(0),                 // 3: handler.MessageType
 	(*handlerrpc.DrawStreamResponse)(nil),       // 4: handler.DrawStreamResponse
 	(*handlerrpc.HandleStreamResponse)(nil),     // 5: handler.HandleStreamResponse
-	(*handlerrpc.ManStreamResponse)(nil),        // 6: handler.ManStreamResponse
+	nil,                                         // 6: handler.ManStreamResponse
 	(*handlerrpc.CloseStreamResponse)(nil),      // 7: handler.CloseStreamResponse
 	(*handlerrpc.CursorStreamResponse)(nil),     // 8: handler.CursorStreamResponse
 	(*handlerrpc.SelectionStreamResponse)(nil),  // 9: handler.SelectionStreamResponse

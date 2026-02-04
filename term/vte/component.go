@@ -37,16 +37,15 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/multierr"
 	"mvdan.cc/sh/v3/shell"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/text"
 )
@@ -581,7 +580,7 @@ func (t *Component) Selection() (data string, ok bool) {
 	if !ok {
 		return
 	}
-	return cell.CellsToString(cells), ok
+	return term.CellsToString(cells), ok
 }
 
 // OnFocusChange allows clients to report whether this vte.Component is on focus or not.

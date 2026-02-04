@@ -33,12 +33,12 @@ import (
 	"github.com/ernestrc/sensible/find"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte/vtescreen"
 	"unstable.build/go-tui/term/vte/vtetest"
 	"unstable.build/go-tui/text"
@@ -629,6 +629,7 @@ func TestZshEdgeCases(t *testing.T) {
 
 	_, err = f.Write([]byte(`
 bindkey '^a' beginning-of-line
+bindkey '^g' beep
 setopt COMBINING_CHARS
 PS1='$ '
 `))

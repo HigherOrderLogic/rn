@@ -26,11 +26,10 @@ package browser
 import (
 	"io"
 
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 var _ component.Scrollable = (*Tab)(nil)
@@ -78,11 +77,6 @@ func (b *Tab) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool)
 // Selection satisfies tui.Handler.
 func (b *Tab) Selection() (string, bool) {
 	return b.handler.Selection()
-}
-
-// Man satisfies tui.Handler
-func (b *Tab) Man() tui.Manual {
-	return b.handler.Man()
 }
 
 // Close satisfies browser.Handler.

@@ -26,7 +26,7 @@ package extension
 import (
 	"context"
 
-	"unstable.build/go-tui/browser/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
 )
 
 type browserServer interface {

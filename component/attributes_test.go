@@ -28,16 +28,17 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
 )
 
 func TestDrawAttributes(t *testing.T) {
 	t.Run("draws cells correctly and respecting bounds", func(t *testing.T) {
 		w := term.NewStringWriter(9, 5)
-		u := &TestComponent{Ch: 'X'}
+		u := &component.TestComponent{Ch: 'X'}
 		s := WithAttrSetter(u)
 
 		s.Resize(8, 4)
@@ -60,7 +61,7 @@ XXXXXXXX
 func TestAttrSetter(t *testing.T) {
 	t.Run("attr oob is ignored", func(t *testing.T) {
 		w := term.NewStringWriter(2, 2)
-		s := WithAttrSetter(&TestComponent{Ch: 'x'})
+		s := WithAttrSetter(&component.TestComponent{Ch: 'x'})
 		s.SetAttrAt(term.Coordinates{X: 2, Y: 2}, term.Attributes{Fg: tcell.ColorRed})
 
 		s.Resize(2, 2)
@@ -71,7 +72,7 @@ func TestAttrSetter(t *testing.T) {
 
 	t.Run("happy path", func(t *testing.T) {
 		w := cell.NewBufferWriter(context.Background(), 4, 4)
-		s := WithAttrSetter(&TestComponent{Ch: 'a'})
+		s := WithAttrSetter(&component.TestComponent{Ch: 'a'})
 		s.SetAttr(term.Attributes{Fg: tcell.ColorBlue, Bg: tcell.ColorNavy})
 		s.SetAttrAt(term.Coordinates{X: 3, Y: 3},
 			term.Attributes{

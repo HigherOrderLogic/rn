@@ -30,13 +30,13 @@ import (
 
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/syntax"
-	"unstable.build/go-tui/term"
 )
 
 // CommandOverlayConfig holds configuration for the

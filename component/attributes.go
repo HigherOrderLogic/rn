@@ -24,25 +24,20 @@
 package component
 
 import (
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
 )
-
-// WithAttributes represents a tui.Component that can be set attributes.
-type WithAttributes interface {
-	tui.Component
-	SetAttr(term.Attributes) term.Attributes
-}
 
 type attributesAt struct {
 	term.Coordinates
 	term.Attributes
 }
 
-var _ WithAttributes = (*AttrSetter)(nil)
-var _ Floating = (*AttrSetter)(nil)
-var _ Responsive = (*AttrSetter)(nil)
+var _ component.WithAttributes = (*AttrSetter)(nil)
+var _ component.Floating = (*AttrSetter)(nil)
+var _ component.Responsive = (*AttrSetter)(nil)
 
 // AttrSetter wraps another tui.Component to satisfy WithAttributes
 // and add the ability to set the Attributes of arbitrary cells.
@@ -77,13 +72,13 @@ func (s *AttrSetter) SetAttr(attr term.Attributes) (ret term.Attributes) {
 // Dimensions satisfies Floating if underlying tui.Component
 // satisfies Floating, or panics if it doesn't.
 func (s *AttrSetter) Dimensions() (width, height int) {
-	return s.comp.(Floating).Dimensions()
+	return s.comp.(component.Floating).Dimensions()
 }
 
 // Height satisfies Responsive if underlying tui.Component
 // satisfies Responsive, or panics if it doesn't.
 func (s *AttrSetter) Height(width int) int {
-	return s.comp.(Responsive).Height(width)
+	return s.comp.(component.Responsive).Height(width)
 }
 
 // SetAttrAt sets the attributes at the given coordinates.
@@ -106,7 +101,7 @@ func (s *AttrSetter) Resize(width, height int) {
 // Draw draws the underlying component along with
 // the attributes.
 func (s *AttrSetter) Draw(w term.Writer) {
-	compWithAttr, is := s.comp.(WithAttributes)
+	compWithAttr, is := s.comp.(component.WithAttributes)
 	if is {
 		compWithAttr.SetAttr(s.def)
 	}

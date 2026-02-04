@@ -33,14 +33,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/handler"
+	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
@@ -1936,7 +1937,7 @@ func TestSetNormalModeClearing(t *testing.T) {
 	vi.setNormalMode()
 	assert.Equal(t, normalMode, vi.mode())
 
-	assert.Equal(t, handler.LessNormalMode, vi.less.Mode())
+	assert.Equal(t, thandler.LessNormalMode, vi.less.Mode())
 }
 
 func setupVi(

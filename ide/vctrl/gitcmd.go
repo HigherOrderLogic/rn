@@ -33,7 +33,7 @@ import (
 	"strings"
 
 	"github.com/sourcegraph/go-diff/diff"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // NewGitCommand returns a Service powered by the local git installation,

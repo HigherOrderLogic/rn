@@ -27,7 +27,7 @@ import (
 	"io/fs"
 
 	"github.com/go-git/go-billy/v6"
-	"unstable.build/go-tui/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 )
 
 var _ billy.Filesystem = billyScheme{}

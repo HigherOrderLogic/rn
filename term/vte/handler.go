@@ -35,12 +35,12 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -142,7 +142,7 @@ func (e *Handler) Init(
 		}
 		if logErr != nil && !errors.Is(logErr, io.EOF) && !errors.Is(logErr, context.Canceled) {
 			e.log(log.ErrorLevel, "terminal run: %v", logErr)
-			_, _ = e.notifications.Notify(notifications.LevelError,
+			_, _ = e.notifications.Notify(browserapi.LevelError,
 				"terminal run: %v", logErr)
 		}
 	})
@@ -227,7 +227,7 @@ func (e *Handler) Resize(width, height int) {
 		e.log(log.ErrorLevel, "terminal set size: %s", err)
 		// do not notify if already closed
 		if !e.exit.Load() {
-			_, _ = e.notifications.Notify(notifications.LevelError,
+			_, _ = e.notifications.Notify(browserapi.LevelError,
 				"terminal set size: %v", err)
 		}
 		return
@@ -276,7 +276,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 				"Ensure that the shell's audible bell is configured and " +
 				"working correctly. You can test it in your terminal with `printf '\\a'`."
 			e.log(log.WarnLevel, "%s: %v", msg, err)
-			if _, err := e.notifications.NotifyOnce(notifications.LevelWarn, msg); err != nil {
+			if _, err := e.notifications.NotifyOnce(browserapi.LevelWarn, msg); err != nil {
 				e.log(log.ErrorLevel, "notify: %v", err)
 			}
 		})
@@ -307,7 +307,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	err := e.comp.WriteToPty(raw)
 	if err != nil {
 		e.log(log.ErrorLevel, "write to pty: %s", err)
-		e.notify(notifications.LevelError, "write to pty: %v", err)
+		e.notify(browserapi.LevelError, "write to pty: %v", err)
 		return
 	}
 
@@ -336,7 +336,7 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 func (e *Handler) OnFocusChange(inFocus bool) {
 	err := e.comp.OnFocusChange(inFocus)
 	if err != nil {
-		e.notify(notifications.LevelError, "failed to report focus changed: %v", err)
+		e.notify(browserapi.LevelError, "failed to report focus changed: %v", err)
 	}
 }
 
@@ -371,14 +371,6 @@ func (e *Handler) Selection() (data string, ok bool) {
 		return e.vi.Selection()
 	}
 	return e.comp.Selection()
-}
-
-// Man satisfies tui.Handler.
-func (e *Handler) Man() tui.Manual {
-	if e.viMode {
-		return e.vi.Man()
-	}
-	panic("TODO")
 }
 
 // SeekUp satisfies component.Scrollable.
@@ -520,7 +512,7 @@ func (e *Handler) log(level log.Level, msg string, args ...any) {
 	}).Logf(level, msg, args...)
 }
 
-func (e *Handler) notify(level notifications.Level, msg string, args ...any) {
+func (e *Handler) notify(level browserapi.NotificationLevel, msg string, args ...any) {
 	if _, err := e.notifications.Notify(level, msg, args...); err != nil {
 		e.log(log.ErrorLevel, "notify: %v", err)
 	}

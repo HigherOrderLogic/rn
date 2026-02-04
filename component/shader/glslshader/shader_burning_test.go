@@ -32,11 +32,11 @@ import (
 	"image/png"
 	"testing"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader/shadertest"
-	"unstable.build/go-tui/term"
 )
 
 //go:embed test_logo.png
@@ -74,7 +74,7 @@ func BenchmarkBurning(b *testing.B) {
 	span := component.NewSpan(image, component.SpanConfig{
 		PadHorizontalPerc: 0.4,
 		PadVerticalPerc:   0.2,
-		ContentAlignment:  component.SpanAlignmentCentered,
+		ContentAlignment:  component.AlignmentCentered,
 	})
 	writer := cell.NewBufferWriter(context.Background(), width, height)
 	span.Resize(width, height)

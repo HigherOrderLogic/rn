@@ -24,7 +24,7 @@
 package text
 
 import (
-	"unstable.build/go-tui/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 )
 
 // LocationList is the interface that groups Prev and Next

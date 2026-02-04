@@ -32,8 +32,8 @@ import (
 	"math"
 	"strings"
 
-	"unstable.build/go-tui/cell/graphemecluster"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 )
 
 const (
@@ -409,7 +409,7 @@ func (c *rawCells) Rows() int {
 }
 
 func (c *rawCells) String() string {
-	return CellsToString(c.cells)
+	return term.CellsToString(c.cells)
 }
 
 func (c *rawCells) RawCells() [][]term.Cell {

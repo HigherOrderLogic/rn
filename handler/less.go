@@ -26,11 +26,11 @@ package handler
 import (
 	"fmt"
 
+	compapi "github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
 // LessConfig holds configuration values for a Less instance.
@@ -64,9 +64,9 @@ func DefaultLessConfig() LessConfig {
 // the Handler and Component interfaces.
 type Less struct {
 	scroll            *component.Scroll
-	searchScrollVirt  component.Virtual[*component.Scroll]
+	searchScrollVirt  compapi.Virtual[*component.Scroll]
 	msgStr            string
-	msgVirt           component.Virtual[*component.ResponsiveString]
+	msgVirt           compapi.Virtual[*compapi.ResponsiveString]
 	mode              LessMode
 	moveMode          LessMoveMode
 	usedMsgBarAttr    term.Attributes
@@ -254,69 +254,6 @@ func (l *Less) Scroll() *component.Scroll {
 	return l.scroll
 }
 
-// Man satisfies tui.Handler.
-func (l *Less) Man() tui.Manual {
-	return tui.Manual{
-		Summary: "Less is a handler similar to Unix' less program, but simplified. It allows basic navigation with vi-style key bindings and text search.",
-		Keys: tui.KeyMap{
-			term.KeyComb{Ch: 'q'}: {
-				ID:          "Normal.Exit",
-				Description: "Exit handler.",
-			},
-			term.KeyComb{Ch: 'N'}: {
-				ID:          "Normal.SeekPrevResult",
-				Description: "Seek to previous search result. See 'SetSearchMode' for more info.",
-			},
-			term.KeyComb{Ch: 'n'}: {
-				ID:          "Normal.SeekNextResult",
-				Description: "Seek to next search result. See 'SetSearchMode' for more info.",
-			},
-			term.KeyComb{Ch: '0'}: {
-				ID:          "Normal.SeekStartLine",
-				Description: "Seek scroll enough columns to render start of the line.",
-			},
-			term.KeyComb{Ch: '$'}: {
-				ID:          "Normal.SeekEndLine",
-				Description: "Seek scroll enough columns to render the end of the line.",
-			},
-			term.KeyComb{Ch: 'g'}: {
-				ID:          "Normal.SeekStartScroll",
-				Description: "Seek to start of scroll",
-			},
-			term.KeyComb{Ch: 'G'}: {
-				ID:          "Normal.SeekEndScroll",
-				Description: "Seek to end of scroll.",
-			},
-			term.KeyComb{Ch: 'j'}: {
-				ID:          "Normal.SeekDown",
-				Description: "Seek scroll one row down.",
-			},
-			term.KeyComb{Ch: 'k'}: {
-				ID:          "Normal.SeekUp",
-				Description: "Seek scroll one row up.",
-			},
-			term.KeyComb{Ch: 'h'}: {
-				ID:          "Normal.SeekLeft",
-				Description: "Seek scroll one column to the left.",
-			},
-			term.KeyComb{Ch: 'l'}: {
-				ID:          "Normal.SeekRight",
-				Description: "Seek scroll one column to the right.",
-			},
-			term.KeyComb{Ch: '/'}: {
-				ID:          "Normal.SetSearchMode",
-				Description: "Enter search mode. After typing search text, press ENTER to perform a text-search or ESC to go back to normal mode.",
-			},
-			term.KeyComb{Key: term.KeyEsc}: {
-				ID: "Search.SetNormalMode", Description: "Enter normal mode",
-			},
-			term.KeyComb{Key: term.KeyEnter}: {
-				ID: "Search.Search", Description: "Perform text search with current search buffer.",
-			},
-		},
-	}
-}
-
 // ShowCommandBar determines whether the command bar should be
 // displayed or not.
 func (l *Less) ShowCommandBar(show bool) {
@@ -438,9 +375,9 @@ func (l *Less) setMessage(msg string) {
 	if l.config.SuperimposeMessage {
 		attr.Bg = l.scroll.Attributes.Bg
 	}
-	newMsg := component.NewResponsiveString(msg, component.StringResponsiveConfig{
-		StringConfig: component.StringConfig{
-			Alignment:            component.SpanAlignmentRight,
+	newMsg := compapi.NewResponsiveString(msg, compapi.StringResponsiveConfig{
+		StringConfig: compapi.StringConfig{
+			Alignment:            compapi.AlignmentRight,
 			Attributes:           attr,
 			BackgroundAttributes: attr,
 		},

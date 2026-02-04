@@ -23,7 +23,7 @@
 
 package shader
 
-import "unstable.build/go-tui/term"
+import "github.com/unstablebuild/rune-go-sdk/term"
 
 // Mix combines multiple shaders into one. They're run
 // in the same order they're passed to this constructor.

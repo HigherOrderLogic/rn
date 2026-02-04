@@ -26,10 +26,13 @@ package handler
 import (
 	"fmt"
 
+	compapi "github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	tterm "unstable.build/go-tui/term"
 )
 
 // WindowManagerConfig represents a WindowManager's
@@ -39,7 +42,7 @@ type WindowManagerConfig struct {
 
 	Dim                bool
 	FocusFrameAttr     term.Attributes
-	FocusFrameCharSet  component.FrameCharSet
+	FocusFrameCharSet  compapi.FrameCharSet
 	ScrollBarHoverChar rune
 }
 
@@ -90,7 +93,7 @@ func (wm *WindowManager) Init(handler tui.Handler, cfg WindowManagerConfig) {
 // SetFrameCharSet sets the frame border cells used to draw borders around tiles.
 // Note that this has no effect if WindowManager was
 // initialized with border == false.
-func (wm *WindowManager) SetFrameCharSet(def, focus component.FrameCharSet) {
+func (wm *WindowManager) SetFrameCharSet(def, focus compapi.FrameCharSet) {
 	if !wm.config.Frame {
 		return
 	}
@@ -240,7 +243,7 @@ func (wm *WindowManager) SplitHorizontal(win Window, h tui.Handler) (Window, boo
 
 // FloatingWindow creates a floating window.
 func (wm *WindowManager) FloatingWindow(
-	content Floating, cfg component.FloatingConfig,
+	content handler.Floating, cfg component.FloatingConfig,
 ) Window {
 	ret := wm.newNode(wm.comp.FloatingWindow(content, cfg))
 	wm.setFocusAttr(wm.focus)
@@ -371,35 +374,6 @@ func (wm *WindowManager) Selection() (string, bool) {
 	return content.Selection()
 }
 
-// Man satisfies tui.Handler.
-func (wm *WindowManager) Man() tui.Manual {
-	return tui.Manual{
-		Summary: "WindowManager implements a tiled window manager.",
-		Keys: tui.KeyMap{
-			term.KeyComb{Mod: term.ModAlt, Ch: 'q'}: {
-				ID:          "Exit",
-				Description: "Exit handler.",
-			},
-			term.KeyComb{Mod: term.ModAlt, Ch: 'j'}: {
-				ID:          "FocusDown",
-				Description: "Switch focus to tile below tile in focus.",
-			},
-			term.KeyComb{Mod: term.ModAlt, Ch: 'k'}: {
-				ID:          "FocusUp",
-				Description: "Switch focus to tile above tile in focus.",
-			},
-			term.KeyComb{Mod: term.ModAlt, Ch: 'h'}: {
-				ID:          "FocusLeft",
-				Description: "Switch focus to tile on the left of tile in focus.",
-			},
-			term.KeyComb{Mod: term.ModAlt, Ch: 'l'}: {
-				ID:          "FocusRight",
-				Description: "Switch focus to tile on the right of tile in focus.",
-			},
-		},
-	}
-}
-
 // Draw : tui.Component
 func (wm *WindowManager) Draw(w term.Writer) {
 	if wm.comp.SizeTiles()+wm.comp.SizeFloating() == 1 || !wm.config.Dim {
@@ -408,7 +382,7 @@ func (wm *WindowManager) Draw(w term.Writer) {
 	}
 
 	focusWin := wm.focus.Window
-	dimWriter := term.DimWriter(w)
+	dimWriter := tterm.DimWriter(w)
 	wm.comp.Iterate(func(win component.Window) {
 		if win == focusWin {
 			wm.comp.DrawWindow(win, w)
@@ -486,7 +460,7 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 	return WindowManagerConfig{
 		Dim:                 true,
 		WindowManagerConfig: component.DefaultWindowManagerConfig(),
-		FocusFrameCharSet:   component.FrameCharSetDefault(),
+		FocusFrameCharSet:   compapi.FrameCharSetDefault(),
 		FocusFrameAttr: term.Attributes{
 			Fg: tcell.ColorRed,
 			Bg: tcell.ColorDefault,
@@ -534,7 +508,7 @@ func (wm *WindowManager) resetScrollBarMouse() {
 
 func (wm *WindowManager) handleScrollBarMouse(
 	win component.Window, barPos, barHeight int,
-	frame *component.Frame, ev term.Event,
+	frame *compapi.Frame, ev term.Event,
 ) (bool, bool) {
 	frame.ScrollBarChar = wm.scrollBarHoverChar(frame)
 	if ev.Key != term.MouseLeft {
@@ -550,7 +524,7 @@ func (wm *WindowManager) handleScrollBarMouse(
 		return false, false
 	}
 
-	scroll := frame.Content().(component.Scrollable)
+	scroll := frame.Content().(compapi.Scrollable)
 	mouseOffset := wm.prevMouseScrollBarOffset
 	if barPos-mouseOffset > ev.MouseY {
 		for i := 0; i < barPos-mouseOffset-ev.MouseY && scroll.SeekUp(); i++ {
@@ -565,7 +539,7 @@ func (wm *WindowManager) handleScrollBarMouse(
 	return false, false
 }
 
-func (wm *WindowManager) scrollBarHoverChar(f *component.Frame) (ch rune) {
+func (wm *WindowManager) scrollBarHoverChar(f *compapi.Frame) (ch rune) {
 	ch = wm.config.ScrollBarHoverChar
 	if ch != 0 {
 		return

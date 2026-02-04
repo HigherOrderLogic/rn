@@ -34,13 +34,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/workspace"
 )
@@ -209,11 +208,11 @@ func (n nopBrowser) PublishEvent(ev term.Event) error {
 	return nil
 }
 
-func (n nopBrowser) Notify(notifications.Level, string, ...interface{}) (string, error) {
+func (n nopBrowser) Notify(browserapi.NotificationLevel, string, ...interface{}) (string, error) {
 	return "", nil
 }
 
-func (n nopBrowser) NotifyOnce(notifications.Level, string, ...interface{}) (string, error) {
+func (n nopBrowser) NotifyOnce(browserapi.NotificationLevel, string, ...interface{}) (string, error) {
 	return "", nil
 }
 

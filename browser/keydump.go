@@ -24,12 +24,11 @@
 package browser
 
 import (
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/term"
+	tterm "unstable.build/go-tui/term"
 )
 
 // Keydump returns a Floating handler that prints the incoming events as rows.
@@ -41,7 +40,7 @@ func Keydump(
 	cfg := component.StringResponsiveConfig{
 		NoSplitWords: true,
 		StringConfig: component.StringConfig{
-			Alignment: component.SpanAlignmentLeft,
+			Alignment: component.AlignmentLeft,
 		},
 	}
 	ret.clipboard = clipboard
@@ -74,10 +73,10 @@ func (k *keydump) Handle(ev term.Event) (exit, handled bool) {
 			err := k.clipboard.Copy(
 				clipboard.DefaultRegisterID, clipboard.Data{Text: k.selection})
 			if err == nil {
-				_, _ = k.notifications.Notify(notifications.LevelInfo,
+				_, _ = k.notifications.Notify(browserapi.LevelInfo,
 					"%q copied to clipboard", k.selection)
 			} else {
-				_, _ = k.notifications.Notify(notifications.LevelError,
+				_, _ = k.notifications.Notify(browserapi.LevelError,
 					"%q copied to clipboard: %v", k.selection, err)
 			}
 		}
@@ -89,11 +88,11 @@ func (k *keydump) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type != term.EventKey {
 		return
 	}
-	str := ev.KeyComb().String()
+	str := tterm.KeyCombString(ev.KeyComb())
 	cfg := component.StringResponsiveConfig{
 		NoSplitWords: true,
 		StringConfig: component.StringConfig{
-			Alignment: component.SpanAlignmentLeft,
+			Alignment: component.AlignmentLeft,
 		},
 	}
 	k.list.PushFront(component.NewResponsiveString(str, cfg))
@@ -116,11 +115,6 @@ func (k *keydump) Cursor() (c term.Coordinates, s term.CursorStyle, show bool) {
 // an empty string and false if there's no text selected.
 func (k *keydump) Selection() (string, bool) {
 	return k.selection, k.selection != ""
-}
-
-// Man returns a Handler's usage manual. See Manual for more information.
-func (k *keydump) Man() tui.Manual {
-	return tui.Manual{}
 }
 
 func (k *keydump) Dimensions() (width int, height int) {

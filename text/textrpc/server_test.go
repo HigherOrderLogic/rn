@@ -32,13 +32,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	gomock "go.uber.org/mock/gomock"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
-	termrpc "unstable.build/go-tui/term/termrpc"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/texttest"
 )
@@ -246,7 +247,7 @@ func TestServerSetCursor(t *testing.T) {
 		var protoPos termrpc.Coordinates
 		protoPos.FromModel(pos)
 
-		req := SetCursorRequest{ResourceName: NewURI(resource), Pos: &protoPos}
+		req := textrpc.SetCursorRequest{ResourceName: NewURI(resource), Pos: &protoPos}
 		res, err := s.SetCursor(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)
@@ -270,7 +271,7 @@ func TestServerCursor(t *testing.T) {
 		h := expectEditor(t, ctrl, mock, resource)
 		h.EXPECT().CursorAtScroll().Return(pos).Times(1)
 
-		req := CursorRequest{ResourceName: NewURI(resource)}
+		req := textrpc.CursorRequest{ResourceName: NewURI(resource)}
 		res, err := s.Cursor(ctx, &req)
 		require.NoError(t, err)
 		require.NotNil(t, res)

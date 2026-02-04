@@ -27,7 +27,7 @@ import (
 	"context"
 	"sync"
 
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 var _ Service = (*Cache)(nil)

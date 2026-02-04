@@ -27,9 +27,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
 )
 
 func TestKeyMappedLessHandle(t *testing.T) {
@@ -76,44 +76,8 @@ func TestKeyMappedLessHandle(t *testing.T) {
 	}), cases, writer3)
 }
 
-func TestKeyMappingMan(t *testing.T) {
-	mySummary := "My Summary"
-	myID := "myID"
-	myDesc := "myDesc"
-	kKey := term.KeyComb{Ch: 'k'}
-	jKey := term.KeyComb{Ch: 'j'}
-
-	var handler tui.Handler
-	handler = &TestHandler{Manual: tui.Manual{
-		Summary: mySummary,
-		Keys: tui.KeyMap{
-			kKey: {
-				ID:          myID,
-				Description: myDesc,
-			},
-			jKey: {
-				ID:          "",
-				Description: "",
-			},
-		},
-	}}
-
-	manualBefore := handler.Man()
-	handler = WithMapping(handler, map[term.KeyComb]term.KeyComb{
-		kKey: jKey,
-	})
-
-	manualAfter := handler.Man()
-
-	if manualBefore.Keys[kKey] != manualAfter.Keys[jKey] ||
-		len(manualBefore.Keys) != len(manualAfter.Keys) ||
-		len(manualAfter.Keys) != 2 {
-		t.Errorf("Manual mapping not correct")
-	}
-}
-
 func TestKeyMappingCursor(t *testing.T) {
-	handler := &TestHandler{CursorStyle: term.CursorStyleBlinkingBlock}
+	handler := &handler.TestHandler{CursorStyle: term.CursorStyleBlinkingBlock}
 	cursor, style, _ := handler.Cursor()
 	kmCursor, kmStyle, _ := WithMapping(handler, nil).Cursor()
 	assert.Equal(t, cursor, kmCursor)

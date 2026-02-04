@@ -27,13 +27,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 func TestNew(t *testing.T) {
-	tree, m := NewTileTree(&TestComponent{})
+	tree, m := NewTileTree(&component.TestComponent{})
 	tree.Resize(10, 10)
 
 	if m.height != 10 || m.width != 10 {
@@ -60,10 +61,10 @@ func TestStackWhenNoSpace(t *testing.T) {
 	width := 1
 	height := 1
 
-	tree, m := NewTileTree(&TestComponent{})
+	tree, m := NewTileTree(&component.TestComponent{})
 	tree.Resize(width, height)
-	w1 := tree.SplitHorizontal(m, &TestComponent{})
-	w2 := tree.SplitVertical(w1, &TestComponent{})
+	w1 := tree.SplitHorizontal(m, &component.TestComponent{})
+	w2 := tree.SplitVertical(w1, &component.TestComponent{})
 
 	assertTileSize(t, m, 1, 0)
 	assertTileSize(t, w1, 0, 1)
@@ -75,11 +76,11 @@ func TestStackWhenNoSpace(t *testing.T) {
 }
 
 func setupTestCase(t *testing.T, gwidth, gheight int) (tree *TileTree, m *TileNode, w1 *TileNode, w2 *TileNode) {
-	tree, m = NewTileTree(&TestComponent{})
+	tree, m = NewTileTree(&component.TestComponent{})
 	tree.Resize(gwidth, gheight)
 
-	w1 = tree.SplitHorizontal(m, &TestComponent{})
-	w2 = tree.SplitVertical(w1, &TestComponent{})
+	w1 = tree.SplitHorizontal(m, &component.TestComponent{})
+	w2 = tree.SplitVertical(w1, &component.TestComponent{})
 
 	return
 }
@@ -127,7 +128,7 @@ func TestNeighbours(t *testing.T) {
 		t.Errorf("%+v vs %+v", w2.TileLeft(), w1)
 	}
 
-	w3 := tree.SplitVertical(w1, &TestComponent{})
+	w3 := tree.SplitVertical(w1, &component.TestComponent{})
 
 	if w1.TileRight() != w3 {
 		t.Errorf("%+v vs %+v", w1.TileRight(), w3)
@@ -145,8 +146,8 @@ func TestNeighbours(t *testing.T) {
 		t.Errorf("%+v vs %+v", w3.TileRight(), w2)
 	}
 
-	w4 := tree.SplitHorizontal(w3, &TestComponent{})
-	w5 := tree.SplitVertical(w4, &TestComponent{})
+	w4 := tree.SplitHorizontal(w3, &component.TestComponent{})
+	w5 := tree.SplitVertical(w4, &component.TestComponent{})
 
 	if w5.TileRight() != w2 {
 		t.Errorf("%+v vs %+v", w5.TileRight(), w2)
@@ -241,26 +242,26 @@ func TestTileNodeClose(t *testing.T) {
 				t.Errorf("did not panic when closing last node")
 			}
 		}()
-		_, m := NewTileTree(&TestComponent{Ch: 'A'})
+		_, m := NewTileTree(&component.TestComponent{Ch: 'A'})
 		m.Close()
 	})
 	t.Run("does not panic if try to close first node", func(t *testing.T) {
-		tree, m := NewTileTree(&TestComponent{Ch: 'A'})
-		tree.SplitVertical(m, &TestComponent{Ch: 'X'})
+		tree, m := NewTileTree(&component.TestComponent{Ch: 'A'})
+		tree.SplitVertical(m, &component.TestComponent{Ch: 'X'})
 		m.Close()
 	})
 	t.Run("does not panic if try to close second node after removing first", func(t *testing.T) {
-		tree, m := NewTileTree(&TestComponent{Ch: 'A'})
-		m2 := tree.SplitVertical(m, &TestComponent{Ch: 'X'})
+		tree, m := NewTileTree(&component.TestComponent{Ch: 'A'})
+		m2 := tree.SplitVertical(m, &component.TestComponent{Ch: 'X'})
 		m2.Close()
-		m3 := tree.SplitVertical(m, &TestComponent{Ch: 'X'})
+		m3 := tree.SplitVertical(m, &component.TestComponent{Ch: 'X'})
 		m.Close()
-		m4 := tree.SplitVertical(m3, &TestComponent{Ch: 'X'})
+		m4 := tree.SplitVertical(m3, &component.TestComponent{Ch: 'X'})
 		m4.Close()
 	})
 	t.Run("panics if try to close same node twice", func(t *testing.T) {
-		tree, m := NewTileTree(&TestComponent{Ch: 'A'})
-		m2 := tree.SplitVertical(m, &TestComponent{Ch: 'X'})
+		tree, m := NewTileTree(&component.TestComponent{Ch: 'A'})
+		m2 := tree.SplitVertical(m, &component.TestComponent{Ch: 'X'})
 		assert.NotPanics(t, func() {
 			m2.Close()
 			m2.Close()
@@ -276,19 +277,19 @@ func testTileAt(t *testing.T, tree *TileTree) {
 	// ABCCDDXX
 
 	ta := tree.TileAt(term.Coordinates{})
-	assert.Equal(t, ta.Content().(*TestComponent).Ch, 'A')
+	assert.Equal(t, ta.Content().(*component.TestComponent).Ch, 'A')
 	assert.Equal(t, ta, tree.TileAt(term.Coordinates{Y: 1}))
 	assert.Equal(t, ta, tree.TileAt(term.Coordinates{Y: 2}))
 	assert.Equal(t, ta, tree.TileAt(term.Coordinates{Y: 3}))
 
 	tb := tree.TileAt(term.Coordinates{X: 1})
-	assert.Equal(t, tb.Content().(*TestComponent).Ch, 'B')
+	assert.Equal(t, tb.Content().(*component.TestComponent).Ch, 'B')
 	assert.Equal(t, tb, tree.TileAt(term.Coordinates{X: 1, Y: 1}))
 	assert.Equal(t, tb, tree.TileAt(term.Coordinates{X: 1, Y: 2}))
 	assert.Equal(t, tb, tree.TileAt(term.Coordinates{X: 1, Y: 3}))
 
 	tc := tree.TileAt(term.Coordinates{X: 3})
-	assert.Equal(t, tc.Content().(*TestComponent).Ch, 'C')
+	assert.Equal(t, tc.Content().(*component.TestComponent).Ch, 'C')
 	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 3, Y: 1}))
 	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 3, Y: 2}))
 	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 3, Y: 3}))
@@ -298,7 +299,7 @@ func testTileAt(t *testing.T, tree *TileTree) {
 	assert.Equal(t, tc, tree.TileAt(term.Coordinates{X: 2, Y: 3}))
 
 	td := tree.TileAt(term.Coordinates{X: 5})
-	assert.Equal(t, td.Content().(*TestComponent).Ch, 'D')
+	assert.Equal(t, td.Content().(*component.TestComponent).Ch, 'D')
 	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 5, Y: 1}))
 	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 5, Y: 2}))
 	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 5, Y: 3}))
@@ -308,13 +309,13 @@ func testTileAt(t *testing.T, tree *TileTree) {
 	assert.Equal(t, td, tree.TileAt(term.Coordinates{X: 4, Y: 3}))
 
 	te := tree.TileAt(term.Coordinates{X: 6})
-	assert.Equal(t, te.Content().(*TestComponent).Ch, 'E')
+	assert.Equal(t, te.Content().(*component.TestComponent).Ch, 'E')
 	assert.Equal(t, te, tree.TileAt(term.Coordinates{X: 6, Y: 1}))
 	assert.Equal(t, te, tree.TileAt(term.Coordinates{X: 7, Y: 0}))
 	assert.Equal(t, te, tree.TileAt(term.Coordinates{X: 7, Y: 1}))
 
 	tx := tree.TileAt(term.Coordinates{Y: 2, X: 6})
-	assert.Equal(t, tx.Content().(*TestComponent).Ch, 'X')
+	assert.Equal(t, tx.Content().(*component.TestComponent).Ch, 'X')
 	assert.Equal(t, tx, tree.TileAt(term.Coordinates{X: 6, Y: 2}))
 	assert.Equal(t, tx, tree.TileAt(term.Coordinates{X: 7, Y: 3}))
 	assert.Equal(t, tx, tree.TileAt(term.Coordinates{X: 7, Y: 3}))
@@ -325,7 +326,7 @@ func TestTileNodeDraw(t *testing.T) {
 
 	width, height := 8, 4
 	w := term.NewStringWriter(width, height)
-	tree, m := NewTileTree(&TestComponent{Ch: 'A'})
+	tree, m := NewTileTree(&component.TestComponent{Ch: 'A'})
 	tree.Resize(width, height)
 
 	var m1 *TileNode
@@ -347,31 +348,31 @@ AAAAAAAA
 AAAAAAAA
 AAAAAAAA`,
 		}, {
-			func() { m1 = tree.SplitVertical(m, &TestComponent{Ch: 'B'}) }, `
+			func() { m1 = tree.SplitVertical(m, &component.TestComponent{Ch: 'B'}) }, `
 AAAABBBB
 AAAABBBB
 AAAABBBB
 AAAABBBB`,
 		}, {
-			func() { m2 = tree.SplitVertical(m1, &TestComponent{Ch: 'C'}) }, `
+			func() { m2 = tree.SplitVertical(m1, &component.TestComponent{Ch: 'C'}) }, `
 AABBBCCC
 AABBBCCC
 AABBBCCC
 AABBBCCC`,
 		}, {
-			func() { m3 = tree.SplitVertical(m2, &TestComponent{Ch: 'D'}) }, `
+			func() { m3 = tree.SplitVertical(m2, &component.TestComponent{Ch: 'D'}) }, `
 AABBCCDD
 AABBCCDD
 AABBCCDD
 AABBCCDD`,
 		}, {
-			func() { m4 = tree.SplitVertical(m3, &TestComponent{Ch: 'E'}) }, `
+			func() { m4 = tree.SplitVertical(m3, &component.TestComponent{Ch: 'E'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABCCDDEE
 ABCCDDEE`,
 		}, {
-			func() { m5 = tree.SplitHorizontal(m4, &TestComponent{Ch: 'X'}) }, `
+			func() { m5 = tree.SplitHorizontal(m4, &component.TestComponent{Ch: 'X'}) }, `
 ABCCDDEE
 ABCCDDEE
 ABCCDDXX
@@ -382,7 +383,7 @@ ABCCDDXX`,
 				// to a separate test... :shrug
 				testTileAt(t, tree)
 
-				m6 = tree.SplitHorizontal(m2, &TestComponent{Ch: 'Z'})
+				m6 = tree.SplitHorizontal(m2, &component.TestComponent{Ch: 'Z'})
 			}, `
 ABCCDDEE
 ABCCDDEE
@@ -413,7 +414,7 @@ ZZDDDEEE
 ZZDDDEEE
 ZZDDDEEE`,
 		}, {
-			func() { m1 = tree.SplitHorizontal(m3, &TestComponent{Ch: 'A'}) }, `
+			func() { m1 = tree.SplitHorizontal(m3, &component.TestComponent{Ch: 'A'}) }, `
 ZZDDDEEE
 ZZDDDEEE
 ZZAAAEEE
@@ -437,13 +438,13 @@ ZZZZZZZZ
 ZZZZZZZZ
 ZZZZZZZZ`,
 		}, {
-			func() { m1 = tree.SplitHorizontal(m6, &TestComponent{Ch: 'Y'}) }, `
+			func() { m1 = tree.SplitHorizontal(m6, &component.TestComponent{Ch: 'Y'}) }, `
 ZZZZZZZZ
 ZZZZZZZZ
 YYYYYYYY
 YYYYYYYY`,
 		}, {
-			func() { m2 = tree.SplitVertical(m1, &TestComponent{Ch: 'X'}) }, `
+			func() { m2 = tree.SplitVertical(m1, &component.TestComponent{Ch: 'X'}) }, `
 ZZZZZZZZ
 ZZZZZZZZ
 YYYYXXXX
@@ -469,7 +470,7 @@ YYXX`,
 XXXX
 XXXX`,
 		}, {
-			func() { _ = tree.SplitVertical(m2, &TestComponent{Ch: 'Z'}) }, `
+			func() { _ = tree.SplitVertical(m2, &component.TestComponent{Ch: 'Z'}) }, `
 XXZZ
 XXZZ`,
 		}, {
@@ -479,7 +480,7 @@ XXXXZZZZ
 XXXXZZZZ
 XXXXZZZZ`,
 		}, {
-			func() { _ = tree.SplitVertical(m2, &TestComponent{Ch: 'I'}) }, `
+			func() { _ = tree.SplitVertical(m2, &component.TestComponent{Ch: 'I'}) }, `
 XXIIIZZZ
 XXIIIZZZ
 XXIIIZZZ
@@ -487,7 +488,7 @@ XXIIIZZZ`,
 		}, {
 			func() {
 				tree.Iterate(func(node *TileNode) {
-					node.Content().(*TestComponent).Ch = 'X'
+					node.Content().(*component.TestComponent).Ch = 'X'
 				})
 			}, `
 XXXXXXXX
@@ -521,7 +522,7 @@ func TestTiledNodeContent(t *testing.T) {
 }
 
 func TestTiledIterateInit(t *testing.T) {
-	tree, m := NewTileTree(&TestComponent{})
+	tree, m := NewTileTree(&component.TestComponent{})
 	var i int
 	tree.Iterate(func(node *TileNode) {
 		i++
@@ -529,8 +530,8 @@ func TestTiledIterateInit(t *testing.T) {
 	assert.Equal(t, 1, i)
 	i = 0
 
-	tree.SplitHorizontal(m, &TestComponent{})
-	tree.SplitVertical(m, &TestComponent{})
+	tree.SplitHorizontal(m, &component.TestComponent{})
+	tree.SplitVertical(m, &component.TestComponent{})
 
 	tree.Iterate(func(node *TileNode) {
 		i++
@@ -539,10 +540,10 @@ func TestTiledIterateInit(t *testing.T) {
 }
 
 func TestTileDimensions(t *testing.T) {
-	tree, t1 := NewTileTree(&TestComponent{Ch: '1'})
-	t2 := tree.SplitVertical(t1, &TestComponent{Ch: '2'})
-	t3 := tree.SplitHorizontal(t2, &TestComponent{Ch: '3'})
-	t4 := tree.SplitVertical(t3, &TestComponent{Ch: '4'})
+	tree, t1 := NewTileTree(&component.TestComponent{Ch: '1'})
+	t2 := tree.SplitVertical(t1, &component.TestComponent{Ch: '2'})
+	t3 := tree.SplitHorizontal(t2, &component.TestComponent{Ch: '3'})
+	t4 := tree.SplitVertical(t3, &component.TestComponent{Ch: '4'})
 	tree.Resize(8, 8)
 
 	assertDimensions(t, 4, 8, t1)
@@ -552,10 +553,10 @@ func TestTileDimensions(t *testing.T) {
 }
 
 func TestTilePosition(t *testing.T) {
-	tree, t1 := NewTileTree(&TestComponent{Ch: '1'})
-	t2 := tree.SplitVertical(t1, &TestComponent{Ch: '2'})
-	t3 := tree.SplitHorizontal(t2, &TestComponent{Ch: '3'})
-	t4 := tree.SplitVertical(t3, &TestComponent{Ch: '4'})
+	tree, t1 := NewTileTree(&component.TestComponent{Ch: '1'})
+	t2 := tree.SplitVertical(t1, &component.TestComponent{Ch: '2'})
+	t3 := tree.SplitHorizontal(t2, &component.TestComponent{Ch: '3'})
+	t4 := tree.SplitVertical(t3, &component.TestComponent{Ch: '4'})
 	tree.Resize(8, 8)
 
 	assertTilePos(t, tree, t1, 0, 0)

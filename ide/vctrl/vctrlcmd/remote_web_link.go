@@ -32,11 +32,10 @@ import (
 	"strings"
 
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/ide/vctrl"
 )
 
@@ -187,11 +186,11 @@ func (c *copyRemoteURL) clipboardCopy(text string) error {
 		return fmt.Errorf("copy web URL: %w", err)
 	}
 
-	return c.notify(notifications.LevelSuccess, "web url copied to clipboard")
+	return c.notify(browserapi.LevelSuccess, "web url copied to clipboard")
 }
 
 func (c *copyRemoteURL) notify(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) error {
 	_, err := c.noti.Notify(level, msg, args...)
 	return err

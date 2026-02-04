@@ -24,7 +24,7 @@
 package shader
 
 import (
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Shader abstracts the ability to apply shader-like effects

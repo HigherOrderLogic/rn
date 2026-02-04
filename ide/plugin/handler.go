@@ -31,15 +31,15 @@ import (
 	"strings"
 	"time"
 
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
+	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/text/modeless"
@@ -165,11 +165,6 @@ func (e *Handler) Cursor() (pos term.Coordinates, style term.CursorStyle, show b
 // Selection satisfies browser.Floating.
 func (e *Handler) Selection() (string, bool) {
 	return e.handler().Selection()
-}
-
-// Man satisfies browser.Floating.
-func (e *Handler) Man() tui.Manual {
-	return e.handler().Man()
 }
 
 // Close satisfies browser.Floating.
@@ -350,7 +345,7 @@ func (e *Handler) initializeDoneHandler() {
 	orig := e.emulator.Component().PrimaryScroll().Buffer()
 	// re-initialize with Init, as opposed how it was initialized (InitPerformance)
 	// so cursor can subscribe and use the underlying buffer
-	data := cell.CellsToString(orig.RawCells())
+	data := term.CellsToString(orig.RawCells())
 	orig.Init()
 	_, _ = orig.ReadFrom(strings.NewReader(data))
 
@@ -383,12 +378,12 @@ func (e *Handler) initializeDoneHandler() {
 }
 
 func (e *Handler) newUnion(unionMain tui.Handler) tui.Handler {
-	union := handler.NewFrameUnion(unionMain)
+	union := thandler.NewFrameUnion(unionMain)
 	union.Frame = false
 	if e.bar.AlignBottom {
-		union.UnionBottom(handler.Nop(e.bar), barHeight)
+		union.UnionBottom(handler.NopFromComponent(e.bar), barHeight)
 	} else {
-		union.UnionTop(handler.Nop(e.bar), barHeight)
+		union.UnionTop(handler.NopFromComponent(e.bar), barHeight)
 	}
 	return union
 }

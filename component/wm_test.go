@@ -29,16 +29,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
 )
 
 func TestSetWidthHeight(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
-	h1 := TestComponent{Ch: 'A'}
+	h1 := component.TestComponent{Ch: 'A'}
 	wm, win1 := NewWindowManager(&h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
@@ -47,9 +48,9 @@ func TestSetWidthHeight(t *testing.T) {
 		{
 			Action: func() {
 				var ok bool
-				win2, ok = wm.SplitVertical(win1, &TestComponent{Ch: 'B'})
+				win2, ok = wm.SplitVertical(win1, &component.TestComponent{Ch: 'B'})
 				require.True(t, ok)
-				win3, ok = wm.SplitHorizontal(win1, &TestComponent{Ch: 'C'})
+				win3, ok = wm.SplitHorizontal(win1, &component.TestComponent{Ch: 'C'})
 				require.True(t, ok)
 			}, Expected: `
 ┌────────┐┌────────┐
@@ -84,7 +85,7 @@ func TestSetWidthHeight(t *testing.T) {
 	comptest.TestComponent(t, wm, w, tests)
 }
 
-func TestComponentWindowZeroValue(t *testing.T) {
+func TestWindowZeroValue(t *testing.T) {
 	t.Run("Close", func(t *testing.T) {
 		var win Window
 		assert.NotPanics(t, func() {
@@ -100,7 +101,7 @@ func TestComponentWindowZeroValue(t *testing.T) {
 	t.Run("SetContent", func(t *testing.T) {
 		var win Window
 		assert.PanicsWithValue(t, errCalledZeroValuedWin, func() {
-			win.SetContent(NewString("ballz"))
+			win.SetContent(component.NewString("ballz"))
 		})
 	})
 	t.Run("Size", func(t *testing.T) {
@@ -120,16 +121,16 @@ func TestComponentWindowZeroValue(t *testing.T) {
 func TestWindowManagerSplit(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
-	h1 := TestComponent{Ch: 'A'}
+	h1 := component.TestComponent{Ch: 'A'}
 	wm, w1 := NewWindowManager(&h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	var w2, w3 Window
 	var prevFloating tui.Component
 	var ok bool
-	h2 := TestComponent{Ch: 'B'}
-	hnop := TestComponent{Ch: 0}
-	h3 := TestComponent{Ch: 'C'}
+	h2 := component.TestComponent{Ch: 'B'}
+	hnop := component.TestComponent{Ch: 0}
+	h3 := component.TestComponent{Ch: 'C'}
 
 	tests := []comptest.TestCase{
 		{
@@ -195,10 +196,10 @@ func TestWindowManagerSplit(t *testing.T) {
 		}, {func() {
 			assert.Error(t, w1.Close())
 			assert.True(t, w1.Closed())
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentLeft | SpanAlignmentTop,
+					Alignment: component.AlignmentLeft | component.AlignmentTop,
 					Offset:    term.Coordinates{X: 1, Y: 1},
 				},
 			)
@@ -212,12 +213,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentRight | SpanAlignmentTop,
+					Alignment: component.AlignmentRight | component.AlignmentTop,
 					Offset:    term.Coordinates{X: 1, Y: 1},
 				},
 			)
@@ -231,13 +232,13 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			assert.False(t, w2.Closed())
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentRight | SpanAlignmentBottom,
+					Alignment: component.AlignmentRight | component.AlignmentBottom,
 					Offset:    term.Coordinates{X: 1, Y: 1},
 				},
 			)
@@ -251,12 +252,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCC└──┘│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentLeft | SpanAlignmentBottom,
+					Alignment: component.AlignmentLeft | component.AlignmentBottom,
 					Offset:    term.Coordinates{X: 1, Y: 1},
 				},
 			)
@@ -270,12 +271,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │└──┘CCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentHorizontallyCentered,
+					Alignment: component.AlignmentHorizontallyCentered,
 					Offset:    term.Coordinates{X: 1, Y: 1}, // offset.X is ignored
 				},
 			)
@@ -289,12 +290,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentVerticallyCentered,
+					Alignment: component.AlignmentVerticallyCentered,
 					Offset:    term.Coordinates{X: 1, Y: 1}, // offset.Y is ignored
 				},
 			)
@@ -308,12 +309,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&hnop, 2, 2)
+			floating := component.StaticFloating(&hnop, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 					Offset:    term.Coordinates{X: 1, Y: 1}, // offset is ignored
 				},
 			)
@@ -327,12 +328,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentBottom,
+					Alignment: component.AlignmentBottom,
 					Offset:    term.Coordinates{X: 400, Y: 500},
 				},
 			)
@@ -346,12 +347,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentTop,
+					Alignment: component.AlignmentTop,
 					Offset:    term.Coordinates{X: 400, Y: 500},
 				},
 			)
@@ -365,12 +366,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentLeft,
+					Alignment: component.AlignmentLeft,
 					Offset:    term.Coordinates{X: 400, Y: 500},
 				},
 			)
@@ -384,12 +385,12 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
 				FloatingConfig{
-					Alignment: SpanAlignmentRight,
+					Alignment: component.AlignmentRight,
 					Offset:    term.Coordinates{X: 400, Y: 500},
 				},
 			)
@@ -403,7 +404,7 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := StaticFloating(&h2, 2, 2)
+			floating := component.StaticFloating(&h2, 2, 2)
 			w2.Close()
 			assert.True(t, w2.Closed())
 			w2 = wm.FloatingWindow(floating,
@@ -419,41 +420,28 @@ func TestWindowManagerSplit(t *testing.T) {
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
-			floating := w2.Content().(*staticFloating)
-			floating.width = 3
-			floating.height = 4
-		}, `
-┌───┐──────────────┐
-│BBB│CCCCCCCCCCCCCC│
-│BBB│CCCCCCCCCCCCCC│
-│BBB│CCCCCCCCCCCCCC│
-│BBB│CCCCCCCCCCCCCC│
-└───┘CCCCCCCCCCCCCC│
-│CCCCCCCCCCCCCCCCCC│
-└──────────────────┘`,
-		}, {func() {
 			// test setting non floating component
-			prevFloating = w2.SetContent(&TestComponent{Ch: '5'})
+			prevFloating = w2.SetContent(&component.TestComponent{Ch: '5'})
 		}, `
-┌───┐──────────────┐
-│555│CCCCCCCCCCCCCC│
-│555│CCCCCCCCCCCCCC│
-│555│CCCCCCCCCCCCCC│
-│555│CCCCCCCCCCCCCC│
-└───┘CCCCCCCCCCCCCC│
+┌──┐───────────────┐
+│55│CCCCCCCCCCCCCCC│
+│55│CCCCCCCCCCCCCCC│
+└──┘CCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
 			// test return of SetContent is always what we expect
 			prevFloating = w2.SetContent(prevFloating)
-			assert.Equal(t, '5', prevFloating.(*TestComponent).Ch)
+			assert.Equal(t, '5', prevFloating.(*component.TestComponent).Ch)
 		}, `
-┌───┐──────────────┐
-│BBB│CCCCCCCCCCCCCC│
-│BBB│CCCCCCCCCCCCCC│
-│BBB│CCCCCCCCCCCCCC│
-│BBB│CCCCCCCCCCCCCC│
-└───┘CCCCCCCCCCCCCC│
+┌──┐───────────────┐
+│BB│CCCCCCCCCCCCCCC│
+│BB│CCCCCCCCCCCCCCC│
+└──┘CCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
+│CCCCCCCCCCCCCCCCCC│
 │CCCCCCCCCCCCCCCCCC│
 └──────────────────┘`,
 		}, {func() {
@@ -485,7 +473,7 @@ func TestWindowManagerSplit(t *testing.T) {
 		}, {func() {
 			wx, ok := wm.WindowAt(term.Coordinates{})
 			require.True(t, ok)
-			comp := TestComponent{Ch: '#'}
+			comp := component.TestComponent{Ch: '#'}
 			comp.Resize(3, 3)
 			wx.SetContentResize(&comp, true)
 		}, `
@@ -500,7 +488,7 @@ func TestWindowManagerSplit(t *testing.T) {
 		}, {func() {
 			wx, ok := wm.WindowAt(term.Coordinates{})
 			require.True(t, ok)
-			comp := TestComponent{Ch: '$'}
+			comp := component.TestComponent{Ch: '$'}
 			comp.Resize(3, 3)
 			wx.SetContentResize(&comp, false)
 		}, `
@@ -521,7 +509,7 @@ func TestWindowManagerSplit(t *testing.T) {
 func TestWindowManagerMinimize(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
-	h1 := TestComponent{Ch: 'A'}
+	h1 := component.TestComponent{Ch: 'A'}
 	wm, _ := NewWindowManager(&h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
@@ -529,10 +517,10 @@ func TestWindowManagerMinimize(t *testing.T) {
 	tests := []comptest.TestCase{
 		{
 			Action: func() {
-				floating := StaticFloating(&TestComponent{Ch: 'u'}, 2, 2)
+				floating := component.StaticFloating(&component.TestComponent{Ch: 'u'}, 2, 2)
 				fwin = wm.FloatingWindow(floating,
 					FloatingConfig{
-						Alignment: SpanAlignmentCentered,
+						Alignment: component.AlignmentCentered,
 					},
 				)
 				assert.True(t, fwin.MinimizeUp(0))
@@ -546,25 +534,25 @@ func TestWindowManagerMinimize(t *testing.T) {
 │AAAAAAAAAAAAAAAAAA│
 └──────────────────┘`,
 		}, {Action: func() {
-			w := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'l'}, 2, 2),
+			w := wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'l'}, 2, 2),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			assert.True(t, w.MinimizeLeft(0))
 			assert.False(t, w.MinimizeLeft(0))
 
-			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'r'}, 2, 2),
+			w = wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'r'}, 2, 2),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			assert.True(t, w.MinimizeRight(0))
 			assert.False(t, w.MinimizeRight(0))
 
-			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'd'}, 2, 2),
+			w = wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'd'}, 2, 2),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			assert.True(t, w.MinimizeDown(0))
@@ -596,29 +584,29 @@ func TestWindowManagerMinimize(t *testing.T) {
 └──────────────────┘`,
 		}, {Action: func() {
 			assert.True(t, fwin.MinimizeUp(0))
-			w := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'U'}, 2, 2),
+			w := wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'U'}, 2, 2),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			assert.True(t, w.MinimizeUp(1))
-			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'L'}, 2, 2),
+			w = wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'L'}, 2, 2),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			assert.True(t, w.MinimizeLeft(1))
 
-			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'R'}, 2, 2),
+			w = wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'R'}, 2, 2),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			assert.True(t, w.MinimizeRight(1))
 
-			w = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'D'}, 2, 2),
+			w = wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'D'}, 2, 2),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			assert.True(t, w.MinimizeDown(1))
@@ -645,7 +633,7 @@ func TestWindowManagerMinimize(t *testing.T) {
 		}, {Action: func() {
 			win, ok := wm.WindowAt(term.Coordinates{X: 3, Y: 2})
 			require.True(t, ok)
-			assert.Equal(t, 'A', win.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'A', win.Content().(*component.TestComponent).Ch)
 
 			wof, ok := win.TileLeft()
 			require.True(t, ok)
@@ -678,7 +666,7 @@ func TestWindowManagerMinimize(t *testing.T) {
 
 			wof, ok = win.TileDown()
 			require.True(t, ok)
-			assert.Equal(t, 'A', wof.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'A', wof.Content().(*component.TestComponent).Ch)
 
 			win, ok = wm.WindowAt(term.Coordinates{X: 0, Y: 2})
 			assert.True(t, ok)
@@ -765,14 +753,14 @@ func TestWindowManagerMinimize(t *testing.T) {
 			assertEqualTile(t, win, 'D')
 			require.True(t, win.MinimizeDown(1))
 
-			w := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'X'}, 7, 100),
+			w := wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'X'}, 7, 100),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			wof, ok := w.TileRight()
 			require.True(t, ok)
-			assert.Equal(t, 'A', wof.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'A', wof.Content().(*component.TestComponent).Ch)
 		}, Expected: `
 ┌──────────────────┐
 │UUUUUUUUUUUUUUUUUU│
@@ -788,9 +776,9 @@ func TestWindowManagerMinimize(t *testing.T) {
 			assertEqualTile(t, win, 'X')
 			require.NoError(t, win.Close())
 
-			w := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'X'}, 100, 100),
+			w := wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'X'}, 100, 100),
 				FloatingConfig{
-					Alignment: SpanAlignmentCentered,
+					Alignment: component.AlignmentCentered,
 				},
 			)
 			wof, ok := w.TileRight()
@@ -844,17 +832,17 @@ func TestWindowManagerMinimize(t *testing.T) {
 
 			win, ok = wm.WindowAt(term.Coordinates{Y: 3, X: 6})
 			require.True(t, ok)
-			assert.Equal(t, 'A', win.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'A', win.Content().(*component.TestComponent).Ch)
 
 			assert.True(t, win.MinimizeUp(0))
-			_, ok = wm.SplitVertical(win, &TestComponent{Ch: 'a'})
+			_, ok = wm.SplitVertical(win, &component.TestComponent{Ch: 'a'})
 			require.True(t, ok)
 
 			require.True(t, win.MinimizeLeft(0))
 
 			win, ok = wm.WindowAt(term.Coordinates{Y: 2, X: 6})
 			require.True(t, ok)
-			assert.Equal(t, 'a', win.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'a', win.Content().(*component.TestComponent).Ch)
 
 			wof, ok := win.TileRight()
 			require.True(t, ok)
@@ -862,7 +850,7 @@ func TestWindowManagerMinimize(t *testing.T) {
 
 			wof, ok = win.TileLeft()
 			require.True(t, ok)
-			assert.Equal(t, 'A', wof.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'A', wof.Content().(*component.TestComponent).Ch)
 
 			wof, ok = win.TileUp()
 			require.True(t, ok)
@@ -883,20 +871,20 @@ func TestWindowManagerMinimize(t *testing.T) {
 		}, {Action: func() {
 			win, ok := wm.WindowAt(term.Coordinates{Y: 4, X: 16})
 			require.True(t, ok)
-			assert.Equal(t, 'a', win.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'a', win.Content().(*component.TestComponent).Ch)
 
-			win, ok = wm.SplitHorizontal(win, &TestComponent{Ch: 'b'})
+			win, ok = wm.SplitHorizontal(win, &component.TestComponent{Ch: 'b'})
 			require.True(t, ok)
 
 			require.True(t, win.MinimizeDown(0))
 
 			win, ok = wm.WindowAt(term.Coordinates{Y: 2, X: 6})
 			require.True(t, ok)
-			assert.Equal(t, 'A', win.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'A', win.Content().(*component.TestComponent).Ch)
 
 			wof, ok := win.TileRight()
 			require.True(t, ok)
-			assert.Equal(t, 'b', wof.Content().(*TestComponent).Ch)
+			assert.Equal(t, 'b', wof.Content().(*component.TestComponent).Ch)
 
 			wof, ok = win.TileLeft()
 			require.True(t, ok)
@@ -925,7 +913,7 @@ func TestWindowManagerMinimize(t *testing.T) {
 }
 
 func TestExposedRootTileAt(t *testing.T) {
-	h1 := TestComponent{Ch: 'A'}
+	h1 := component.TestComponent{Ch: 'A'}
 	wm, w1 := NewWindowManager(&h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
@@ -938,7 +926,7 @@ func TestExposedRootTileAt(t *testing.T) {
 	_, found = w1.TileDown()
 	require.False(t, found)
 
-	h2 := TestComponent{Ch: 'B'}
+	h2 := component.TestComponent{Ch: 'B'}
 	w2, ok := wm.SplitVertical(w1, &h2)
 	require.True(t, ok)
 
@@ -960,25 +948,25 @@ func TestExposedRootTileAt(t *testing.T) {
 func TestWindowManagerTileFocusFloating(t *testing.T) {
 	w := term.NewStringWriter(20, 8)
 
-	wm, w1 := NewWindowManager(&TestComponent{Ch: 'A'}, testWindowManagerConfig())
+	wm, w1 := NewWindowManager(&component.TestComponent{Ch: 'A'}, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
 	_, ok := w1.TileUp()
 	require.False(t, ok)
 
-	w2, ok := wm.SplitVertical(w1, &TestComponent{Ch: 'B'})
+	w2, ok := wm.SplitVertical(w1, &component.TestComponent{Ch: 'B'})
 	require.True(t, ok)
-	wm.SplitHorizontal(w1, &TestComponent{Ch: 'C'})
-	wm.SplitHorizontal(w2, &TestComponent{Ch: 'D'})
+	wm.SplitHorizontal(w1, &component.TestComponent{Ch: 'C'})
+	wm.SplitHorizontal(w2, &component.TestComponent{Ch: 'D'})
 
 	var f1 Window
 	tests := []comptest.TestCase{
 		{
 			Action: func() {
-				floating := StaticFloating(&TestComponent{Ch: 'a'}, 2, 4)
+				floating := component.StaticFloating(&component.TestComponent{Ch: 'a'}, 2, 4)
 				f1 = wm.FloatingWindow(floating,
 					FloatingConfig{
-						Alignment: SpanAlignmentHorizontallyCentered,
+						Alignment: component.AlignmentHorizontallyCentered,
 					},
 				)
 				_, ok := f1.TileUp()
@@ -1009,10 +997,10 @@ func TestWindowManagerTileFocusFloating(t *testing.T) {
 			Action: func() {
 				require.NoError(t, f1.Close())
 
-				floating := StaticFloating(&TestComponent{Ch: 'a'}, 2, 4)
+				floating := component.StaticFloating(&component.TestComponent{Ch: 'a'}, 2, 4)
 				f1 = wm.FloatingWindow(floating,
 					FloatingConfig{
-						Alignment: SpanAlignmentHorizontallyCentered | SpanAlignmentBottom,
+						Alignment: component.AlignmentHorizontallyCentered | component.AlignmentBottom,
 					},
 				)
 				_, ok := f1.TileDown()
@@ -1043,10 +1031,10 @@ func TestWindowManagerTileFocusFloating(t *testing.T) {
 			Action: func() {
 				require.NoError(t, f1.Close())
 
-				floating := StaticFloating(&TestComponent{Ch: 'a'}, 12, 2)
+				floating := component.StaticFloating(&component.TestComponent{Ch: 'a'}, 12, 2)
 				f1 = wm.FloatingWindow(floating,
 					FloatingConfig{
-						Alignment: SpanAlignmentVerticallyCentered,
+						Alignment: component.AlignmentVerticallyCentered,
 					},
 				)
 				_, ok := f1.TileLeft()
@@ -1077,10 +1065,10 @@ func TestWindowManagerTileFocusFloating(t *testing.T) {
 			Action: func() {
 				require.NoError(t, f1.Close())
 
-				floating := StaticFloating(&TestComponent{Ch: 'a'}, 12, 2)
+				floating := component.StaticFloating(&component.TestComponent{Ch: 'a'}, 12, 2)
 				f1 = wm.FloatingWindow(floating,
 					FloatingConfig{
-						Alignment: SpanAlignmentVerticallyCentered | SpanAlignmentRight,
+						Alignment: component.AlignmentVerticallyCentered | component.AlignmentRight,
 					},
 				)
 				_, ok := f1.TileRight()
@@ -1113,32 +1101,32 @@ func TestWindowManagerTileFocusFloating(t *testing.T) {
 }
 
 func TestComponentWindowAt(t *testing.T) {
-	h1 := &TestComponent{Ch: '1'}
+	h1 := &component.TestComponent{Ch: '1'}
 	wm, w1 := NewWindowManager(h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
-	h2 := &TestComponent{Ch: '2'}
+	h2 := &component.TestComponent{Ch: '2'}
 	w2, ok := wm.SplitVertical(w1, h2)
 	require.True(t, ok)
 
-	h3 := &TestComponent{Ch: '3'}
+	h3 := &component.TestComponent{Ch: '3'}
 	w3, ok := wm.SplitHorizontal(w2, h3)
 	require.True(t, ok)
 
-	h4 := &TestComponent{Ch: '4'}
+	h4 := &component.TestComponent{Ch: '4'}
 	w4, ok := wm.SplitVertical(w3, h4)
 	require.True(t, ok)
 
-	wf := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'f'}, 100, 100),
+	wf := wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'f'}, 100, 100),
 		FloatingConfig{
-			Alignment: SpanAlignmentCentered,
+			Alignment: component.AlignmentCentered,
 		},
 	)
 	require.True(t, wf.MinimizeDown(1))
 
-	wF := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'F'}, 2, 2),
+	wF := wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'F'}, 2, 2),
 		FloatingConfig{
-			Alignment: SpanAlignmentCentered,
+			Alignment: component.AlignmentCentered,
 		},
 	)
 
@@ -1227,15 +1215,15 @@ func TestComponentWindowAt(t *testing.T) {
 		})
 	}
 
-	wx := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'x'}, 100, 100),
+	wx := wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'x'}, 100, 100),
 		FloatingConfig{
-			Alignment: SpanAlignmentCentered,
+			Alignment: component.AlignmentCentered,
 		},
 	)
 	require.True(t, wx.MinimizeUp(2))
-	wy := wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'y'}, 100, 100),
+	wy := wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'y'}, 100, 100),
 		FloatingConfig{
-			Alignment: SpanAlignmentCentered,
+			Alignment: component.AlignmentCentered,
 		},
 	)
 	require.True(t, wy.MinimizeLeft(2))
@@ -1327,7 +1315,7 @@ func TestComponentWindowAt(t *testing.T) {
 }
 
 func TestFixedSizeWindows(t *testing.T) {
-	h1 := &TestComponent{Ch: '1'}
+	h1 := &component.TestComponent{Ch: '1'}
 	wm, w1 := NewWindowManager(h1, testWindowManagerConfig())
 	wm.Resize(20, 8)
 
@@ -1344,7 +1332,7 @@ func TestFixedSizeWindows(t *testing.T) {
 				assert.Equal(t, 3, w1.MinWidth())
 				assert.Equal(t, 3, w1.MinHeight())
 
-				h2 := &TestComponent{Ch: '2'}
+				h2 := &component.TestComponent{Ch: '2'}
 				var ok bool
 				w2, ok = wm.SplitVertical(w1, h2)
 				require.True(t, ok)
@@ -1375,7 +1363,7 @@ func TestFixedSizeWindows(t *testing.T) {
 		},
 		{
 			Action: func() {
-				h3 := &TestComponent{Ch: '3'}
+				h3 := &component.TestComponent{Ch: '3'}
 				var ok bool
 				w3, ok = wm.SplitHorizontal(w2, h3)
 				require.True(t, ok)
@@ -1411,7 +1399,7 @@ func TestFixedSizeWindows(t *testing.T) {
 		},
 		{
 			Action: func() {
-				h4 := &TestComponent{Ch: '4'}
+				h4 := &component.TestComponent{Ch: '4'}
 				var ok bool
 				w4, ok = wm.SplitVertical(w3, h4)
 				require.True(t, ok)
@@ -1435,16 +1423,16 @@ func TestFixedSizeWindows(t *testing.T) {
 		},
 		{
 			Action: func() {
-				wf = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'f'}, 100, 100),
+				wf = wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'f'}, 100, 100),
 					FloatingConfig{
-						Alignment: SpanAlignmentCentered,
+						Alignment: component.AlignmentCentered,
 					},
 				)
 				require.True(t, wf.MinimizeDown(1))
 
-				wF = wm.FloatingWindow(StaticFloating(&TestComponent{Ch: 'F'}, 2, 2),
+				wF = wm.FloatingWindow(component.StaticFloating(&component.TestComponent{Ch: 'F'}, 2, 2),
 					FloatingConfig{
-						Alignment: SpanAlignmentCentered,
+						Alignment: component.AlignmentCentered,
 					},
 				)
 
@@ -1567,7 +1555,7 @@ func TestFixedSizeWindows(t *testing.T) {
 }
 
 func TestSetFrameAttr(t *testing.T) {
-	h1 := &TestComponent{Ch: '1'}
+	h1 := &component.TestComponent{Ch: '1'}
 	cfg := testWindowManagerConfig()
 	wm, w1 := NewWindowManager(h1, cfg)
 	wm.Resize(20, 8)
@@ -1584,10 +1572,10 @@ func TestSetFrameAttr(t *testing.T) {
 
 func assertEqualTile(t *testing.T, win Window, expected rune) {
 	t.Helper()
-	if f, ok := win.Content().(*staticFloating); ok {
-		assert.Equal(t, string(expected), string(f.Component.(*TestComponent).Ch))
+	if f, ok := win.Content().(interface { Content() tui.Component }); ok {
+		assert.Equal(t, string(expected), string(f.Content().(*component.TestComponent).Ch))
 	} else {
-		assert.Equal(t, string(expected), string(win.Content().(*TestComponent).Ch))
+		assert.Equal(t, string(expected), string(win.Content().(*component.TestComponent).Ch))
 	}
 
 }

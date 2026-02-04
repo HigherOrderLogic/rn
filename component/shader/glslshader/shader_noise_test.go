@@ -32,7 +32,7 @@ import (
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/component/shader/shadertest"
 	"unstable.build/go-tui/component/shader/shaderutils"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestNoise(t *testing.T) {

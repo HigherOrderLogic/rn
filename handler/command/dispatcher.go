@@ -23,9 +23,7 @@
 
 package command
 
-import (
-	"unstable.build/go-tui/component"
-)
+import "github.com/unstablebuild/rune-go-sdk/component"
 
 // Dispatcher abstracts the ability to dispatch commands.
 type Dispatcher interface {

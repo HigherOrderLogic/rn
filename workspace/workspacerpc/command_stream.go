@@ -29,24 +29,20 @@ import (
 	"fmt"
 	"io"
 	"syscall"
-	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/bluenet"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"unstable.build/go-tui/debug"
 )
 
-var readBufferSize = 1024 * 64
-
-const watcherWaitTimeout = 2 * time.Minute
-
 type serverCommandStreamer struct {
 	cmd       workspaceapi.Cmd
-	stream    Executor_StartCommandServer
+	stream    workspacerpc.Executor_StartCommandServer
 	doneCh    chan error
 	stdinCh   chan bluenet.ReadResult
 	stdoutCh  chan bluenet.ReadResult
@@ -62,7 +58,7 @@ type serverCommandStreamer struct {
 func newServerCommandStreamer(
 	ctx context.Context,
 	cancelCtx func(),
-	stream Executor_StartCommandServer,
+	stream workspacerpc.Executor_StartCommandServer,
 	path, dir string, args, env []string,
 	stdinSet, stdoutSet, stderrSet bool,
 	stdinFd, stdoutFd, stderrFd uint32,
@@ -181,7 +177,7 @@ func (s *serverCommandStreamer) receiveCommandData() {
 	}
 
 	for {
-		var msg CommandPayload
+		var msg workspacerpc.CommandPayload
 		err := s.stream.RecvMsg(&msg)
 		s.log(log.TraceLevel, "receive msg: err=%v", err)
 		if err != nil {
@@ -208,10 +204,10 @@ func (s *serverCommandStreamer) receiveCommandData() {
 
 		var data []byte
 		switch msg.Type {
-		case CommandPayload_TypeIO:
+		case workspacerpc.CommandPayload_TypeIO:
 			io := msg.GetIo()
 			switch io.GetType() {
-			case CommandPayload_IO_TypeStdin:
+			case workspacerpc.CommandPayload_IO_TypeStdin:
 				data = io.GetData()
 			default:
 				err = fmt.Errorf("unexpected IO type received: %v", io.GetType())
@@ -234,13 +230,13 @@ func (s *serverCommandStreamer) receiveCommandData() {
 }
 
 func (s *serverCommandStreamer) streamReadResult(
-	res bluenet.ReadResult, t CommandPayload_IO_Type,
+	res bluenet.ReadResult, t workspacerpc.CommandPayload_IO_Type,
 ) error {
 	defer close(res.Ch)
 
 	if res.Error != nil {
-		err := s.stream.Send(&CommandPayload{
-			Type:  CommandPayload_TypeError,
+		err := s.stream.Send(&workspacerpc.CommandPayload{
+			Type:  workspacerpc.CommandPayload_TypeError,
 			Error: res.Error.Error(),
 		})
 		s.log(log.TraceLevel, "send error msg: err=%v", err)
@@ -249,9 +245,9 @@ func (s *serverCommandStreamer) streamReadResult(
 		}
 		return fmt.Errorf("error reading from standard io %v: %v", t, res.Error)
 	}
-	err := s.stream.Send(&CommandPayload{
-		Type: CommandPayload_TypeIO,
-		Io:   &CommandPayload_IO{Data: res.Data, Type: t},
+	err := s.stream.Send(&workspacerpc.CommandPayload{
+		Type: workspacerpc.CommandPayload_TypeIO,
+		Io:   &workspacerpc.CommandPayload_IO{Data: res.Data, Type: t},
 	})
 	s.log(log.TraceLevel, "send io msg: err=%v", err)
 	if err != nil {
@@ -261,9 +257,9 @@ func (s *serverCommandStreamer) streamReadResult(
 }
 
 func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
-	err := s.stream.Send(&CommandPayload{
-		Type: CommandPayload_TypeStarted,
-		Started: &CommandPayload_Started{
+	err := s.stream.Send(&workspacerpc.CommandPayload{
+		Type: workspacerpc.CommandPayload_TypeStarted,
+		Started: &workspacerpc.CommandPayload_Started{
 			Pid: int64(pid),
 		},
 	})
@@ -287,7 +283,7 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 			if !ok {
 				return nil
 			}
-			err = s.streamReadResult(res, CommandPayload_IO_TypeStdout)
+			err = s.streamReadResult(res, workspacerpc.CommandPayload_IO_TypeStdout)
 		case res, ok := <-s.stderrCh:
 			if s.stderrFd != 0 {
 				s.log(log.ErrorLevel, "read from stderr but using file mode: ok=%v, err=%v, data=%d",
@@ -299,15 +295,15 @@ func (s *serverCommandStreamer) sendCommandData(pid workspaceapi.Pid) error {
 			if !ok {
 				return nil
 			}
-			err = s.streamReadResult(res, CommandPayload_IO_TypeStderr)
+			err = s.streamReadResult(res, workspacerpc.CommandPayload_IO_TypeStderr)
 		case doneErr := <-s.doneCh:
 			var errStr string
 			if doneErr != nil && doneErr != io.EOF {
 				errStr = doneErr.Error()
 			}
-			err = s.stream.Send(&CommandPayload{
-				Type: CommandPayload_TypeDone,
-				Done: &CommandPayload_Done{
+			err = s.stream.Send(&workspacerpc.CommandPayload{
+				Type: workspacerpc.CommandPayload_TypeDone,
+				Done: &workspacerpc.CommandPayload_Done{
 					ExitError: errStr,
 				},
 			})
@@ -339,200 +335,4 @@ func (s *serverCommandStreamer) Close() (ret error) {
 	}
 	s.cancelCtx()
 	return
-}
-
-type clientCommandStreamer struct {
-	req    *StartCommandRequest
-	cmd    workspaceapi.Cmd
-	stream Executor_StartCommandClient
-	ctx    context.Context
-	quitCh chan struct{}
-}
-
-func newClientCommandStreamer(
-	ctx context.Context,
-	req *StartCommandRequest,
-	cmd workspaceapi.Cmd,
-	stream Executor_StartCommandClient,
-) *clientCommandStreamer {
-	ret := new(clientCommandStreamer)
-	ret.cmd = cmd
-	ret.req = req
-	ret.stream = stream
-	ret.ctx = ctx
-	ret.quitCh = make(chan struct{})
-	return ret
-}
-
-func (s *clientCommandStreamer) waitForPid() (workspaceapi.Pid, error) {
-	var msg CommandPayload
-	err := s.stream.RecvMsg(&msg)
-	s.log(log.TraceLevel, "receive first msg: err=%v", err)
-	if err != nil {
-		return 0, fmt.Errorf("stream receive msg: %v", err)
-	}
-
-	if msg.Type != CommandPayload_TypeStarted || msg.Started == nil {
-		return 0, fmt.Errorf("expected stream started msg, found %v", msg.Type)
-	}
-
-	return workspaceapi.Pid(msg.Started.Pid), nil
-}
-
-func (s *clientCommandStreamer) streamStdin() {
-	defer s.stream.CloseSend() // nolint:errcheck
-
-	if s.cmd.Stdin == nil {
-		s.log(log.TraceLevel, "no stdin set in cmd, skipping streaming stdin")
-		return
-	}
-
-	if s.req.StdinFd != 0 {
-		s.log(log.TraceLevel, "stdin is a file on the remote server. skipping streaming stdin")
-		return
-	}
-
-	var err error
-	buf := make([]byte, readBufferSize)
-	for {
-		select {
-		case <-s.quitCh:
-			return
-		case <-s.ctx.Done():
-			s.log(log.TraceLevel, "parent context is done")
-			return
-		default:
-		}
-
-		var n int
-		n, err = s.cmd.Stdin.Read(buf)
-		s.log(log.TraceLevel, "read from stdin: err=%v, data=%d", err, n)
-		if err != nil && err != io.EOF {
-			break
-		}
-		serr := s.stream.Send(&CommandPayload{
-			Type: CommandPayload_TypeIO,
-			Io: &CommandPayload_IO{
-				Data: buf[:n],
-				Type: CommandPayload_IO_TypeStdin,
-			},
-		})
-		if serr != nil {
-			err = fmt.Errorf("stream send: %v", serr)
-			break
-		}
-		if err == io.EOF {
-			err = nil
-			break
-		}
-	}
-
-	if err != nil {
-		s.log(log.ErrorLevel, "stream stdin stopped with error: %v", err)
-	}
-}
-
-func (s *clientCommandStreamer) log(level log.Level, msg string, args ...interface{}) {
-	log.WithFields(log.Fields{logging.KeyClass: "clientCommandStreamer"}).Logf(level, msg, args...)
-}
-
-func (s *clientCommandStreamer) streamCommandData(cancelFn func()) {
-	s.log(log.TraceLevel, "streaming command data")
-	defer close(s.quitCh)
-	defer cancelFn()
-
-	go debug.CapturePanicReport(s.streamStdin)
-
-	var err error
-	for {
-		var msg CommandPayload
-		err = s.stream.RecvMsg(&msg)
-		s.log(log.TraceLevel, "receive msg: err=%v", err)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			err = fmt.Errorf("stream receive msg: %v", err)
-			break
-		}
-
-		var n int
-		switch msg.Type {
-		case CommandPayload_TypeIO:
-			switch msg.GetIo().GetType() {
-			case CommandPayload_IO_TypeStdout:
-				if s.cmd.Stdout == nil {
-					s.log(log.TraceLevel, "no stdout set in cmd, dropping data")
-					continue
-				}
-				if s.req.StdoutFd != 0 {
-					s.log(log.ErrorLevel, "stdout is a file on the remote server but received data over the stream")
-					return
-				}
-				if msg.GetIo().Data == nil {
-					s.log(log.WarnLevel, "stdout type without stdout data")
-					continue
-				}
-				_, err = s.cmd.Stdout.Write(msg.GetIo().GetData())
-				s.log(log.TraceLevel, "wrote to stdout, err=%v, data=%d", err, len(msg.GetIo().GetData()))
-				if err != nil {
-					err = fmt.Errorf("stdout io.Writer write: %v", err)
-				}
-			case CommandPayload_IO_TypeStderr:
-				if s.cmd.Stderr == nil {
-					s.log(log.TraceLevel, "no stderr set in cmd, dropping data")
-					continue
-				}
-				if s.req.StderrFd != 0 {
-					s.log(log.ErrorLevel, "stderr is a file on the remote server but received data over the stream")
-					return
-				}
-				if msg.GetIo().Data == nil {
-					s.log(log.WarnLevel, "stderr type without stderr data")
-					continue
-				}
-				n, err = s.cmd.Stderr.Write(msg.GetIo().GetData())
-				s.log(log.TraceLevel, "wrote to stderr, err=%v, data=%d", err, n)
-				if err != nil {
-					err = fmt.Errorf("stderr io.Writer write: %v", err)
-				}
-			default:
-				err = fmt.Errorf("unexpected io message received %v", msg.GetType())
-			}
-			if err == nil {
-				continue
-			}
-		case CommandPayload_TypeError:
-			err = fmt.Errorf("error reading command stdio: %v", msg.GetError())
-		case CommandPayload_TypeDone:
-			if msg.GetDone().GetExitError() != "" {
-				err = errors.New(msg.GetDone().GetExitError())
-			}
-		default:
-			err = fmt.Errorf("unexpected message received %v", msg.GetType())
-		}
-		break
-	}
-
-	// avoid buggy watchers to cause this goroutine to block forever,
-	// so the timeout should be in the order of minutes.
-	ctx, cancel := context.WithTimeout(context.Background(),
-		watcherWaitTimeout)
-	defer cancel()
-
-	if s.cmd.Watcher != nil && s.cmd.Watcher.WatchProcess() != nil {
-		select {
-		case s.cmd.Watcher.WatchProcess() <- err:
-		case <-ctx.Done():
-			s.log(log.WarnLevel, "could not deliver error to watcher chan: "+
-				"watcher not ready for too long")
-		}
-	}
-	// emulate exec code; pipes should be closed to force EOF
-	for _, fd := range [2]io.Writer{s.cmd.Stdout, s.cmd.Stderr} {
-		if closer, ok := fd.(io.Closer); ok {
-			_ = closer.Close()
-		}
-	}
-	s.log(log.TraceLevel, "done streaming command data: err=%v", err)
 }

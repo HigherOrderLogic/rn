@@ -29,10 +29,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
+	"unstable.build/go-tui/localstorage/bluestore"
 )
 
 func TestHistory(t *testing.T) {
-	store := document.NewInMemoryService()
+	store := bluestore.AdaptTo(document.NewInMemoryService())
 	history := NewHistory(store, "id", 4)
 	err := history.Load()
 	require.NoError(t, err)

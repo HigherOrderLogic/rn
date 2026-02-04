@@ -34,17 +34,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/component"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 )
@@ -427,7 +428,7 @@ func TestConfigSetting(t *testing.T) {
 	assert.Equal(t, "XX", cfg.tabNameSeparator())
 
 	expectedConfig := handler.WindowManagerConfig{
-		WindowManagerConfig: component.WindowManagerConfig{
+		WindowManagerConfig: tcomponent.WindowManagerConfig{
 			Frame:         true,
 			FrameAttr:     term.Attributes{Fg: tcell.ColorRed},
 			FrameCharSet:  component.FrameCharSetHighlight(),

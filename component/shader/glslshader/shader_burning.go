@@ -33,13 +33,13 @@ import (
 	"unicode"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/component/shader/shaderutils"
-	"unstable.build/go-tui/term"
 )
 
 // Burning shows fire building the given logo as flames touch it.

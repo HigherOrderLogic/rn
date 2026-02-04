@@ -26,12 +26,13 @@ package input
 import (
 	"fmt"
 
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/text"
 )
 
@@ -63,7 +64,7 @@ type Box struct {
 	editor         text.Editor
 	handler        text.Handler
 	// used just for Height calculation support
-	scroll component.Scroll
+	scroll tcomponent.Scroll
 }
 
 // NewBox allocates storage for a new Box and
@@ -107,7 +108,7 @@ func (i *Box) Init(buf *cell.Buffer, ed text.Editor, cfg BoxConfig) {
 	placeholderStr := component.NewResponsiveString(cfg.Placeholder,
 		component.StringResponsiveConfig{StringConfig: cfg.PlaceholderConfig})
 	placeholder := handler.NewFrame(
-		handler.Nop(placeholderStr))
+		handler.NopFromComponent(placeholderStr))
 	placeholder.Attributes = cfg.DefaultFrameAttr
 
 	i.buf = buf
@@ -198,9 +199,4 @@ func (i *Box) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool)
 // Selection satisfies tui.Handler.
 func (i *Box) Selection() (string, bool) {
 	return i.frame.Selection()
-}
-
-// Man satisfies tui.Handler.
-func (i *Box) Man() tui.Manual {
-	return tui.Manual{}
 }

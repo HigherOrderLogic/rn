@@ -32,19 +32,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"go.uber.org/goleak"
 	gomock "go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 )
 
 func newClientServerIntegration(
 	t *testing.T, h browser.Browser,
-) (*Client, func()) {
+) (*browserrpc.Client, func()) {
 	lis, err := net.Listen("tcp", ":0")
 	require.NoError(t, err)
 	mutex := new(sync.Mutex)
@@ -52,17 +53,17 @@ func newClientServerIntegration(
 	grpcServer := grpc.NewServer()
 	rpcServer := NewServer(h, mutex)
 	rpcServer.SetSyncMode()
-	RegisterWindowManagerServer(grpcServer, rpcServer)
-	RegisterResourceOpenerServer(grpcServer, rpcServer)
-	RegisterNotificationsServer(grpcServer, rpcServer)
-	RegisterEventPublisherServer(grpcServer, rpcServer)
+	browserrpc.RegisterWindowManagerServer(grpcServer, rpcServer)
+	browserrpc.RegisterResourceOpenerServer(grpcServer, rpcServer)
+	browserrpc.RegisterNotificationsServer(grpcServer, rpcServer)
+	browserrpc.RegisterEventPublisherServer(grpcServer, rpcServer)
 
 	go grpcServer.Serve(lis)
 
 	conn, err := grpc.Dial(lis.Addr().String(), grpc.WithInsecure())
 	require.NoError(t, err)
 
-	client := NewClient(context.Background(), conn)
+	client := browserrpc.NewClient(context.Background(), conn)
 
 	closeFn := func() {
 		client.Close()

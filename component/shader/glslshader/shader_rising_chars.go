@@ -28,7 +28,7 @@ import (
 	"math/rand"
 
 	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // RisingChars produce ascending particles that displacing the original

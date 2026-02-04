@@ -30,14 +30,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"unstable.build/go-tui/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	term "github.com/unstablebuild/rune-go-sdk/term"
 	cell "unstable.build/go-tui/cell"
-	term "unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -199,7 +199,7 @@ func TestReadFile(t *testing.T) {
 
 			cells := h.CellView().RawCells()
 			require.NoError(t, err)
-			assert.Equal(t, tcase.expectedResult, cell.CellsToString(cells))
+			assert.Equal(t, tcase.expectedResult, term.CellsToString(cells))
 		})
 	}
 }

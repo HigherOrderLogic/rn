@@ -33,7 +33,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 var (
@@ -855,28 +855,3 @@ func BenchmarkBufferReadFrom10000(b *testing.B) {
 // func BenchmarkBufferReadFrom100MB(b *testing.B) {
 // 	benchmarkBufferReadFrom(b, 1000000)
 // }
-
-func benchmarkCellToString(b *testing.B, n int) {
-	c := make([][]term.Cell, n)
-	for i := 0; i < n; i++ {
-		c[i] = make([]term.Cell, n)
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		_ = CellsToString(c)
-	}
-}
-
-func BenchmarkCellToString10(b *testing.B) {
-	benchmarkCellToString(b, 10)
-}
-func BenchmarkCellToString100(b *testing.B) {
-	benchmarkCellToString(b, 100)
-}
-func BenchmarkCellToString1000(b *testing.B) {
-	benchmarkCellToString(b, 1000)
-}
-func BenchmarkCellToString10000(b *testing.B) {
-	benchmarkCellToString(b, 10000)
-}

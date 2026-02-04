@@ -26,7 +26,7 @@ package cell
 import (
 	"container/list"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Searcher is an interface that wraps methods to search text in a View.

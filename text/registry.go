@@ -29,8 +29,8 @@ import (
 	"fmt"
 
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // NewFileCommandRegistry returns a command registry that satisfies FileCommandRegistry,

@@ -24,8 +24,8 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 var _ tui.Handler = (*Proxy)(nil)
@@ -60,9 +60,4 @@ func (i *Proxy) Cursor() (pos term.Coordinates, style term.CursorStyle, show boo
 // Selection satisfies tui.Handler.
 func (i *Proxy) Selection() (string, bool) {
 	return i.Target.Selection()
-}
-
-// Man satisfies tui.Handler.
-func (i *Proxy) Man() tui.Manual {
-	return i.Target.Man()
 }

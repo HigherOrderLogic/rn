@@ -29,7 +29,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func newTestInterrupter() (term.Interrupter, chan struct{}) {
@@ -63,10 +64,10 @@ func TestAnimation(t *testing.T) {
 			}},
 		{"non stringer encoded and decoded animation",
 			func(t *testing.T, interrupter term.Interrupter, frames []string, sequence []int, fps int) *Animation {
-				components := make([]WithAttributes, len(frames))
+				components := make([]component.WithAttributes, len(frames))
 				for i, frame := range frames {
-					components[i] = noStringerString{NewStringWithConfig(frame, StringConfig{
-						Alignment: SpanAlignmentCentered,
+					components[i] = noStringerString{component.NewStringWithConfig(frame, component.StringConfig{
+						Alignment: component.AlignmentCentered,
 					})}
 				}
 				a := new(Animation)
@@ -173,7 +174,7 @@ func TestAnimation(t *testing.T) {
 }
 
 type noStringerString struct {
-	str String
+	str component.String
 }
 
 func (n noStringerString) Draw(w term.Writer) {

@@ -24,8 +24,8 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Wrap wraps a tui.Handler with a fn that gets called
@@ -63,8 +63,4 @@ func (n wrapHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 
 func (n wrapHandler) Selection() (string, bool) {
 	return n.h.Selection()
-}
-
-func (n wrapHandler) Man() tui.Manual {
-	return n.h.Man()
 }

@@ -30,8 +30,8 @@ import (
 	"image/png"
 	"testing"
 
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 //go:embed test/logo.png

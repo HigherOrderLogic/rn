@@ -28,7 +28,7 @@ import (
 
 	fzf "github.com/junegunn/fzf/src/algo"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const (

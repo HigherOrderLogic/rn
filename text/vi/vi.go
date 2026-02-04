@@ -30,16 +30,15 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/syntax"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -271,11 +270,6 @@ func (vi *Vi) Handle(ev term.Event) (quit, handled bool) {
 		}
 	}
 	return quit, handled
-}
-
-// Man satisfies tui.Handler
-func (vi *Vi) Man() tui.Manual {
-	return vi.handler.Man()
 }
 
 // Resize satisfies tui.Component

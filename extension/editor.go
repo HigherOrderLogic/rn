@@ -27,12 +27,13 @@ import (
 	"io"
 	"sync"
 
-	"unstable.build/go-tui/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
-	"unstable.build/go-tui/text/textrpc"
+	ttextrpc "unstable.build/go-tui/text/textrpc"
 )
 
 // EditorResources returns a map of Permission to a ResourceServer
@@ -67,7 +68,7 @@ func newEditorResourceServer(
 func (s *editorResourceServer) Register(
 	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	server := textrpc.NewServer(s.b, s.ed, lock)
+	server := ttextrpc.NewServer(s.b, s.ed, lock)
 	textrpc.RegisterEditorServer(registrar,
 		interruptEditorServer(server, func() {
 			s.publishEvent(term.Event{Type: term.EventInterrupt})

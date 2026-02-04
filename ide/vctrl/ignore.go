@@ -33,7 +33,7 @@ import (
 	"strings"
 
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
-	"unstable.build/go-tui/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 )
 
 const (

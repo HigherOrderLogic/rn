@@ -35,14 +35,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -219,7 +219,7 @@ func TestCursorUpperLowercase(t *testing.T) {
 			// sut
 			test.op(t, c)
 
-			assert.Equal(t, test.outputBuffer, cell.CellsToString(c.view().RawCells()))
+			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
 		})
 	}
 }
@@ -327,7 +327,7 @@ func TestIndent(t *testing.T) {
 			mock.View = c.buffer().WithView(mock)
 			c.MoveToScroll(test.cursorAtScroll)
 			assert.Equal(t, test.expectIndent, c.TryIndent())
-			assert.Equal(t, test.outputBuffer, cell.CellsToString(c.view().RawCells()))
+			assert.Equal(t, test.outputBuffer, term.CellsToString(c.view().RawCells()))
 			if test.expectIndent {
 				assert.Equal(t, test.expectCursorAtScroll, c.CursorAtScroll())
 			}

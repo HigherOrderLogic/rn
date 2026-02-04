@@ -30,13 +30,12 @@ import (
 	"os"
 
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/idetask"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/workspace"
 )
 
@@ -114,7 +113,7 @@ func (h *openRestorePromptHandler) OnSelect(idx int, option string) {
 	}
 
 	if err != nil {
-		_, _ = h.wm.empty.Browser().Notify(notifications.LevelError, err.Error())
+		_, _ = h.wm.empty.Browser().Notify(browserapi.LevelError, err.Error())
 	}
 }
 
@@ -198,14 +197,14 @@ func (h *createWorkspaceHandler) OnSelect(
 		// and then proceed to MkdirAll from that root.
 		parent, err := h.createParentWorkspace(h.uri)
 		if err != nil {
-			_, _ = h.ex.Browser().Notify(notifications.LevelError,
+			_, _ = h.ex.Browser().Notify(browserapi.LevelError,
 				"create parent workspace: %v", err.Error())
 			log.Errorf("create parent to mkdirall of %s: %v", path, err)
 			return
 		}
 		err = parent.MkdirAll(path, 0755)
 		if err != nil {
-			_, _ = h.ex.Browser().Notify(notifications.LevelError, "mkdirall: %v", err)
+			_, _ = h.ex.Browser().Notify(browserapi.LevelError, "mkdirall: %v", err)
 			log.Errorf("mkdirall %s: %v", path, err)
 			return
 		}
@@ -214,7 +213,7 @@ func (h *createWorkspaceHandler) OnSelect(
 
 		err = h.wm.addWorkspace(h.uri, true, true, -1)
 		if err != nil {
-			_, _ = h.ex.Browser().Notify(notifications.LevelError, err.Error())
+			_, _ = h.ex.Browser().Notify(browserapi.LevelError, err.Error())
 			log.Errorf("add workspace %s: %v", h.uri, err)
 			return
 		}
@@ -326,7 +325,7 @@ func (h *fileChangedPrompt) discard() {
 func (h *fileChangedPrompt) overwrite() {
 	h.selected = true
 	if err := h.ex.comp.OverwriteTab(h.h); err != nil {
-		_, _ = h.ex.comp.Notify(notifications.LevelError, "failed to overwrite tab: %v", err)
+		_, _ = h.ex.comp.Notify(browserapi.LevelError, "failed to overwrite tab: %v", err)
 	}
 }
 
@@ -368,11 +367,11 @@ func (h *areYouSurePrompt) discard() {
 	h.selected = true
 	if h.reload {
 		if err := h.ex.comp.ReloadTab(h.h); err != nil {
-			_, _ = h.ex.comp.Notify(notifications.LevelError, "failed to reload tab: %v", err)
+			_, _ = h.ex.comp.Notify(browserapi.LevelError, "failed to reload tab: %v", err)
 		}
 	} else {
 		if err := h.ex.comp.RemoveTab(h.h); err != nil {
-			_, _ = h.ex.comp.Notify(notifications.LevelError, "failed to remove tab: %v", err)
+			_, _ = h.ex.comp.Notify(browserapi.LevelError, "failed to remove tab: %v", err)
 		}
 	}
 }
@@ -388,7 +387,7 @@ func (h *replaceTaskHandler) OnSelect(
 	switch option {
 	case yesOpt:
 		if err := h.ex.tasks.ReplaceTask(h.t.Name, h.t.Cmd, h.t.Args...); err != nil {
-			_, _ = h.ex.comp.Notify(notifications.LevelError, "replace task: %v", err)
+			_, _ = h.ex.comp.Notify(browserapi.LevelError, "replace task: %v", err)
 			return
 		}
 	case noOpt:

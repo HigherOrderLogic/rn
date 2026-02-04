@@ -33,11 +33,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 )
 
 // Level represents the notification level.
@@ -236,7 +236,7 @@ func (n *Container) Notify(level Level, msg string) string {
 
 	comp = component.NewSpan(comp, component.SpanConfig{
 		PadVertical:      n.cfg.Padding,
-		ContentAlignment: component.SpanAlignmentTop,
+		ContentAlignment: component.AlignmentTop,
 	})
 	// add a new notification
 	el := n.vlist.C.PushFront(comp)

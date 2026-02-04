@@ -40,15 +40,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/plugin"
-	"unstable.build/go-tui/term"
 )
 
 func TestManager(t *testing.T) {
@@ -149,8 +149,7 @@ func TestManager(t *testing.T) {
 			actualMaxWidth = maxWidth
 			mu.Unlock()
 			return browser.NopScrollableFloatingHandler(
-				handler.NopScrollableFloating(
-					component.NopScrollableFloating()),
+				handler.NopScrollableFloating(),
 			), nil
 		}
 
@@ -273,8 +272,8 @@ func TestManager(t *testing.T) {
 		wm := newFakeBrowser()
 		exec := newFakeScheme()
 		m := newTestManager(wm, exec)
-		expectedAlignment := component.SpanAlignmentBottom
-		wm.createHook = func(_ string, cfg component.FloatingConfig) {
+		expectedAlignment := component.AlignmentBottom
+		wm.createHook = func(_ string, cfg browserapi.FloatingConfig) {
 			assert.Equal(t, expectedAlignment, cfg.Alignment&expectedAlignment)
 		}
 
@@ -509,8 +508,7 @@ func newTestManager(b *fakeBrowser, scheme schemeapi.Scheme) *Manager {
 		}
 		var closed bool
 		handler := browser.FuncScrollableFloatingHandler(
-			handler.NopScrollableFloating(
-				component.NopScrollableFloating()),
+			handler.NopScrollableFloating(),
 			func() error {
 				if closed {
 					return errors.New("already closed")
@@ -699,7 +697,7 @@ type fakeWindow struct {
 	statusBuf bytes.Buffer
 
 	minAlign component.Alignment
-	cfg      component.FloatingConfig
+	cfg      browserapi.FloatingConfig
 }
 
 func (w *fakeWindow) Content() tui.Handler {
@@ -748,14 +746,14 @@ func (w *fakeWindow) IsMinimized() (component.Alignment, bool) {
 func (w *fakeWindow) MinimizeUp(padding int) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.alignment = component.SpanAlignmentTop
+	w.alignment = component.AlignmentTop
 	w.minimized = true
 	return true
 }
 func (w *fakeWindow) MinimizeDown(padding int) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.alignment = component.SpanAlignmentBottom
+	w.alignment = component.AlignmentBottom
 	w.minimized = true
 	return true
 }
@@ -763,14 +761,14 @@ func (w *fakeWindow) MinimizeDown(padding int) bool {
 func (w *fakeWindow) MinimizeLeft(padding int) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.alignment = component.SpanAlignmentLeft
+	w.alignment = component.AlignmentLeft
 	w.minimized = true
 	return true
 }
 func (w *fakeWindow) MinimizeRight(padding int) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.alignment = component.SpanAlignmentRight
+	w.alignment = component.AlignmentRight
 	w.minimized = true
 	return true
 }
@@ -791,7 +789,7 @@ type fakeBrowser struct {
 	focus           *fakeWindow
 	created         []*fakeWindow
 	createErr       error
-	createHook      func(taskName string, cfg component.FloatingConfig)
+	createHook      func(taskName string, cfg browserapi.FloatingConfig)
 	createdHandlers []browser.ScrollableFloating
 }
 
@@ -833,7 +831,7 @@ func (m *fakeBrowser) RemoveTab(h browserapi.Handler) error {
 	return nil
 }
 
-func (m *fakeBrowser) Floating(h browser.Floating, cfg component.FloatingConfig) (
+func (m *fakeBrowser) Floating(h browser.Floating, cfg browserapi.FloatingConfig) (
 	browser.Window, error,
 ) {
 	if m.createErr != nil {

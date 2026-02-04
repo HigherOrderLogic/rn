@@ -44,9 +44,9 @@ import (
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/notify"
 	"github.com/unstablebuild/pty"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/debug"
 )
 

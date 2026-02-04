@@ -31,8 +31,8 @@ import (
 	"strconv"
 	"strings"
 
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // CreateTemp creates a new temporary file in the directory dir,

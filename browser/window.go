@@ -26,10 +26,10 @@ package browser
 import (
 	"errors"
 
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/component"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
 )
 
 type browserWindow struct {

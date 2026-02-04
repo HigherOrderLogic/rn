@@ -27,8 +27,8 @@ import (
 	"context"
 
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // CommandHandler wraps the basic methods HandleCommand and Complete.

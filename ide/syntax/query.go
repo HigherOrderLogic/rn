@@ -35,7 +35,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	tree_sitter "github.com/tree-sitter/go-tree-sitter"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui/cell"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const (
@@ -153,7 +153,7 @@ func (t *Tree) runQuery(queryFile string, expectedCaptureNames []string) ([]Matc
 			ret = append(ret, Match{
 				Line:        rng.Start.Y,
 				CaptureName: captureName,
-				LineString:  cell.CellsToString(cells),
+				LineString:  term.CellsToString(cells),
 			})
 		}
 	}

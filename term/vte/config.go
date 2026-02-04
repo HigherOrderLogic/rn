@@ -25,9 +25,9 @@ package vte
 
 import (
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // DefaultConfig returns a sane default Config.

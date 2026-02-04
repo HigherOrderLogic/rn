@@ -31,10 +31,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/goleak"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
 )
 
 func TestShader(t *testing.T) {

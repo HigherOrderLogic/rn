@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"unstable.build/go-tui/component/notifications"
 )
 
@@ -48,11 +49,11 @@ func TestNotifyOnce(t *testing.T) {
 		svc := document.NewInMemoryService()
 		mock, b := newTestNotifications(t)
 
-		_, err := b.NotifyOnce(notifications.LevelError, "a")
+		_, err := b.NotifyOnce(browserapi.LevelError, "a")
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 
-		_, err = b.NotifyOnce(notifications.LevelError, "%v", svc)
+		_, err = b.NotifyOnce(browserapi.LevelError, "%v", svc)
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 	})
@@ -60,11 +61,11 @@ func TestNotifyOnce(t *testing.T) {
 	t.Run("delivers notifications with different args multiple times, if args are different", func(t *testing.T) {
 		mock, b := newTestNotifications(t)
 
-		_, err := b.NotifyOnce(notifications.LevelError, "a %d", 0)
+		_, err := b.NotifyOnce(browserapi.LevelError, "a %d", 0)
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 0"])
 
-		_, err = b.NotifyOnce(notifications.LevelError, "a %d", 1)
+		_, err = b.NotifyOnce(browserapi.LevelError, "a %d", 1)
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 1"])
 		assert.Equal(t, 1, mock.messages["a 0"])
@@ -73,11 +74,11 @@ func TestNotifyOnce(t *testing.T) {
 	t.Run("delivers notifications with different args only once if args are the same", func(t *testing.T) {
 		mock, b := newTestNotifications(t)
 
-		_, err := b.NotifyOnce(notifications.LevelError, "a %d", 0)
+		_, err := b.NotifyOnce(browserapi.LevelError, "a %d", 0)
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 0"])
 
-		_, err = b.NotifyOnce(notifications.LevelError, "a %d", 0)
+		_, err = b.NotifyOnce(browserapi.LevelError, "a %d", 0)
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a 0"])
 	})
@@ -85,14 +86,14 @@ func TestNotifyOnce(t *testing.T) {
 	t.Run("delivers notifications multiple times if subsequent uses Notify rather than NotifyOnce", func(t *testing.T) {
 		mock, b := newTestNotifications(t)
 
-		_, err := b.NotifyOnce(notifications.LevelError, "a")
+		_, err := b.NotifyOnce(browserapi.LevelError, "a")
 		require.NoError(t, err)
 		assert.Equal(t, 1, mock.messages["a"])
 
-		b.Notify(notifications.LevelError, "a")
+		b.Notify(browserapi.LevelError, "a")
 		assert.Equal(t, 2, mock.messages["a"])
 
-		_, err = b.NotifyOnce(notifications.LevelError, "a")
+		_, err = b.NotifyOnce(browserapi.LevelError, "a")
 		require.NoError(t, err)
 		assert.Equal(t, 2, mock.messages["a"])
 	})

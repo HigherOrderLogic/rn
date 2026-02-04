@@ -28,14 +28,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestTabsDraw(t *testing.T) {
 	l := NewTabs()
 	l.Resize(20, 4)
-	fb := FrameCharSetDefault()
+	fb := component.FrameCharSetDefault()
 	fb.BottomLeft, fb.BottomRight = '├', '┤'
 	l.SetFrameCharSet(fb)
 

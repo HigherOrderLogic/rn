@@ -27,17 +27,17 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 )
 
 // Grantee returns this extension's extension.Grantee, and it required permissions.
@@ -153,10 +153,6 @@ func (h *colorPaletteHandler) Cursor() (pos term.Coordinates, style term.CursorS
 
 func (h *colorPaletteHandler) Selection() (string, bool) {
 	return "", false
-}
-
-func (h *colorPaletteHandler) Man() tui.Manual {
-	return tui.Manual{}
 }
 
 func (h *colorPaletteHandler) Close() error {

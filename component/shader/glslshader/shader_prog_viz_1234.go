@@ -27,7 +27,7 @@ import (
 	"math"
 
 	"unstable.build/go-tui/component/shader"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // ProgressViz1234 shows the process percentage as numbers 0-9, 0 being the

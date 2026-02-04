@@ -35,19 +35,17 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	shsyntax "mvdan.cc/sh/v3/syntax"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/ide/syntax"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 	"unstable.build/go-tui/workspace/walkdir"
 )
@@ -226,8 +224,8 @@ func (c *Component) getContentDimensions(win handler.Window) term.Coordinates {
 	width := win.Width()
 	height := win.Height()
 	if c.config.WindowManagerConfig.Frame {
-		width -= 2
-		height -= 2
+		width = max(0, width-2)
+		height = max(0, height-2)
 	}
 	return term.Coordinates{X: width, Y: height}
 }
@@ -679,16 +677,16 @@ func (c *Component) DispatchEvent(ev textapi.Event) (handled bool) {
 }
 
 // Notify satisfies browser.Browser.
-func (c *Component) Notify(level notifications.Level, msg string, args ...interface{}) (
-	string, error,
-) {
+func (c *Component) Notify(
+	level browserapi.NotificationLevel, msg string, args ...interface{},
+) (string, error) {
 	return c.config.Notify(level, fmt.Sprintf(msg, args...))
 }
 
 // NotifyOnce satisfies browser.Browser.
-func (c *Component) NotifyOnce(level notifications.Level, msg string, args ...interface{}) (
-	string, error,
-) {
+func (c *Component) NotifyOnce(
+	level browserapi.NotificationLevel, msg string, args ...interface{},
+) (string, error) {
 	return c.config.NotifyOnce(level, msg, args...)
 }
 
@@ -843,7 +841,7 @@ func (c *Component) LastFlush(h browserapi.Handler) (time.Time, error) {
 
 func (c *Component) getContent(h Handler) string {
 	cells := h.CellView().RawCells()
-	return cell.CellsToString(cells)
+	return term.CellsToString(cells)
 }
 
 func (c *Component) dispatchOpenUponSubscribe(h EventHandler) bool {
@@ -1043,7 +1041,7 @@ func (c *Component) WindowManagerSize() (width, height int) {
 
 // Floating satisfies browser.WindowManager.
 func (c *Component) Floating(
-	h browser.Floating, cfg component.FloatingConfig,
+	h browser.Floating, cfg browserapi.FloatingConfig,
 ) (browser.Window, error) {
 	return c.comp.Floating(h, cfg), nil
 }

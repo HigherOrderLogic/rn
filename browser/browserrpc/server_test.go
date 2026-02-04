@@ -32,12 +32,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	gomock "go.uber.org/mock/gomock"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser/browsertest"
-	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/term"
-	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 const asyncResultsSleepDuration = 300 * time.Millisecond
@@ -70,10 +71,10 @@ func TestServerNotify(t *testing.T) {
 		s, mock := newServerWithNoBroker(ctrl)
 
 		mock.EXPECT().
-			Notify(gomock.Eq(notifications.LevelSuccess), gomock.Eq("blah")).
+			Notify(gomock.Eq(browserapi.LevelSuccess), gomock.Eq("blah")).
 			Return("1234", nil)
 
-		req := NotifyRequest{Level: uint32(notifications.LevelSuccess), Msg: "blah"}
+		req := browserrpc.NotifyRequest{Level: uint32(browserapi.LevelSuccess), Msg: "blah"}
 		res, err := s.Notify(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
@@ -87,7 +88,7 @@ func TestServerNotify(t *testing.T) {
 
 		mock.EXPECT().Notify(gomock.Any(), gomock.Any()).Return("", errors.New("oopsie daisy"))
 
-		_, err := s.Notify(ctx, new(NotifyRequest))
+		_, err := s.Notify(ctx, new(browserrpc.NotifyRequest))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
 	})
@@ -106,7 +107,7 @@ func TestServerOpen(t *testing.T) {
 		h := browsertest.NewTestHandler()
 		mock.EXPECT().Open(gomock.Eq(uri)).Return(h, nil)
 
-		req := OpenResourceRequest{Resource: "file:///tmp/coronavirus.sql"}
+		req := browserrpc.OpenResourceRequest{Resource: "file:///tmp/coronavirus.sql"}
 		res, err := s.Open(ctx, &req)
 		require.NoError(t, err)
 		assert.NotNil(t, res)
@@ -119,7 +120,7 @@ func TestServerOpen(t *testing.T) {
 
 		mock.EXPECT().Open(gomock.Any()).Return(nil, errors.New("oopsie daisy"))
 
-		req := OpenResourceRequest{Resource: "file:///a"}
+		req := browserrpc.OpenResourceRequest{Resource: "file:///a"}
 		_, err := s.Open(ctx, &req)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "oopsie")
@@ -134,7 +135,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeInterrupt}}
+		req := browserrpc.PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishEvent(gomock.Eq(term.Event{Type: term.EventInterrupt})).Times(1)
 
@@ -148,7 +149,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeNone}}
+		req := browserrpc.PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeNone}}
 
 		mock.EXPECT().PublishEvent(gomock.Eq(term.Event{Type: term.EventNone})).Times(1)
 
@@ -162,7 +163,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeInterrupt}}
+		req := browserrpc.PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeInterrupt}}
 
 		mock.EXPECT().PublishEvent(gomock.Any()).Return(errors.New("uRock"))
 
@@ -176,7 +177,7 @@ func TestServerPublish(t *testing.T) {
 		defer ctrl.Finish()
 		var mu sync.Mutex
 		s, mock := newTestServer(ctrl, &mu)
-		req := PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeNone}}
+		req := browserrpc.PublishRequest{Ev: &termrpc.Event{Type: termrpc.Event_TypeNone}}
 
 		mock.EXPECT().PublishEvent(gomock.Any()).Return(errors.New("uRock"))
 

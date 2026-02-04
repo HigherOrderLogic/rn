@@ -24,12 +24,13 @@
 package handler
 
 import (
-	"unstable.build/go-tui"
+	compapi "github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
-var _ component.WithAttributes = AttrSetter{}
+var _ compapi.WithAttributes = AttrSetter{}
 
 // AttrSetter provides an API like component.AttrSetter for a tui.Handler.
 type AttrSetter struct {

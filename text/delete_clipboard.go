@@ -28,7 +28,7 @@ import (
 
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 type delClip struct {

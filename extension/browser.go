@@ -27,11 +27,12 @@ import (
 	"io"
 	"sync"
 
-	"unstable.build/go-tui/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi/browserrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/browser/browserrpc"
+	tbrowserrpc "unstable.build/go-tui/browser/browserrpc"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 )
 
 // BrowserResources returns a map of Permission to a ResourceServer
@@ -78,7 +79,7 @@ func (s *browserResourceServer) forPermission(p extensionapi.Permission) Resourc
 func (s browserResourcePermissionServer) Register(
 	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
-	server := browserrpc.NewServer(s.b, lock)
+	server := tbrowserrpc.NewServer(s.b, lock)
 	rpcServer := interruptBrowserServer(server, func() {
 		s.publishEvent(term.Event{Type: term.EventInterrupt})
 	})
@@ -96,7 +97,7 @@ func (s browserResourcePermissionServer) Register(
 }
 
 type browserCloser struct {
-	server *browserrpc.Server
+	server *tbrowserrpc.Server
 }
 
 func (b browserCloser) Close() error {

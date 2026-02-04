@@ -33,16 +33,16 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/blue/release/docrelease"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	yaml "gopkg.in/yaml.v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/term"
 )
 
 // Option is a configuration option for an IDE.

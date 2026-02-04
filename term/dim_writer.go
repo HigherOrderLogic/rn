@@ -26,28 +26,29 @@ package term
 import (
 	"context"
 
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/cell/graphemecluster"
 )
 
 type dimWriter struct {
-	w Writer
+	w term.Writer
 }
 
 // DimWriter returns a Writer that sets tcell.AttrDim
 // and removes tcell.AttrBold to all cells by default.
-func DimWriter(w Writer) Writer {
+func DimWriter(w term.Writer) term.Writer {
 	return dimWriter{w: w}
 }
 
-func (w dimWriter) SetCell(pos Coordinates, c Cell) {
+func (w dimWriter) SetCell(pos term.Coordinates, c term.Cell) {
 	if !graphemecluster.IsBackground(c.Ch) {
 		c.Attributes.Attrs |= tcell.AttrDim
 	}
 	w.w.SetCell(pos, c)
 }
 
-func (w dimWriter) UnionAttributes(pos Coordinates, attr Attributes) {
+func (w dimWriter) UnionAttributes(pos term.Coordinates, attr term.Attributes) {
 	w.w.UnionAttributes(pos, attr)
 }
 

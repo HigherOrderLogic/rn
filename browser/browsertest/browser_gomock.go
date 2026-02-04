@@ -12,14 +12,13 @@ package browsertest
 import (
 	reflect "reflect"
 
+	browserapi "github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	workspaceapi "github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	component "github.com/unstablebuild/rune-go-sdk/component"
+	term "github.com/unstablebuild/rune-go-sdk/term"
+	tui "github.com/unstablebuild/rune-go-sdk/tui"
 	gomock "go.uber.org/mock/gomock"
-	tui "unstable.build/go-tui"
-	browserapi "unstable.build/go-tui/api/browserapi"
-	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 	browser "unstable.build/go-tui/browser"
-	component "unstable.build/go-tui/component"
-	notifications "unstable.build/go-tui/component/notifications"
-	term "unstable.build/go-tui/term"
 )
 
 // MockFloating is a mock of Floating interface.
@@ -115,20 +114,6 @@ func (m *MockFloating) Handle(arg0 term.Event) (bool, bool) {
 func (mr *MockFloatingMockRecorder) Handle(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockFloating)(nil).Handle), arg0)
-}
-
-// Man mocks base method.
-func (m *MockFloating) Man() tui.Manual {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Man")
-	ret0, _ := ret[0].(tui.Manual)
-	return ret0
-}
-
-// Man indicates an expected call of Man.
-func (mr *MockFloatingMockRecorder) Man() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockFloating)(nil).Man))
 }
 
 // Resize mocks base method.
@@ -236,20 +221,6 @@ func (m *MockScrollable) Handle(arg0 term.Event) (bool, bool) {
 func (mr *MockScrollableMockRecorder) Handle(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockScrollable)(nil).Handle), arg0)
-}
-
-// Man mocks base method.
-func (m *MockScrollable) Man() tui.Manual {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Man")
-	ret0, _ := ret[0].(tui.Manual)
-	return ret0
-}
-
-// Man indicates an expected call of Man.
-func (mr *MockScrollableMockRecorder) Man() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockScrollable)(nil).Man))
 }
 
 // MaxSeekOffset mocks base method.
@@ -428,20 +399,6 @@ func (m *MockScrollableFloating) Handle(arg0 term.Event) (bool, bool) {
 func (mr *MockScrollableFloatingMockRecorder) Handle(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Handle", reflect.TypeOf((*MockScrollableFloating)(nil).Handle), arg0)
-}
-
-// Man mocks base method.
-func (m *MockScrollableFloating) Man() tui.Manual {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Man")
-	ret0, _ := ret[0].(tui.Manual)
-	return ret0
-}
-
-// Man indicates an expected call of Man.
-func (mr *MockScrollableFloatingMockRecorder) Man() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockScrollableFloating)(nil).Man))
 }
 
 // MaxSeekOffset mocks base method.
@@ -788,7 +745,7 @@ func (mr *MockWindowManagerMockRecorder) Bar(arg0, arg1 any) *gomock.Call {
 }
 
 // Floating mocks base method.
-func (m *MockWindowManager) Floating(h browser.Floating, cfg component.FloatingConfig) (browser.Window, error) {
+func (m *MockWindowManager) Floating(h browser.Floating, cfg browserapi.FloatingConfig) (browser.Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Floating", h, cfg)
 	ret0, _ := ret[0].(browser.Window)
@@ -967,7 +924,7 @@ func (m *MockNotifications) EXPECT() *MockNotificationsMockRecorder {
 }
 
 // Notify mocks base method.
-func (m *MockNotifications) Notify(level notifications.Level, msg string, args ...any) (string, error) {
+func (m *MockNotifications) Notify(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {
@@ -987,7 +944,7 @@ func (mr *MockNotificationsMockRecorder) Notify(level, msg any, args ...any) *go
 }
 
 // NotifyOnce mocks base method.
-func (m *MockNotifications) NotifyOnce(level notifications.Level, msg string, args ...any) (string, error) {
+func (m *MockNotifications) NotifyOnce(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {
@@ -1162,7 +1119,7 @@ func (mr *MockBrowserMockRecorder) Close() *gomock.Call {
 }
 
 // Floating mocks base method.
-func (m *MockBrowser) Floating(h browser.Floating, cfg component.FloatingConfig) (browser.Window, error) {
+func (m *MockBrowser) Floating(h browser.Floating, cfg browserapi.FloatingConfig) (browser.Window, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Floating", h, cfg)
 	ret0, _ := ret[0].(browser.Window)
@@ -1192,7 +1149,7 @@ func (mr *MockBrowserMockRecorder) Focus() *gomock.Call {
 }
 
 // Notify mocks base method.
-func (m *MockBrowser) Notify(level notifications.Level, msg string, args ...any) (string, error) {
+func (m *MockBrowser) Notify(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {
@@ -1212,7 +1169,7 @@ func (mr *MockBrowserMockRecorder) Notify(level, msg any, args ...any) *gomock.C
 }
 
 // NotifyOnce mocks base method.
-func (m *MockBrowser) NotifyOnce(level notifications.Level, msg string, args ...any) (string, error) {
+func (m *MockBrowser) NotifyOnce(level browserapi.NotificationLevel, msg string, args ...any) (string, error) {
 	m.ctrl.T.Helper()
 	varargs := []any{level, msg}
 	for _, a := range args {

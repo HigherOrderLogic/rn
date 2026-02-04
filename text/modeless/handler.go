@@ -30,16 +30,15 @@ import (
 	"github.com/ernestrc/logd-go/logging"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/syntax"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/text"
 )
 
@@ -580,11 +579,6 @@ func (h *editorHandler) Cursor() (
 func (h *editorHandler) Selection() (string, bool) {
 	text := h.cursor.Selection()
 	return text, text != ""
-}
-
-// Man satisfies tui.Handler
-func (h *editorHandler) Man() tui.Manual {
-	return tui.Manual{}
 }
 
 // Close satisfies editor.Handler.

@@ -27,7 +27,7 @@ import (
 	"errors"
 	"fmt"
 
-	"unstable.build/go-tui/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/clipboard/sysclip"

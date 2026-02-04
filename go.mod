@@ -1,8 +1,6 @@
 module unstable.build/go-tui
 
-go 1.25.0
-
-toolchain go1.25.1
+go 1.25.6
 
 require (
 	github.com/atotto/clipboard v0.1.2
@@ -19,13 +17,14 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/unstablebuild/blue v1.61.1
 	github.com/unstablebuild/golang-internal-tools v0.0.2
+	github.com/unstablebuild/rune-go-sdk v0.0.2
 	github.com/unstablebuild/tcell/v3 v3.6.1
-	go.uber.org/goleak v1.2.0
+	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.46.0
 	golang.org/x/image v0.16.0
 	golang.org/x/term v0.39.0
-	google.golang.org/grpc v1.74.2
-	google.golang.org/protobuf v1.36.7
+	google.golang.org/grpc v1.78.0
+	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -37,7 +36,7 @@ require (
 	github.com/lucasb-eyer/go-colorful v1.3.0 // indirect
 	github.com/mattn/go-isatty v0.0.12 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/rivo/uniseg v0.4.4
+	github.com/rivo/uniseg v0.4.7
 	golang.org/x/lint v0.0.0-20210508222113-6edffad5e616 // indirect
 	golang.org/x/mod v0.31.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
@@ -59,13 +58,13 @@ require (
 	github.com/unstablebuild/pty v1.3.1
 	go.uber.org/mock v0.4.0
 	go.uber.org/multierr v1.4.0
-	golang.org/x/oauth2 v0.30.0
+	golang.org/x/oauth2 v0.34.0
 	mvdan.cc/sh/v3 v3.12.0
 )
 
 require (
-	cloud.google.com/go/compute/metadata v0.7.0 // indirect
-	github.com/BurntSushi/toml v1.2.1 // indirect
+	cloud.google.com/go/compute/metadata v0.9.0 // indirect
+	github.com/BurntSushi/toml v1.6.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/ProtonMail/go-crypto v1.3.0 // indirect
 	github.com/blackjack/webcam v0.5.0 // indirect
@@ -75,7 +74,7 @@ require (
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/gen2brain/malgo v0.11.21 // indirect
 	github.com/go-git/gcfg/v2 v2.0.2 // indirect
-	github.com/go-jose/go-jose/v4 v4.1.2 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
 	github.com/kevinburke/ssh_config v1.4.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
@@ -104,7 +103,7 @@ require (
 	golang.org/x/exp/typeparams v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/tools/go/expect v0.1.1-deprecated // indirect
 	golang.org/x/tools/go/packages/packagestest v0.1.1-deprecated // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda // indirect
 	honnef.co/go/tools v0.3.2 // indirect
 )
 

@@ -13,8 +13,8 @@ import (
 	os "os"
 	reflect "reflect"
 
+	workspaceapi "github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	gomock "go.uber.org/mock/gomock"
-	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 	cell "unstable.build/go-tui/cell"
 	workspace "unstable.build/go-tui/workspace"
 )

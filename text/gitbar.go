@@ -31,16 +31,15 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/vctrl"
-	"unstable.build/go-tui/term"
 )
 
 // GitBarConfig holds configuration for the auxiliary bar created
@@ -175,10 +174,6 @@ func (b *gitBar) Draw(w term.Writer) {
 			w.UnionAttributes(term.Coordinates{Y: y, X: 1}, bg)
 		}
 	}
-}
-
-func (b *gitBar) Man() tui.Manual {
-	return b.vhandler.Man()
 }
 
 func (b *gitBar) Handle(ev term.Event) (quit, handled bool) {

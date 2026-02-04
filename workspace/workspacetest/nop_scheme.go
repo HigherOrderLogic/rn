@@ -33,9 +33,9 @@ import (
 	"syscall"
 	"time"
 
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
 // NewNopScheme returns a scheme that does nothing and workspace.Executor API panics.

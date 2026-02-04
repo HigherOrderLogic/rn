@@ -29,7 +29,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/unstablebuild/golang-internal-tools/lsp/protocol"
 	"github.com/unstablebuild/golang-internal-tools/span"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 )
 
@@ -125,7 +126,7 @@ func TestApplyEdits(t *testing.T) {
 		out.WriteString(tcase.input)
 
 		var b editBuilder
-		b.init(4, makeFile(), wrapEditor{out.Editor()}, cell.StringToCells(tcase.input))
+		b.init(4, makeFile(), wrapEditor{out.Editor()}, term.StringToCells(tcase.input))
 		edits := make([]protocol.TextEdit, len(tcase.ed))
 		copy(edits, tcase.ed)
 		b.applyEdits(edits)

@@ -40,18 +40,21 @@ import (
 	"github.com/unstablebuild/blue/document"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
-	"unstable.build/go-tui"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/search"
-	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/localstorage/bluestore"
 )
 
 // NewPrompt allocates storage for a new Prompt and initializes it.
 func NewPrompt(
-	storage document.Service, completer Completer,
+	storage storageapi.Service, completer Completer,
 	dispatcher Dispatcher, interrupter term.Interrupter,
 	commands []Manual, config Config,
 ) *Prompt {
@@ -128,7 +131,7 @@ const (
 // Init initializes this handler with the given storage, completer,
 // dispatcher, interrupter and config.
 func (h *Prompt) Init(
-	storage document.Service, completer Completer,
+	storage storageapi.Service, completer Completer,
 	dispatcher Dispatcher, interrupter term.Interrupter,
 	commands []Manual, config Config,
 ) {
@@ -144,7 +147,7 @@ func (h *Prompt) Init(
 }
 
 func (h *Prompt) doInit(
-	storage document.Service, completer Completer, interrupter term.Interrupter,
+	storage storageapi.Service, completer Completer, interrupter term.Interrupter,
 	dispatcher Dispatcher, commands []Manual, config Config,
 	listCfg search.ListConfig,
 ) {
@@ -159,7 +162,7 @@ func (h *Prompt) doInit(
 
 	h.buf.Init()
 	h.inputString.Store("")
-	h.responsive = component.Buffer(&h.buf,
+	h.responsive = tcomponent.Buffer(&h.buf,
 		component.StringResponsiveConfig{
 			StringConfig: component.StringConfig{
 				Attributes:           config.ElementAttr,
@@ -176,7 +179,7 @@ func (h *Prompt) doInit(
 			break
 		}
 		h.log(log.ErrorLevel, "load history: %v", err)
-		storage = document.NewInMemoryService()
+		storage = bluestore.AdaptTo(document.NewInMemoryService())
 	}
 
 	// add a canceled cancelCtx so Wait never needs to check if cancelFn is nil
@@ -243,7 +246,7 @@ func (h *Prompt) Draw(w term.Writer) {
 				Ch:         h.config.FrameCharSet.HorizontalBottom,
 				Attributes: h.config.FrameAttr,
 			}
-			separator := handler.Nop(&comp)
+			separator := handler.NopFromComponent(&comp)
 			separator.Resize(h.width, separatorHeight)
 			separator.Draw(&separatorWriter)
 		}
@@ -847,8 +850,8 @@ func (h *Prompt) setCompletionList(
 		// via Next, so do not block
 		go debug.CapturePanicReport(func() {
 			// draw progress animation while iterator is still returning results
-			frames, seq := component.ProgressAnimationFrames()
-			animation := component.NewAnimation(h.interrupter, frames, seq, 10)
+			frames, seq := tcomponent.ProgressAnimationFrames()
+			animation := tcomponent.NewAnimation(h.interrupter, frames, seq, 10)
 			defer func() {
 				_ = animation.Close()
 				h.mu.Lock()
@@ -1062,11 +1065,6 @@ func (h *Prompt) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 		pos.Y += y
 	}
 	return pos, term.CursorStyleBlinkingBar, true
-}
-
-// Man satisfies tui.Handler
-func (h *Prompt) Man() tui.Manual {
-	panic("TODO")
 }
 
 // Wait waits for any asynchronous completion

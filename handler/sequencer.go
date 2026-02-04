@@ -30,7 +30,8 @@ import (
 	"strings"
 	"time"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	tterm "unstable.build/go-tui/term"
 )
 
 // SequenceMatchResult represents the result of sequencing.
@@ -141,7 +142,7 @@ func (s *Sequencer) Reset() {
 // It accepts two key string representation, as they would be individually
 // parsed by term.ParseKey: i.e. <c-x><c-p>, f<c-p>, <c-x>t, gf
 func ParseSequence(str string) (Sequence, error) {
-	keys, err := term.ParseKeys(str)
+	keys, err := tterm.ParseKeys(str)
 	if err != nil {
 		return Sequence{}, fmt.Errorf("invalid sequence: %v", err)
 	}
@@ -153,7 +154,7 @@ func ParseSequence(str string) (Sequence, error) {
 
 func (s Sequence) String() string {
 	var ret strings.Builder
-	ret.WriteString(s.First.String())
-	ret.WriteString(s.Last.String())
+	ret.WriteString(tterm.KeyCombString(s.First))
+	ret.WriteString(tterm.KeyCombString(s.Last))
 	return ret.String()
 }

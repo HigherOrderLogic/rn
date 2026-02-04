@@ -25,9 +25,9 @@ package handler
 
 import (
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
 )
 
 // PromptHandler provides hooks to be called upon Prompt actions.
@@ -198,11 +198,6 @@ func (f *Prompt) Close() error {
 // Cursor satisfies tui.Handler.
 func (f *Prompt) Cursor() (pos term.Coordinates, style term.CursorStyle, show bool) {
 	return
-}
-
-// Man satisfies tui.Component.
-func (f *Prompt) Man() tui.Manual {
-	panic("TODO")
 }
 
 type nopPromptHandler struct{}

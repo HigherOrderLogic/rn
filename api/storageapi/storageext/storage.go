@@ -28,9 +28,11 @@ import (
 	"os"
 
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
-	"github.com/unstablebuild/blue/document/docrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/doctoml"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/localstorage/bluestore"
 	"unstable.build/go-tui/rpc"
 )
 
@@ -38,7 +40,7 @@ import (
 // want to do directly. If we ever open-source that library
 // then remove this comment.
 func dialStorage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	document.Service, error,
+	storageapi.Service, error,
 ) {
 	partition, ok := partitionFromContext(grant.Context)
 	if !ok {
@@ -49,15 +51,16 @@ func dialStorage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroke
 	if err != nil {
 		return nil, err
 	}
-	c := new(docrpc.Client)
+	c := new(storagerpc.Client)
 	c.Init(conn, doctoml.Marshaler())
-	return document.WithPartition(c, partition), nil
+	return bluestore.AdaptTo(
+		document.WithPartition(bluestore.AdaptFrom(c), partition)), nil
 }
 
 // Storage acquires a client to persistent storage with
 // the given token.
 func Storage(ctx context.Context, grant extension.Grant, broker rpc.MuxBroker) (
-	document.Service, error,
+	storageapi.Service, error,
 ) {
 	return dialStorage(ctx, grant, broker)
 }

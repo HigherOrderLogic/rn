@@ -24,8 +24,8 @@
 package browsertest
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/handler"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/handler"
 )
 
 // TestHandler is a testing Handler.

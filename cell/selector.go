@@ -26,7 +26,7 @@ package cell
 import (
 	"math"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Selection represents a selection of cells, defined by

@@ -30,8 +30,8 @@ import (
 	"text/template"
 
 	"github.com/unstablebuild/blue/release"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 const pkgTemplateString = `{{ .Name }}
@@ -93,7 +93,7 @@ func makePackagePreviewComponent(
 	ret := component.NewResponsiveString(str, component.StringResponsiveConfig{
 		NoSplitWords: false,
 		StringConfig: component.StringConfig{
-			Alignment:            component.SpanAlignmentCentered,
+			Alignment:            component.AlignmentCentered,
 			Attributes:           attr,
 			BackgroundAttributes: attr,
 			PaddingVertical:      2,
@@ -127,7 +127,7 @@ func makeReleasePreviewComponent(
 	ret := component.NewResponsiveString(str, component.StringResponsiveConfig{
 		NoSplitWords: false,
 		StringConfig: component.StringConfig{
-			Alignment:            component.SpanAlignmentCentered,
+			Alignment:            component.AlignmentCentered,
 			Attributes:           attr,
 			BackgroundAttributes: attr,
 			PaddingVertical:      2,

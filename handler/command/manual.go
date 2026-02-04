@@ -29,8 +29,8 @@ import (
 	"strings"
 	"text/template"
 
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // Manual represents a command's manual and documentation.
@@ -99,7 +99,7 @@ func makeManualComponent(
 	ret := component.NewResponsiveString(str, component.StringResponsiveConfig{
 		NoSplitWords: true,
 		StringConfig: component.StringConfig{
-			Alignment:            component.SpanAlignmentCentered,
+			Alignment:            component.AlignmentCentered,
 			Attributes:           attr,
 			BackgroundAttributes: attr,
 			PaddingVertical:      2,

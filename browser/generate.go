@@ -23,5 +23,4 @@
 
 package browser
 
-//go:generate protoc browserrpc/browser.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mbrowserrpc/browser.proto=unstable.build/go-tui/browser/browserrpc
 //go:generate mockgen -destination=./browsertest/browser_gomock.go -package browsertest -self_package unstable.build/go-tui/browser/browserrpctest -source ./browser.go

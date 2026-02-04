@@ -28,9 +28,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/document"
-	"unstable.build/go-tui/component"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/handler/handlertest"
-	"unstable.build/go-tui/term"
+	"unstable.build/go-tui/localstorage/bluestore"
 )
 
 var goodTestCommands = []Manual{
@@ -550,7 +551,7 @@ Alias of jeep
 			completeFn, cleanupComplete := nopComplete()
 			defer cleanupComplete(t)
 
-			storage := document.NewInMemoryService()
+			storage := bluestore.AdaptTo(document.NewInMemoryService())
 			b := NewPrompt(
 				storage, FuncCompleter(completeFn), FuncDispatcher(dispatchFn),
 				term.NopInterrupter(), tcase.commands, cfg,

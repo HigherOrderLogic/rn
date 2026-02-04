@@ -33,12 +33,12 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/graphemecluster"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/browser"
-	"unstable.build/go-tui/cell/graphemecluster"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte/vteparser"
 	"unstable.build/go-tui/term/vte/vtescreen"
 )

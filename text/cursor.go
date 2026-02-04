@@ -33,13 +33,13 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/textapi"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
 	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/term"
 )
 
 // SelectMode represents a select mode.
@@ -1331,7 +1331,7 @@ func (c *Cursor) Unselect() bool {
 
 // Selection returns the current text under either text, line or block selection.
 func (c *Cursor) Selection() string {
-	return cell.CellsToString(c.selection.cells)
+	return term.CellsToString(c.selection.cells)
 }
 
 // Redo reverses the previously reversed update to the underlying buffer.
@@ -2323,14 +2323,14 @@ func (c *Cursor) selectionOp(fn func(string) string) (ok bool) {
 	case StandardSelection:
 		cells, _, ok = c.buffer().Select(from, to)
 		if ok {
-			str := cell.CellsToString(cells)
+			str := term.CellsToString(cells)
 			c.log(log.TraceLevel, "selectionOp: replace with cells: %#v, from: %v, to: %v", cells, from, to)
 			c.buffer().Edit(c.ctx, from, to, fn(str))
 		}
 	case LineSelection:
 		cells, _, ok = c.buffer().SelectLine(from, to)
 		if ok {
-			c.buffer().Edit(c.ctx, from, to, fn(cell.CellsToString(cells)))
+			c.buffer().Edit(c.ctx, from, to, fn(term.CellsToString(cells)))
 		}
 	case BlockSelection:
 		ok = false

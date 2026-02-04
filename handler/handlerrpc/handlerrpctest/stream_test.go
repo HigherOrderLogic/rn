@@ -34,20 +34,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/component/comptest"
+	"github.com/unstablebuild/rune-go-sdk/handler/handlerrpc"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	browserapitest "unstable.build/go-tui/api/browserapi/browsertest"
 	"unstable.build/go-tui/browser/browsertest"
-	"unstable.build/go-tui/component/comptest"
-	"unstable.build/go-tui/handler/handlerrpc"
-	"unstable.build/go-tui/term"
+	thandlerrpc "unstable.build/go-tui/handler/handlerrpc"
 )
 
 func TestClientServerStreamIntegration(t *testing.T) {
 	t.Run("dimensions", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		mock := browserapitest.NewMockFloating(ctrl)
+		mock := browsertest.NewMockFloating(ctrl)
 
 		expectedWidth, expectedHeight := 11, 19
 		client, closeFn := setupIntTest(t, mock, func() {
@@ -67,7 +67,7 @@ func TestClientServerStreamIntegration(t *testing.T) {
 
 	t.Run("selection returns selection", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		mock := browserapitest.NewMockFloating(ctrl)
+		mock := browsertest.NewMockFloating(ctrl)
 
 		expectedSelection := "1234"
 		client, closeFn := setupIntTest(t, mock, func() {
@@ -87,7 +87,7 @@ func TestClientServerStreamIntegration(t *testing.T) {
 
 	t.Run("selection does not return non-utf8 selection", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		mock := browserapitest.NewMockFloating(ctrl)
+		mock := browsertest.NewMockFloating(ctrl)
 
 		expectedSelection := "\xF1\x01\x02"
 		client, closeFn := setupIntTest(t, mock, func() {
@@ -104,7 +104,7 @@ func TestClientServerStreamIntegration(t *testing.T) {
 
 	t.Run("selection returns nothing", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		mock := browserapitest.NewMockFloating(ctrl)
+		mock := browsertest.NewMockFloating(ctrl)
 
 		var expectedSelection string
 		client, closeFn := setupIntTest(t, mock, func() {
@@ -176,7 +176,7 @@ AAAAAAAAAAAAAAAAAAAA
 
 	t.Run("handle short circuits exit by sending close request", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		mock := browserapitest.NewMockFloating(ctrl)
+		mock := browsertest.NewMockFloating(ctrl)
 		var wg sync.WaitGroup
 
 		expectedHandled, expectedExit := true, true
@@ -211,7 +211,7 @@ AAAAAAAAAAAAAAAAAAAA
 
 	t.Run("handle re-dispatches prior event if handle response is handled=false", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		mock := browserapitest.NewMockFloating(ctrl)
+		mock := browsertest.NewMockFloating(ctrl)
 		var wg sync.WaitGroup
 
 		var actualRepublishedEvent term.Event
@@ -246,7 +246,7 @@ AAAAAAAAAAAAAAAAAAAA
 
 	t.Run("cursor returns nothing", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		mock := browserapitest.NewMockFloating(ctrl)
+		mock := browsertest.NewMockFloating(ctrl)
 
 		expectedCoordinates := term.Coordinates{}
 		var expectedStyle term.CursorStyle
@@ -268,7 +268,7 @@ AAAAAAAAAAAAAAAAAAAA
 
 	t.Run("cursor returns cursor, style", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		mock := browserapitest.NewMockFloating(ctrl)
+		mock := browsertest.NewMockFloating(ctrl)
 
 		expectedCoordinates := term.Coordinates{X: 99, Y: 11}
 		expectedStyle := term.CursorStyleSteadyBlock
@@ -297,7 +297,7 @@ func (n nopLocker) Unlock() {}
 type testServer struct {
 	UnimplementedTestServiceServer
 	windowID  uint64
-	client    *handlerrpc.ClientStream[*TestMessage]
+	client    *thandlerrpc.ClientStream[*TestMessage]
 	publisher func(term.Event) error
 }
 
@@ -305,7 +305,7 @@ func (t *testServer) TestStream(srv TestService_TestStreamServer) error {
 	if t.client != nil {
 		return errors.New("cannot re-use test server")
 	}
-	t.client = handlerrpc.NewClientStream[*TestMessage](context.Background(), srv,
+	t.client = thandlerrpc.NewClientStream[*TestMessage](context.Background(), srv,
 		func() *TestMessage {
 			return new(TestMessage)
 
@@ -332,7 +332,7 @@ func setupIntTest(
 	t *testing.T, mock handlerrpc.Handler,
 	setup func(), publisher func(term.Event) error,
 ) (
-	*handlerrpc.ClientStream[*TestMessage], func(),
+	*thandlerrpc.ClientStream[*TestMessage], func(),
 ) {
 
 	const windowID = 99

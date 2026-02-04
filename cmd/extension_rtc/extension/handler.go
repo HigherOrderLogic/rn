@@ -33,19 +33,19 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
-	"unstable.build/go-tui/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/api/browserapi/browserext"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/extensionapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/asciiart/capture"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extutil"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/rpc"
-	"unstable.build/go-tui/term"
 )
 
 const defaultFPS = 30
@@ -116,7 +116,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 				return nil, fmt.Errorf("new device: %v", err)
 			}
 			return extutil.NopRedispatchHandler(browserapi.FuncHandler(
-				handler.Nop(component.Sync(new(sync.Mutex), device)), device.Close)), nil
+				handler.NopFromComponent(component.Sync(new(sync.Mutex), device)), device.Close)), nil
 		},
 		Command: textapi.CommandManual{
 			Name: "rtcgetusermedia",
@@ -140,7 +140,7 @@ func Grantee() (extension.Grantee, []extensionapi.Permission) {
 			cfg := asciiart.DefaultConfig()
 			cfg.Color = true
 			cfg.MaintainAspectRatio = true
-			h := browserapi.NopHandler(handler.Nop(
+			h := browserapi.NopHandler(handler.NopFromComponent(
 				component.Sync(new(sync.Mutex), asciiart.NewComponent(img, cfg))))
 			return extutil.NopRedispatchHandler(h), nil
 		},

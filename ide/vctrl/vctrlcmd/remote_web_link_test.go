@@ -35,19 +35,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/ide/vctrl"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/workspace"
 )
 
 type notiRecord struct {
-	level notifications.Level
+	level browserapi.NotificationLevel
 	text  string
 }
 
@@ -56,7 +56,7 @@ type testNotifications struct {
 }
 
 func (n *testNotifications) Notify(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	n.msg = append(n.msg, notiRecord{
 		level: level,
@@ -66,7 +66,7 @@ func (n *testNotifications) Notify(
 }
 
 func (n *testNotifications) NotifyOnce(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	return n.Notify(level, msg, args...)
 }
@@ -78,7 +78,7 @@ func (n *testNotifications) UpdateNotificationProgress(
 }
 
 func assertNoti(
-	t *testing.T, noti notiRecord, level notifications.Level, text string,
+	t *testing.T, noti notiRecord, level browserapi.NotificationLevel, text string,
 ) {
 	assert.Equal(t, notiRecord{level: level, text: text}, noti)
 }
@@ -131,7 +131,7 @@ func TestCommandHandler(t *testing.T) {
 
 		assert.Len(t, testNoti.msg, 1)
 		assertNoti(t, testNoti.msg[0],
-			notifications.LevelSuccess,
+			browserapi.LevelSuccess,
 			"web url copied to clipboard",
 		)
 

@@ -23,5 +23,6 @@
 
 package workspace
 
-//go:generate protoc workspacerpc/workspace.proto --go_out=./ --go-grpc_out=./ --go_opt=Mworkspacerpc/workspace.proto=unstable.build/go-tui/workspace/workspacerpc
-//go:generate mockgen -destination=./workspacetest/workspace_gomock.go -package workspacetest -self_package unstable.build/go-tui/workspace/workspacetest -source ./workspace.go
+//go:generate mockgen -destination=./workspacetest/workspace_gomock.go -package workspacetest -source workspace.go
+//go:generate mockgen -destination=./workspaceapitest/workspace_gomock.go -package workspaceapitest github.com/unstablebuild/rune-go-sdk/api/workspaceapi  FileSystem,File,Executor,Terminal
+//go:generate mockgen -destination=./schemetest/scheme_gomock.go -package schemetest github.com/unstablebuild/rune-go-sdk/api/schemeapi  Scheme

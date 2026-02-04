@@ -43,21 +43,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/blue/document"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/component"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/notifications"
-	"unstable.build/go-tui/handler"
+	thandler "unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/plugin"
-	"unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
@@ -546,7 +548,7 @@ IIII`},
 	}
 	handlertest.TestHandlerSequence(t, bh, 4, 4, cases)
 
-	_, err = b.Notify(notifications.LevelInfo, "wasup: %s", "Z")
+	_, err = b.Notify(browserapi.LevelInfo, "wasup: %s", "Z")
 	require.NoError(t, err)
 	cases = []handlertest.SequenceTestCase{
 		{"",
@@ -631,7 +633,7 @@ IIII`},
 	}()
 
 	floating1, err := b.Floating(browsertest.NewTestFloating(4, 2),
-		component.FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}})
+		browserapi.FloatingConfig{Offset: term.Coordinates{X: 1, Y: 1}})
 	require.NoError(t, err)
 
 	focus, err = b.Focus()
@@ -1010,8 +1012,8 @@ eeeeeeeeeeeee▐
 	fn := func(t *testing.T) tui.Handler {
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
-			text.WithWindowManagerConfig(handler.WindowManagerConfig{
-				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
+			text.WithWindowManagerConfig(thandler.WindowManagerConfig{
+				WindowManagerConfig: tcomponent.WindowManagerConfig{Frame: false}}),
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		b := newExForTesting(t, texttest.NopEditor(), opts...)
@@ -1094,11 +1096,11 @@ func TestExKeySequence(t *testing.T) {
 		require.NoError(t, err)
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
-			text.WithCommandSequenceBinding(handler.Sequence{
+			text.WithCommandSequenceBinding(thandler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'l'},
 			}, [][]string{{"tabnext"}}),
-			text.WithCommandSequenceBinding(handler.Sequence{
+			text.WithCommandSequenceBinding(thandler.Sequence{
 				First: term.KeyComb{Ch: 'g'},
 				Last:  term.KeyComb{Ch: 'g'},
 			}, [][]string{{"tabcloseall"}}),
@@ -2213,8 +2215,8 @@ reloadfile!
 	fn := func(t *testing.T) tui.Handler {
 		opts := []text.Option{
 			text.WithCommandKey(testCommandKey),
-			text.WithWindowManagerConfig(handler.WindowManagerConfig{
-				WindowManagerConfig: component.WindowManagerConfig{Frame: false}}),
+			text.WithWindowManagerConfig(thandler.WindowManagerConfig{
+				WindowManagerConfig: tcomponent.WindowManagerConfig{Frame: false}}),
 			text.WithCommandOverlayConfig(testCommandOverlayConfig()),
 		}
 		uri, err := workspaceapi.ParseURI("memory:///")
@@ -2771,15 +2773,15 @@ func TestRunStopTasks(t *testing.T) {
 │                            │
 ├┌───────────────────────────┤
 ││                           │
+││                           │
 ││                  ┌────────┐
 ││                  │new     │
 ││                  │vte:    │
 ││                  │start   │
 ││                  │command:│
 ││                  │ context│
-││                  │ cancele│
-││                  │d       │
 ││                  └────────┘
+││                           │
 ││                           │
 └└───────────────────────────┘`},
 			{":windowclose>:tasknew validateAssets right -- echo a>", // recreate after close
@@ -2819,15 +2821,15 @@ func TestRunStopTasks(t *testing.T) {
 │                            │
 ├┌───────────────────────────┤
 ││                           │
+││                           │
 ││                  ┌────────┐
 ││                  │new     │
 ││                  │vte:    │
 ││                  │start   │
 ││                  │command:│
 ││                  │ context│
-││                  │ cancele│
-││                  │d       │
 ││                  └────────┘
+││                           │
 ││                           │
 └└───────────────────────────┘`},
 			{":windowconverttab asset x>",
@@ -3749,10 +3751,6 @@ func (t *testVte) Cursor() (ret term.Coordinates, style term.CursorStyle, show b
 
 func (t *testVte) Selection() (string, bool) {
 	return "", false
-}
-
-func (t *testVte) Man() tui.Manual {
-	return tui.Manual{}
 }
 
 func (t *testVte) Dimensions() (int, int) {

@@ -27,8 +27,9 @@ import (
 	"fmt"
 	"unsafe"
 
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 )
 
 type splitDir uint8
@@ -49,7 +50,7 @@ type TileNode struct {
 	tree          *TileTree
 	width, height int
 	content       tui.Component
-	children      []*Virtual[*TileNode]
+	children      []*component.Virtual[*TileNode]
 	childSplit    splitDir
 	parent        *TileNode
 	fixedSize     int
@@ -60,7 +61,7 @@ type TileNode struct {
 func (t *TileTree) Init(content tui.Component) (n *TileNode) {
 	n = new(TileNode)
 	t.root.childSplit = vertical
-	t.root.children = []*Virtual[*TileNode]{{C: n}}
+	t.root.children = []*component.Virtual[*TileNode]{{C: n}}
 	t.root.tree = t
 	n.initNode(content, &t.root)
 	return
@@ -91,7 +92,7 @@ func (t *TileTree) DrawTile(node *TileNode, w term.Writer) {
 
 func (t *TileNode) initNode(content tui.Component, parent *TileNode) {
 	t.content = content
-	t.children = []*Virtual[*TileNode]{}
+	t.children = []*component.Virtual[*TileNode]{}
 	t.parent = parent
 	t.tree = parent.tree
 }
@@ -153,7 +154,10 @@ func (t *TileNode) drawTile(node *TileNode, w term.Writer) bool {
 	for _, ti := range t.children {
 		// call drawTile and use Virtual's position, width, height
 		// to emulate Virtual.Draw via VirtualWriter
-		vwriter := VirtualWriter{w, ti.Position(), ti.Height(), ti.Width()}
+		vwriter := component.VirtualWriter{
+			Writer: w, Offset: ti.Position(),
+			Height: ti.Height(), Width: ti.Width(),
+		}
 		if ok := ti.C.drawTile(node, &vwriter); ok {
 			return true
 		}
@@ -179,7 +183,7 @@ func (t *TileNode) addChildAtIdx(
 			idx, len(t.children)))
 	}
 
-	v := &Virtual[*TileNode]{C: child}
+	v := &component.Virtual[*TileNode]{C: child}
 
 	// transfer content to child at index 0 but do it in a way such that it
 	// maintains mapping of content to TileNode.
@@ -190,10 +194,10 @@ func (t *TileNode) addChildAtIdx(
 		proxyNode.initNode(nil, t.parent)
 		proxyNode.childSplit = direction
 		proxyNode.fixedSize = t.fixedSize
-		proxyNode.children = append(proxyNode.children, &Virtual[*TileNode]{C: t}, v)
+		proxyNode.children = append(proxyNode.children, &component.Virtual[*TileNode]{C: t}, v)
 
 		idx := t.parent.childIdx(t)
-		t.parent.children[idx] = &Virtual[*TileNode]{C: proxyNode}
+		t.parent.children[idx] = &component.Virtual[*TileNode]{C: proxyNode}
 
 		child.initNode(content, proxyNode)
 		t.initNode(t.content, proxyNode)

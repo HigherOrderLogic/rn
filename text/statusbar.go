@@ -32,18 +32,18 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/textapi"
-	"unstable.build/go-tui/api/workspaceapi"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/component"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/template"
 	"unstable.build/go-tui/debug"
-	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
-	"unstable.build/go-tui/term"
 )
 
 // StatusBarComponentType is one of the many supported
@@ -105,7 +105,7 @@ type StatusBarConfig struct {
 // WithStatusBar wraps the given editor with an git bar. The given buffer,
 // and scroll should correspond to the buffer and scroll used by the given editor.
 func WithStatusBar(
-	handler Handler, buf *cell.Buffer, scroll *component.Scroll,
+	handler Handler, buf *cell.Buffer, scroll *tcomponent.Scroll,
 	readOnly, recovered bool, cfg StatusBarConfig,
 ) *StatusBar {
 	if cfg.Publisher == nil || cfg.ScheduleNextTick == nil {
@@ -176,7 +176,7 @@ type StatusBar struct {
 
 	file        workspaceapi.URI
 	buf         *cell.Buffer
-	scroll      *component.Scroll
+	scroll      *tcomponent.Scroll
 	cancelBuild func()
 	closed      bool
 	dirty       bool
@@ -226,7 +226,7 @@ func (b *StatusBar) ShowCommandBar(show bool) {
 func (b *StatusBar) SetStatus(message string, attrs term.Attributes) {
 	components := template.Build(b.statusTemplate.Template, message,
 		attrs, b.statusTemplate.Attributes, b.config.BackgroundColor)
-	status := component.Inline(components, component.SpanAlignmentLeft)
+	status := component.Inline(components, component.AlignmentLeft)
 	b.status.Init(status)
 	b.doRebuildBar()
 }
@@ -306,11 +306,6 @@ func (b *StatusBar) Draw(w term.Writer) {
 	}
 }
 
-// Man satisfies tui.Handler.
-func (b *StatusBar) Man() tui.Manual {
-	return b.vhandler.Man()
-}
-
 // Buffer is a helper for tests.
 func (b *StatusBar) Buffer() *cell.Buffer {
 	return b.buf
@@ -359,17 +354,17 @@ func (b *StatusBar) rebuildBarCursor() {
 	components := template.Build(b.cursorXTemplate.Template,
 		cursor.X+1, term.Attributes{}, b.cursorXTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.cursorX.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.cursorX.Init(component.Inline(components, component.AlignmentLeft))
 
 	components = template.Build(b.cursorYTemplate.Template,
 		cursor.Y+1, term.Attributes{}, b.cursorYTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.cursorY.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.cursorY.Init(component.Inline(components, component.AlignmentLeft))
 
 	components = template.Build(b.totalLinesTemplate.Template,
 		totalRows, term.Attributes{}, b.totalLinesTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.totalLines.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.totalLines.Init(component.Inline(components, component.AlignmentLeft))
 
 	b.doRebuildBar()
 }
@@ -417,7 +412,7 @@ func (b *StatusBar) rebuildBarSyntax(state syntax.State) {
 	components := template.Build(b.syntaxTemplate.Template, state.LangID,
 		attrs, b.syntaxTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.syntaxState.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.syntaxState.Init(component.Inline(components, component.AlignmentLeft))
 	b.doRebuildBar()
 }
 
@@ -473,24 +468,24 @@ func (b *StatusBar) buildGit(shortRef string, added, deleted int) {
 	components := template.Build(b.gitShortRefTemplate.Template, shortRef,
 		term.Attributes{}, b.gitShortRefTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.gitShortRef.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.gitShortRef.Init(component.Inline(components, component.AlignmentLeft))
 
 	components = template.Build(b.gitAddTemplate.Template, added,
 		term.Attributes{}, b.gitAddTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.gitAdd.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.gitAdd.Init(component.Inline(components, component.AlignmentLeft))
 
 	components = template.Build(b.gitDelTemplate.Template, deleted,
 		term.Attributes{}, b.gitDelTemplate.Attributes,
 		b.config.BackgroundColor)
-	b.gitDel.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.gitDel.Init(component.Inline(components, component.AlignmentLeft))
 }
 
 func (b *StatusBar) buildGitError() {
 	components := template.Build(b.gitShortRefTemplate.Template, "untracked",
 		term.Attributes{Fg: tcell.ColorYellow},
 		b.gitShortRefTemplate.Attributes, b.config.BackgroundColor)
-	b.gitShortRef.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.gitShortRef.Init(component.Inline(components, component.AlignmentLeft))
 }
 
 func (b *StatusBar) rebuildFilename(filename string) {
@@ -519,7 +514,7 @@ func (b *StatusBar) rebuildFilename(filename string) {
 	}
 	components := template.Build(b.relpathTemplate.Template,
 		path, attrs, b.relpathTemplate.Attributes, b.config.BackgroundColor)
-	b.relpath.Init(component.Inline(components, component.SpanAlignmentLeft))
+	b.relpath.Init(component.Inline(components, component.AlignmentLeft))
 }
 
 func (b *StatusBar) doRebuildBar() int {
@@ -690,8 +685,8 @@ func (b *StatusBar) initLayout(cfg StatusBarConfig) {
 		}
 	}
 
-	b.barLeft.C = component.Inline(barLeft, component.SpanAlignmentLeft)
-	b.barRight.C = component.Inline(barRight, component.SpanAlignmentRight)
+	b.barLeft.C = component.Inline(barLeft, component.AlignmentLeft)
+	b.barRight.C = component.Inline(barRight, component.AlignmentRight)
 }
 
 func calculateGitStats(diff vctrl.FileDiff) (added, deleted int) {

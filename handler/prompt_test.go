@@ -27,9 +27,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/term"
 )
 
 func TestPromptDefaults(t *testing.T) {

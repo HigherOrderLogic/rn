@@ -29,12 +29,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/handler"
+	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/component"
-	"unstable.build/go-tui/handler"
-	"unstable.build/go-tui/term"
+	thandler "unstable.build/go-tui/handler"
 )
 
 func TestNewTabFromContent(t *testing.T) {
@@ -97,8 +98,8 @@ func TestNewTabFromContent(t *testing.T) {
 		b := NewComponent(DefaultConfig())
 
 		h := newTestHandler()
-		floating := b.Floating(h, component.FloatingConfig{
-			Alignment: component.SpanAlignmentHorizontallyCentered,
+		floating := b.Floating(h, browserapi.FloatingConfig{
+			Alignment: component.AlignmentHorizontallyCentered,
 		})
 
 		tab, ok := b.NewTabFromContent('o', "tab", floating)
@@ -241,8 +242,8 @@ func TestWindowDraw(t *testing.T) {
 			b.Bar(cfg, newTestHandler())
 			cfg.Orientation = browserapi.OrientationRight
 			b.Bar(cfg, newTestHandler())
-			b.Floating(newTestHandler(), component.FloatingConfig{
-				Alignment: component.SpanAlignmentHorizontallyCentered,
+			b.Floating(newTestHandler(), browserapi.FloatingConfig{
+				Alignment: component.AlignmentHorizontallyCentered,
 			})
 
 			width, height := 12, 8
@@ -261,7 +262,7 @@ func TestWindowDraw(t *testing.T) {
 				}
 			}
 			b.union.Draw(writer2)
-			b.wm.Iterate(func(w handler.Window) {
+			b.wm.Iterate(func(w thandler.Window) {
 				win, _ := b.findWindow(w.ID())
 				b.DrawWindow(win, writer2)
 			})
@@ -283,7 +284,7 @@ func TestWindowClosedOnClose(t *testing.T) {
 			_ = win.Close()
 		}
 		return h.Close()
-	}), component.FloatingConfig{})
+	}), browserapi.FloatingConfig{})
 	assert.NoError(t, win.Close())
 }
 
@@ -292,7 +293,7 @@ func TestBrowserScrollable(t *testing.T) {
 		b := NewComponent(DefaultConfig())
 		scrollable := newTestScrollableHandler()
 
-		win := b.Floating(scrollable, component.FloatingConfig{})
+		win := b.Floating(scrollable, browserapi.FloatingConfig{})
 		content, err := win.Content()
 		require.NoError(t, err)
 
@@ -353,7 +354,7 @@ func TestBrowserFloating(t *testing.T) {
 		b := NewComponent(DefaultConfig())
 		h := newTestHandler()
 
-		win := b.Floating(h, component.FloatingConfig{})
+		win := b.Floating(h, browserapi.FloatingConfig{})
 		content, err := win.Content()
 		require.NoError(t, err)
 
@@ -367,7 +368,7 @@ func TestBrowserFloating(t *testing.T) {
 			b := NewComponent(DefaultConfig())
 			var h Floating
 			h = newTestHandler()
-			win := b.Floating(h, component.FloatingConfig{})
+			win := b.Floating(h, browserapi.FloatingConfig{})
 
 			notFloating := browserapi.NopHandler(handler.NewTestHandler())
 			err := win.SetContent(notFloating)
@@ -379,7 +380,7 @@ func TestBrowserFloating(t *testing.T) {
 			b := NewComponent(DefaultConfig())
 			var h Floating
 			h = newTestScrollableHandler()
-			win := b.Floating(h, component.FloatingConfig{})
+			win := b.Floating(h, browserapi.FloatingConfig{})
 
 			content, err := win.Content()
 			require.NoError(t, err)
@@ -407,8 +408,8 @@ func TestComponentCloseOtherWindows(t *testing.T) {
 	})
 	t.Run("fails if there's one tiled window and one floating window", func(t *testing.T) {
 		b := NewComponent(DefaultConfig())
-		_ = b.Floating(newTestHandler(), component.FloatingConfig{
-			Alignment: component.SpanAlignmentHorizontallyCentered,
+		_ = b.Floating(newTestHandler(), browserapi.FloatingConfig{
+			Alignment: component.AlignmentHorizontallyCentered,
 		})
 		require.Error(t, b.CloseOtherWindows(b.Focus()))
 		assert.Equal(t, 1, b.Tiles())
@@ -416,8 +417,8 @@ func TestComponentCloseOtherWindows(t *testing.T) {
 	})
 	t.Run("fails if called on floating window", func(t *testing.T) {
 		b := NewComponent(DefaultConfig())
-		win := b.Floating(newTestHandler(), component.FloatingConfig{
-			Alignment: component.SpanAlignmentHorizontallyCentered,
+		win := b.Floating(newTestHandler(), browserapi.FloatingConfig{
+			Alignment: component.AlignmentHorizontallyCentered,
 		})
 		require.Error(t, b.CloseOtherWindows(win))
 		assert.Equal(t, 1, b.Tiles())
@@ -426,8 +427,8 @@ func TestComponentCloseOtherWindows(t *testing.T) {
 	t.Run("closes all floating and non-floating windows except focus", func(t *testing.T) {
 		b := NewComponent(DefaultConfig())
 		orig := b.Focus()
-		_ = b.Floating(newTestHandler(), component.FloatingConfig{
-			Alignment: component.SpanAlignmentHorizontallyCentered,
+		_ = b.Floating(newTestHandler(), browserapi.FloatingConfig{
+			Alignment: component.AlignmentHorizontallyCentered,
 		})
 		win, ok := b.Split(browserapi.OrientationDefault, orig, newTestHandler())
 		require.True(t, ok)

@@ -23,7 +23,7 @@
 
 package shadertest
 
-import "unstable.build/go-tui/term"
+import "github.com/unstablebuild/rune-go-sdk/term"
 
 // MakeCellMatrix creates an two-dimensional array of zero-value cells
 // representing a grid of w rows and h cols.

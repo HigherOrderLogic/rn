@@ -29,7 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestSelect(t *testing.T) {
@@ -153,7 +153,7 @@ itsme`
 					selection[y][x].Width = 0
 				}
 			}
-			require.Equal(t, CellsToString(tcase.expected), CellsToString(selection))
+			require.Equal(t, term.CellsToString(tcase.expected), term.CellsToString(selection))
 			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, false)
 		})
 	}
@@ -256,7 +256,7 @@ func TestSelectLine(t *testing.T) {
 					selection[y][x].Width = 0
 				}
 			}
-			require.Equal(t, CellsToString(tcase.expected), CellsToString(selection))
+			require.Equal(t, term.CellsToString(tcase.expected), term.CellsToString(selection))
 			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, true)
 		})
 	}
@@ -325,7 +325,7 @@ func TestSelectBlock(t *testing.T) {
 					selection[y][x].Width = 0
 				}
 			}
-			require.Equal(t, CellsToString(tcase.expected), CellsToString(selection), i)
+			require.Equal(t, term.CellsToString(tcase.expected), term.CellsToString(selection), i)
 			assertReturnedCoordinatesSelectSame(t, selector, coords, tcase.expected, false)
 		})
 	}
@@ -345,12 +345,12 @@ func assertReturnedCoordinatesSelectSame(
 		assert.Equal(t, coords, actualCoords[0])
 		selectedSelection = append(selectedSelection, cells...)
 	}
-	expect := CellsToString(expected)
+	expect := term.CellsToString(expected)
 	// line selection always appends a newline at the end
 	// it should be the line paste that adds it, rather than the selection
 	// but for now this is needed for this assertion
 	if isLine {
 		expect = string(expect[:len(expect)-1])
 	}
-	assert.Equal(t, expect, CellsToString(selectedSelection))
+	assert.Equal(t, expect, term.CellsToString(selectedSelection))
 }

@@ -12,12 +12,11 @@ package texttest
 import (
 	reflect "reflect"
 
+	textapi "github.com/unstablebuild/rune-go-sdk/api/textapi"
+	workspaceapi "github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	term "github.com/unstablebuild/rune-go-sdk/term"
 	gomock "go.uber.org/mock/gomock"
-	tui "unstable.build/go-tui"
-	textapi "unstable.build/go-tui/api/textapi"
-	workspaceapi "unstable.build/go-tui/api/workspaceapi"
 	cell "unstable.build/go-tui/cell"
-	term "unstable.build/go-tui/term"
 	text "unstable.build/go-tui/text"
 )
 
@@ -155,20 +154,6 @@ func (m *MockHandler) LocationLists() []text.LocationSet {
 func (mr *MockHandlerMockRecorder) LocationLists() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LocationLists", reflect.TypeOf((*MockHandler)(nil).LocationLists))
-}
-
-// Man mocks base method.
-func (m *MockHandler) Man() tui.Manual {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Man")
-	ret0, _ := ret[0].(tui.Manual)
-	return ret0
-}
-
-// Man indicates an expected call of Man.
-func (mr *MockHandlerMockRecorder) Man() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Man", reflect.TypeOf((*MockHandler)(nil).Man))
 }
 
 // MaxSeekOffset mocks base method.

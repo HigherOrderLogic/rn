@@ -26,7 +26,7 @@ package text
 import (
 	"time"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 // TODO should be defaults. add config or options

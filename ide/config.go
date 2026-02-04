@@ -38,14 +38,17 @@ import (
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/iterator"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
 	yaml "gopkg.in/yaml.v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/workspaceapi"
+	tconfig "unstable.build/go-tui/api/config"
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/clipboard"
-	"unstable.build/go-tui/component"
+	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/asciiart"
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/extension/extutil"
@@ -54,7 +57,7 @@ import (
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/ide/vctrl"
-	"unstable.build/go-tui/term"
+	tterm "unstable.build/go-tui/term"
 	"unstable.build/go-tui/term/vte"
 	"unstable.build/go-tui/text"
 	"unstable.build/go-tui/workspace"
@@ -159,7 +162,7 @@ func (c ideConfig) commandKeyMappings() map[handler.Sequence][][]string {
 	for k, v := range m {
 		seq, err := handler.ParseSequence(k)
 		if err != nil {
-			seq.First, err = term.ParseKey(k)
+			seq.First, err = tterm.ParseKey(k)
 			if err != nil {
 				c.errors["key_bindings."+k] = err
 				continue
@@ -216,7 +219,7 @@ func (c ideConfig) commandKey() (ret term.KeyComb) {
 		}
 		return
 	}
-	key, err := term.ParseKey(cfgKey)
+	key, err := tterm.ParseKey(cfgKey)
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("command.%s", keyCommandKey)] = err
@@ -606,7 +609,7 @@ func (c ideConfig) notificationsCharset(def component.FrameCharSet) (
 	if !ok {
 		return
 	}
-	cfgCs, err := config.GetFrameCharset(cfg, "frame_charset", cs)
+	cfgCs, err := tconfig.GetFrameCharset(cfg, "frame_charset", cs)
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("notifications.%s", "frame_charset")] = err
@@ -851,7 +854,7 @@ func (c ideConfig) windowCharset(key string, def component.FrameCharSet) (
 	if !ok {
 		return
 	}
-	cfgCs, err := config.GetFrameCharset(cfg, key, cs)
+	cfgCs, err := tconfig.GetFrameCharset(cfg, key, cs)
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors[fmt.Sprintf("window_manager.%s", key)] = err
@@ -966,7 +969,7 @@ func (c ideConfig) windowManagerConfig() handler.WindowManagerConfig {
 		FocusFrameAttr:     c.windowFocusFrameAttr(),
 		FocusFrameCharSet:  c.windowFocusFrameCharset(),
 		ScrollBarHoverChar: c.windowScrollBarHoverChar(),
-		WindowManagerConfig: component.WindowManagerConfig{
+		WindowManagerConfig: tcomponent.WindowManagerConfig{
 			NoMaxSize:     c.windowNoMaxSize(),
 			Frame:         c.frame(),
 			FrameAttr:     c.windowFrameAttr(),
@@ -1589,7 +1592,7 @@ func makeWallpaper(img image.Image, densityCharacters string) browser.Wallpaper 
 			return component.NewSpan(comp, component.SpanConfig{
 				PadHorizontalPerc: 0.4,
 				PadVerticalPerc:   0.2,
-				ContentAlignment:  component.SpanAlignmentCentered,
+				ContentAlignment:  component.AlignmentCentered,
 			})
 		},
 	}
@@ -1613,7 +1616,7 @@ func (c ideConfig) wallpaperASCII(
 	strcfg := component.StringConfig{
 		Attributes:           c.workspaceWallpaperAttr(),
 		BackgroundAttributes: c.workspaceWallpaperBackgroundAttr(),
-		Alignment:            component.SpanAlignmentCentered,
+		Alignment:            component.AlignmentCentered,
 	}
 	ret.NewComponent = func() tui.Component {
 		return component.NewStringWithConfig(cfgText, strcfg)

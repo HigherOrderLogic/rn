@@ -31,8 +31,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/api/browserapi"
-	"unstable.build/go-tui/component/notifications"
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 )
 
 var _ browserapi.Notifications = (*Notifications)(nil)
@@ -69,11 +68,11 @@ func (n *Notifications) ExpectReturnErr(err error) {
 
 // Notify satisfies browserapi.Notifications.
 func (n *Notifications) Notify(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	if !n.ExpectErrorNotification && level == notifications.LevelError {
+	if !n.ExpectErrorNotification && level == browserapi.LevelError {
 		n.t.Logf("no error notification was expected: %s", fmt.Sprintf(msg, args...))
 		if n.Wg != nil {
 			n.Wg.Done()
@@ -84,7 +83,7 @@ func (n *Notifications) Notify(
 	id := strconv.Itoa(n.i)
 	n.active[id] = Noti{Level: level, Msg: fmt.Sprintf(msg, args...)}
 	switch level {
-	case notifications.LevelError, notifications.LevelSuccess:
+	case browserapi.LevelError, browserapi.LevelSuccess:
 		if n.Wg != nil {
 			n.Wg.Done()
 		}
@@ -94,7 +93,7 @@ func (n *Notifications) Notify(
 
 // NotifyOnce satisfies browserapi.Notifications.
 func (n *Notifications) NotifyOnce(
-	level notifications.Level, msg string, args ...interface{},
+	level browserapi.NotificationLevel, msg string, args ...interface{},
 ) (string, error) {
 	panic("unimplemented")
 }
@@ -141,8 +140,8 @@ func (n *Notifications) RequireNoErrorNotification() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	for _, noti := range n.active {
-		require.NotEqual(n.t, notifications.LevelError, noti.Level, noti.Msg)
-		require.NotEqual(n.t, notifications.LevelWarn, noti.Level, noti.Msg)
+		require.NotEqual(n.t, browserapi.LevelError, noti.Level, noti.Msg)
+		require.NotEqual(n.t, browserapi.LevelWarn, noti.Level, noti.Msg)
 	}
 }
 
@@ -153,7 +152,7 @@ func (n *Notifications) RequireErrorNotification() {
 	defer n.mu.Unlock()
 	var found bool
 	for _, noti := range n.active {
-		if noti.Level == notifications.LevelError {
+		if noti.Level == browserapi.LevelError {
 			found = true
 		}
 	}
@@ -162,6 +161,6 @@ func (n *Notifications) RequireErrorNotification() {
 
 // Noti is an active notification.
 type Noti struct {
-	Level notifications.Level
+	Level browserapi.NotificationLevel
 	Msg   string
 }

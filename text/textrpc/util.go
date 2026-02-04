@@ -26,17 +26,18 @@ package textrpc
 import (
 	"context"
 
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	"unstable.build/go-tui/cell"
-	"unstable.build/go-tui/term"
-	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 // NewEditRequest converts a buf into an EditRequest.
 func NewEditRequest(
 	file workspaceapi.URI, buf *cell.Buffer, readOnly, recovered bool,
-) EditRequest {
-	return EditRequest{
+) textrpc.EditRequest {
+	return textrpc.EditRequest{
 		Buffer:       rawCellsToProtoCells(buf.RawCells()),
 		ResourceName: NewURI(file),
 		ReadOnly:     readOnly,
@@ -45,28 +46,28 @@ func NewEditRequest(
 }
 
 // EditRequestToBuffer converts an EditRequest into a cell.Buffer
-func EditRequestToBuffer(in *EditRequest) *cell.Buffer {
+func EditRequestToBuffer(in *textrpc.EditRequest) *cell.Buffer {
 	return rowsToBuffer(in.GetBuffer())
 }
 
 // NewURIFromProto maps rpc.URI into a workspaceapi.URI.
-func NewURIFromProto(u *URI) (workspaceapi.URI, error) {
+func NewURIFromProto(u *textrpc.URI) (workspaceapi.URI, error) {
 	return workspaceapi.ParseURI(u.GetUri())
 }
 
 // NewURI maps a workspaceapi.URI into a rpc.URI.
-func NewURI(u workspaceapi.URI) *URI {
-	return &URI{Uri: u.String()}
+func NewURI(u workspaceapi.URI) *textrpc.URI {
+	return &textrpc.URI{Uri: u.String()}
 }
 
 // RawCellsResponseToBuffer converts an EditRequest into a cell.Buffer
-func RawCellsResponseToBuffer(in *RawCellsResponse) *cell.Buffer {
+func RawCellsResponseToBuffer(in *textrpc.RawCellsResponse) *cell.Buffer {
 	return rowsToBuffer(in.GetRows())
 }
 
 // NewRawCellsResponse converts a buf into an RawCellsResponse.
-func NewRawCellsResponse(cells [][]term.Cell) *RawCellsResponse {
-	return &RawCellsResponse{Rows: rawCellsToProtoCells(cells)}
+func NewRawCellsResponse(cells [][]term.Cell) *textrpc.RawCellsResponse {
+	return &textrpc.RawCellsResponse{Rows: rawCellsToProtoCells(cells)}
 }
 
 func rowsToBuffer(in []*termrpc.CellRow) *cell.Buffer {

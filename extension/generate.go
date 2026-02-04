@@ -23,4 +23,4 @@
 
 package extension
 
-//go:generate protoc extensionrpc/grantee.proto -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mextensionrpc/grantee.proto=unstable.build/go-tui/extension/extensionrpc
+//go:generate protoc extensionrpc/grantee.proto --go_opt=paths=source_relative --go-grpc_opt=paths=source_relative -I=. -I=../ --go_out=./ --go-grpc_out=./ --go_opt=Mextensionrpc/grantee.proto=/extensionrpc

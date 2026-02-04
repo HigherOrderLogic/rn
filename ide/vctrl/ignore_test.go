@@ -33,13 +33,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"go.uber.org/mock/gomock"
-	"unstable.build/go-tui/api/config"
-	"unstable.build/go-tui/api/schemeapi"
-	"unstable.build/go-tui/api/schemeapi/schemetest"
-	"unstable.build/go-tui/api/workspaceapi"
-	"unstable.build/go-tui/api/workspaceapi/workspacetest"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/schemetest"
+	"unstable.build/go-tui/workspace/workspaceapitest"
 )
 
 func TestLoadGitignore(t *testing.T) {
@@ -99,7 +99,7 @@ func TestLoadGitignore(t *testing.T) {
 	t.Run("uri returns error is bubbled up", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock := schemetest.NewMockScheme(ctrl)
-		f := workspacetest.NewMockFile(ctrl)
+		f := workspaceapitest.NewMockFile(ctrl)
 
 		f.EXPECT().Read(gomock.Any()).Return(0, io.EOF).AnyTimes()
 		f.EXPECT().Close().Return(nil).AnyTimes()

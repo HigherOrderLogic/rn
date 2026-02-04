@@ -26,7 +26,7 @@ package cell
 import (
 	"context"
 
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 var _ term.Writer = (*BufferWriter)(nil)

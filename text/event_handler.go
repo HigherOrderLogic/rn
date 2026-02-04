@@ -26,7 +26,7 @@ package text
 import (
 	"context"
 
-	"unstable.build/go-tui/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 )
 
 // EventHandler wraps the basic method Handle.

@@ -32,7 +32,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"unstable.build/go-tui/term"
+	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
 func TestConvertByteOffset(t *testing.T) {
@@ -98,7 +98,7 @@ func TestConvertByteOffset(t *testing.T) {
 				cells := tcase.cells
 				if len(cells) != 0 {
 					buf := NewBuffer()
-					str := CellsToString(tcase.cells)
+					str := term.CellsToString(tcase.cells)
 					_, err := buf.ReadFrom(strings.NewReader(str))
 					require.NoError(t, err)
 					cells = buf.RawCells()
@@ -182,7 +182,7 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 			cells := tcase.cells
 			if len(cells) != 0 {
 				buf := NewBuffer()
-				str := CellsToString(tcase.cells)
+				str := term.CellsToString(tcase.cells)
 				_, err := buf.ReadFrom(strings.NewReader(str))
 				require.NoError(t, err)
 				cells = buf.RawCells()
@@ -197,7 +197,7 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 			cells := tcase.cells
 			if len(cells) != 0 {
 				buf := NewBuffer()
-				str := CellsToString(tcase.cells)
+				str := term.CellsToString(tcase.cells)
 				_, err := buf.ReadFrom(strings.NewReader(str))
 				require.NoError(t, err)
 				cells = buf.RawCells()
@@ -208,45 +208,6 @@ func TestConvertCoordinatesToRunePos(t *testing.T) {
 			assert.Equal(t, tcase.y, y, i)
 		})
 	}
-}
-
-func TestCopyCloneCells(t *testing.T) {
-	reversible := []string{
-		"",
-		"a",
-		"",
-		"a\n",
-		"a",
-		"\n\n",
-		"\n",
-		"a\nb\nc\nd",
-		"a\nb\nc\n",
-		"",
-		"a",
-		"\ta",
-		"a\n",
-		"\x00",
-		"\x00a",
-		"a\x00",
-		"\t\x00",
-		"\x00\t",
-		"\n\x00",
-		"\x00\n",
-	}
-
-	t.Run("CopyCells", func(t *testing.T) {
-		var dst [][]term.Cell
-		for i, test := range reversible {
-			dst = CopyCells(dst, StringToCells(test))
-			assert.Equal(t, test, CellsToString(dst), i)
-		}
-	})
-	t.Run("CloneCells", func(t *testing.T) {
-		for i, test := range reversible {
-			dst := CloneCells(StringToCells(test))
-			assert.Equal(t, test, CellsToString(dst), i)
-		}
-	})
 }
 
 func TestCellsToBufferZero(t *testing.T) {

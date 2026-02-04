@@ -30,13 +30,11 @@ import (
 	"sync"
 
 	"github.com/unstablebuild/blue/document"
-	"github.com/unstablebuild/blue/document/doclog"
-	"github.com/unstablebuild/blue/document/docmarshal/doctoml"
-	"github.com/unstablebuild/blue/document/docrpc"
-	"github.com/unstablebuild/blue/document/docrpc/docpb"
-
-	"unstable.build/go-tui/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/docpb"
+	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagerpc/doctoml"
 	"unstable.build/go-tui/localstorage"
+	"unstable.build/go-tui/localstorage/storagerpc"
 	"unstable.build/go-tui/rpc"
 )
 
@@ -60,8 +58,7 @@ func (s *storageResourceServer) Register(
 	registrar rpc.ServiceRegistrar, lock sync.Locker,
 ) (io.Closer, error) {
 	svc := s.setupStorage(lock)
-	svc = doclog.WithLogging(svc, "ExtensionStorage")
-	server := new(docrpc.Server)
+	server := new(storagerpc.Server)
 	server.Init(svc, doctoml.Marshaler())
 	docpb.RegisterDocumentStoreServer(registrar, server)
 	// doc server stops grpc.Server, which is not something storageResourceserver

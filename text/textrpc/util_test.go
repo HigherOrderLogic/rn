@@ -27,20 +27,21 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"unstable.build/go-tui/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi/textrpc"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/term/termrpc"
 	"unstable.build/go-tui/cell"
-	termrpc "unstable.build/go-tui/term/termrpc"
 )
 
 func TestBufferEditRequest(t *testing.T) {
 	tsuite := []struct {
 		in  string
-		out EditRequest
+		out textrpc.EditRequest
 	}{
 		{
 			in: "a",
-			out: EditRequest{
-				ResourceName: &URI{Uri: ""},
+			out: textrpc.EditRequest{
+				ResourceName: &textrpc.URI{Uri: ""},
 				Buffer: []*termrpc.CellRow{
 					{Cells: []*termrpc.Cell{{Character: 'a'}}},
 				},
@@ -48,8 +49,8 @@ func TestBufferEditRequest(t *testing.T) {
 		},
 		{
 			in: "a\nbb\nccc",
-			out: EditRequest{
-				ResourceName: &URI{Uri: ""},
+			out: textrpc.EditRequest{
+				ResourceName: &textrpc.URI{Uri: ""},
 				Buffer: []*termrpc.CellRow{
 					{Cells: []*termrpc.Cell{{Character: 'a'}}},
 					{Cells: []*termrpc.Cell{{Character: 'b'}, {Character: 'b'}}},

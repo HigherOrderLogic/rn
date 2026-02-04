@@ -28,7 +28,7 @@ import (
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
-	"unstable.build/go-tui/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 )
 
 const (

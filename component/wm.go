@@ -24,9 +24,10 @@
 package component
 
 import (
+	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui"
-	"unstable.build/go-tui/term"
 )
 
 // WindowManagerConfig represents the configuration for a WindowManager
@@ -36,7 +37,7 @@ type WindowManagerConfig struct {
 	FrameAttr     term.Attributes
 	ScrollBarAttr term.Attributes
 	ScrollBarChar rune
-	FrameCharSet
+	component.FrameCharSet
 	NoMaxSize bool
 }
 
@@ -83,7 +84,7 @@ func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
 		wm.Resize(wm.width, wm.height)
 	}
 
-	nonMinimizedW := VirtualWriter{
+	nonMinimizedW := component.VirtualWriter{
 		Writer: w,
 		Offset: wm.minimizedOffset,
 		Height: wm.height,
@@ -114,13 +115,13 @@ func (wm *WindowManager) DrawWindow(win Window, w term.Writer) {
 	pos := winPos.from()
 	length := winPos.length()
 	switch f.minimized {
-	case SpanAlignmentTop:
+	case component.AlignmentTop:
 		wm.drawMinimizedTop(w, f, pos, length)
-	case SpanAlignmentBottom:
+	case component.AlignmentBottom:
 		wm.drawMinimizedBottom(w, f, pos, length)
-	case SpanAlignmentLeft:
+	case component.AlignmentLeft:
 		wm.drawMinimizedLeft(w, f, pos, length)
-	case SpanAlignmentRight:
+	case component.AlignmentRight:
 		wm.drawMinimizedRight(w, f, pos, length)
 	}
 }
@@ -291,14 +292,14 @@ func (wm *WindowManager) WindowAt(pos term.Coordinates) (Window, bool) {
 // SetFrameCharSet sets the defaultframe border cells used
 // to draw borders around tiles.  Note that this has no effect if WindowManager was
 // initialized with border == false.
-func (wm *WindowManager) SetFrameCharSet(b FrameCharSet) {
+func (wm *WindowManager) SetFrameCharSet(b component.FrameCharSet) {
 	if !wm.config.Frame {
 		return
 	}
 
 	wm.config.FrameCharSet = b
 	wm.Iterate(func(w Window) {
-		w.node.Content().(*Frame).FrameCharSet = b
+		w.node.Content().(*component.Frame).FrameCharSet = b
 	})
 }
 
@@ -311,7 +312,7 @@ func (wm *WindowManager) SetFrameAttr(attr term.Attributes) {
 
 	wm.config.FrameAttr = attr
 	wm.Iterate(func(w Window) {
-		w.node.Content().(*Frame).Attributes = attr
+		w.node.Content().(*component.Frame).Attributes = attr
 	})
 }
 
@@ -319,7 +320,7 @@ func (wm *WindowManager) SetFrameAttr(attr term.Attributes) {
 // creating floating windows.
 type FloatingConfig struct {
 	// Sets the alignment of the window.
-	Alignment
+	component.Alignment
 	// Offset is to be applied to the position of the window
 	// after alignment has been determined.
 	Offset term.Coordinates
@@ -327,7 +328,7 @@ type FloatingConfig struct {
 
 // FloatingWindow creates a floating window.
 func (wm *WindowManager) FloatingWindow(
-	content Floating, cfg FloatingConfig,
+	content component.Floating, cfg FloatingConfig,
 ) Window {
 	if wm.config.Frame {
 		content = wm.withFrame(content)
@@ -340,7 +341,7 @@ func (wm *WindowManager) FloatingWindow(
 
 // DefaultWindowManagerConfig returns a sane WindowManagerConfig.
 func DefaultWindowManagerConfig() WindowManagerConfig {
-	charset := FrameCharSetDefault()
+	charset := component.FrameCharSetDefault()
 	return WindowManagerConfig{
 		Frame:         true,
 		FrameAttr:     term.Attributes{},
@@ -350,8 +351,8 @@ func DefaultWindowManagerConfig() WindowManagerConfig {
 	}
 }
 
-func (wm *WindowManager) withFrame(handler tui.Component) *Frame {
-	f := NewFrame(handler)
+func (wm *WindowManager) withFrame(handler tui.Component) *component.Frame {
+	f := component.NewFrame(handler)
 	f.FrameCharSet = wm.config.FrameCharSet
 	f.Attributes = wm.config.FrameAttr
 	f.ScrollBarAttributes = wm.config.ScrollBarAttr
@@ -379,19 +380,19 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 	for _, win := range wm.FloatingWindows() {
 		fn := win.node.(*floatingNode)
 		switch fn.minimized {
-		case SpanAlignmentTop:
+		case component.AlignmentTop:
 			wm.minimizedPos[win.ID()] = windowPos{pos: offsetTop, win: win}
 			offsetTop++
 			offsetTop += fn.minimizedPadding
-		case SpanAlignmentBottom:
+		case component.AlignmentBottom:
 			wm.minimizedPos[win.ID()] = windowPos{pos: offsetBottom, win: win}
 			offsetBottom++
 			offsetBottom += fn.minimizedPadding
-		case SpanAlignmentLeft:
+		case component.AlignmentLeft:
 			wm.minimizedPos[win.ID()] = windowPos{pos: offsetLeft, win: win}
 			offsetLeft++
 			offsetLeft += fn.minimizedPadding
-		case SpanAlignmentRight:
+		case component.AlignmentRight:
 			wm.minimizedPos[win.ID()] = windowPos{pos: offsetRight, win: win}
 			offsetRight++
 			offsetRight += fn.minimizedPadding
@@ -410,23 +411,19 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 			continue
 		}
 		switch fn.minimized {
-		case SpanAlignmentTop, SpanAlignmentBottom:
+		case component.AlignmentTop, component.AlignmentBottom:
 			width := wm.width
 			if wm.config.Frame {
 				width -= 2
 			}
-			if width < 0 {
-				width = 0
-			}
+			width= max(0, width)
 			fn.Content().Resize(width, fn.minimizedPadding)
-		case SpanAlignmentLeft, SpanAlignmentRight:
+		case component.AlignmentLeft, component.AlignmentRight:
 			height := wm.minimizedHeight
 			if wm.config.Frame {
 				height -= 2
 			}
-			if height < 0 {
-				height = 0
-			}
+			height = max(0, height)
 			fn.Content().Resize(fn.minimizedPadding, height)
 		}
 	}
@@ -435,7 +432,7 @@ func (wm *WindowManager) calculateMinimizedOffsets() {
 func (wm *WindowManager) drawMinimizedContent(
 	w term.Writer, f *floatingNode, at term.Coordinates,
 ) {
-	vw := VirtualWriter{
+	vw := component.VirtualWriter{
 		Writer: w,
 		Offset: at,
 		Height: wm.height,
@@ -448,7 +445,7 @@ func (wm *WindowManager) drawMinimizedTop(
 	w term.Writer, f *floatingNode, pos term.Coordinates, length int,
 ) {
 	frameAttr := wm.config.FrameAttr
-	if attr, ok := f.content.C.(WithAttributes); ok {
+	if attr, ok := f.content.C.(component.WithAttributes); ok {
 		frameAttr = attr.SetAttr(term.Attributes{})
 		attr.SetAttr(frameAttr)
 	}
@@ -496,7 +493,7 @@ func (wm *WindowManager) drawMinimizedBottom(
 	w term.Writer, f *floatingNode, pos term.Coordinates, length int,
 ) {
 	frameAttr := wm.config.FrameAttr
-	if attr, ok := f.content.C.(WithAttributes); ok {
+	if attr, ok := f.content.C.(component.WithAttributes); ok {
 		frameAttr = attr.SetAttr(term.Attributes{})
 		attr.SetAttr(frameAttr)
 	}
@@ -546,7 +543,7 @@ func (wm *WindowManager) drawMinimizedLeft(
 	w term.Writer, f *floatingNode, pos term.Coordinates, length int,
 ) {
 	frameAttr := wm.config.FrameAttr
-	if attr, ok := f.content.C.(WithAttributes); ok {
+	if attr, ok := f.content.C.(component.WithAttributes); ok {
 		frameAttr = attr.SetAttr(term.Attributes{})
 		attr.SetAttr(frameAttr)
 	}
@@ -595,7 +592,7 @@ func (wm *WindowManager) drawMinimizedRight(
 	w term.Writer, f *floatingNode, pos term.Coordinates, length int,
 ) {
 	frameAttr := wm.config.FrameAttr
-	if attr, ok := f.content.C.(WithAttributes); ok {
+	if attr, ok := f.content.C.(component.WithAttributes); ok {
 		frameAttr = attr.SetAttr(term.Attributes{})
 		attr.SetAttr(frameAttr)
 	}
@@ -671,12 +668,12 @@ func (w windowPos) position() (term.Coordinates, term.Coordinates) {
 	var to term.Coordinates
 	fn := w.win.node.(*floatingNode)
 	switch fn.minimized {
-	case SpanAlignmentTop, SpanAlignmentBottom:
+	case component.AlignmentTop, component.AlignmentBottom:
 		to = from
 		to.Y++
 		to.Y += fn.minimizedPadding
 		to.X += length
-	case SpanAlignmentLeft, SpanAlignmentRight:
+	case component.AlignmentLeft, component.AlignmentRight:
 		to = from
 		to.X++
 		to.X += fn.minimizedPadding
@@ -690,13 +687,13 @@ func (w windowPos) position() (term.Coordinates, term.Coordinates) {
 func (w windowPos) from() term.Coordinates {
 	fn := w.win.node.(*floatingNode)
 	switch fn.minimized {
-	case SpanAlignmentTop:
+	case component.AlignmentTop:
 		return term.Coordinates{X: 0, Y: w.pos}
-	case SpanAlignmentBottom:
+	case component.AlignmentBottom:
 		return term.Coordinates{X: 0, Y: w.win.wm.height - w.pos - 1 - fn.minimizedPadding}
-	case SpanAlignmentLeft:
+	case component.AlignmentLeft:
 		return term.Coordinates{X: w.pos, Y: w.win.wm.minimizedOffset.Y}
-	case SpanAlignmentRight:
+	case component.AlignmentRight:
 		return term.Coordinates{
 			X: w.win.wm.width - w.pos - 1 - fn.minimizedPadding,
 			Y: w.win.wm.minimizedOffset.Y,
@@ -708,13 +705,13 @@ func (w windowPos) from() term.Coordinates {
 
 func (w windowPos) length() int {
 	switch w.win.node.(*floatingNode).minimized {
-	case SpanAlignmentTop:
+	case component.AlignmentTop:
 		return w.win.wm.width
-	case SpanAlignmentBottom:
+	case component.AlignmentBottom:
 		return w.win.wm.width
-	case SpanAlignmentLeft:
+	case component.AlignmentLeft:
 		return w.win.wm.minimizedHeight
-	case SpanAlignmentRight:
+	case component.AlignmentRight:
 		return w.win.wm.minimizedHeight
 	default:
 		panic("invalid minimize alignment")
