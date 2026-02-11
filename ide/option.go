@@ -24,9 +24,11 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -54,8 +56,8 @@ type Extension struct {
 	// extension.
 	ID string
 
-	// Path is the path to the executable.
-	Path string
+	// CmdAndArgs is the path to the executable.
+	CmdAndArgs string
 
 	// Config is the configuration for the extension.
 	Config config.Config
@@ -333,5 +335,15 @@ func (n nopExtensionsRunner) Run(extensionID, path string, config config.Config)
 }
 
 func (n nopExtensionsRunner) Close() error {
+	return nil
+}
+
+func (n nopExtensionsRunner) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	return 0, nil
+}
+
+func (n nopExtensionsRunner) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return nil
 }

@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/logging"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/clipboard"
@@ -83,12 +84,14 @@ type ex struct {
 	config               text.Config
 	comp                 text.Component
 	clip                 clipboard.Register
+	executor             schemeapi.Executor
 	ed                   text.Editor
 	storage              document.Service
 	reservoir            *vtereservoir.Facility
 	notifications        notifier
 	emulatorConfig       vte.Config
-	newEmulatorHandler   func([]string, workspaceapi.ProcessWatcher) (vtereservoir.VTE, error)
+	newEmulatorHandler   func([]string) (vtereservoir.VTE, error)
+	tm                   browser.TabManager
 	newPluginHandler     func(...string) (pluginHandler, error)
 	workspace            workspace.Workspace
 	tasks                *idetask.Manager
@@ -173,12 +176,13 @@ func (e *ex) init(
 	if tm == nil {
 		tm = e.Browser()
 	}
+	e.tm = tm
 	e.comp.SubscribeWindow((*windowSubscriber)(e))
 	if initialVTECapacity != 0 {
 		e.reservoir = vtereservoir.New(e.Browser(), e.Browser(),
-			e.workspace, e.workspace, tm, e.emulatorConfig, initialVTECapacity)
+			e.workspace, e.workspace, e.tm, e.emulatorConfig, initialVTECapacity)
 	}
-	e.newEmulatorHandler = func(cmdAndArgs []string, watcher workspaceapi.ProcessWatcher) (
+	e.newEmulatorHandler = func(cmdAndArgs []string) (
 		vtereservoir.VTE, error,
 	) {
 		if len(cmdAndArgs) == 0 && e.reservoir != nil {
@@ -186,12 +190,11 @@ func (e *ex) init(
 			return e.reservoir.Get()
 		}
 		cfg := e.emulatorConfig
-		cfg.Watcher = watcher
 		if len(cmdAndArgs) != 0 {
 			cfg.CommandAndArgs = cmdAndArgs
 		}
 		v, err := vte.NewHandler(e.Browser(), e.Browser(),
-			e.workspace, e.workspace, tm, cfg)
+			e.workspace, e.workspace, e.tm, cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -205,8 +208,8 @@ func (e *ex) init(
 		plugin.WithBarConfig(pluginBarConfig),
 	}
 	e.newPluginHandler = func(args ...string) (pluginHandler, error) {
-		return plugin.New(e.Browser(), e.Browser(), e.workspace, e.workspace,
-			tm, args, e.width, pluginOpts...)
+		return plugin.New(e.Browser(), e.Browser(), e.executor, e.workspace,
+			e.tm, args, e.width, pluginOpts...)
 	}
 	e.dispatchOnPreview = dispatchOnPreview
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
@@ -241,6 +244,10 @@ func (e *ex) subscribeCommands() error {
 	return ret
 }
 
+func (e *ex) setExecutor(exe schemeapi.Executor) {
+	e.executor = exe
+}
+
 func (e *ex) completeReadFile(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[string], string, error) {
@@ -273,6 +280,7 @@ func (e *ex) doInit(
 	clip clipboard.Register,
 	opts ...text.Option,
 ) (err error) {
+	e.executor = m
 	e.pluginWaitTimeout = 3 * time.Second
 	e.clip = clip
 	e.workspace = m
@@ -1084,10 +1092,16 @@ func (e *ex) executePluginWait(ctx context.Context, args ...string) error {
 	watcher := workspaceapi.ChanProcessWatcher(ch)
 	start := time.Now()
 	e.log(log.DebugLevel, "starting command %v", args)
-	h, err := e.newEmulatorHandler(args, watcher)
+	cfg := e.emulatorConfig
+	cfg.Watcher = watcher
+	cfg.CommandAndArgs = args
+	// use set executor so we can inject plugin vars
+	v, err := vte.NewHandler(e.Browser(), e.Browser(),
+		e.workspace, e.executor, e.tm, cfg)
 	if err != nil {
 		return err
 	}
+	h := vteAdapter{v}
 
 	handleError := func(err error) error {
 		if err == nil {
@@ -1288,7 +1302,7 @@ func (e *ex) toggleCompanionTerminal() error {
 			_ = e.companionTerminal.Close()
 		}
 		var err error
-		e.companionTerminal, err = e.newEmulatorHandler(nil, nil)
+		e.companionTerminal, err = e.newEmulatorHandler(nil)
 		if err != nil {
 			return err
 		}
@@ -1310,7 +1324,7 @@ func (e *ex) toggleCompanionTerminal() error {
 }
 
 func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
-	h, err := e.newEmulatorHandler(args, nil)
+	h, err := e.newEmulatorHandler(args)
 	if err != nil {
 		return err
 	}
@@ -1334,7 +1348,7 @@ func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 }
 
 func (e *ex) terminalnew(_ context.Context, args ...string) error {
-	h, err := e.newEmulatorHandler(args, nil)
+	h, err := e.newEmulatorHandler(args)
 	if err != nil {
 		return err
 	}
@@ -1348,7 +1362,7 @@ func (e *ex) terminalnew(_ context.Context, args ...string) error {
 }
 
 func (e *ex) terminalneworsplit(_ context.Context, args ...string) error {
-	t, err := e.newEmulatorHandler(args, nil)
+	t, err := e.newEmulatorHandler(args)
 	if err != nil {
 		return err
 	}

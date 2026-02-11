@@ -48,11 +48,47 @@ func WithInsecureAuth() Option {
 }
 
 // WithInsecureTransport returns an option that configures
-// a extension.Manager's to NOT secure communication
+// a extension.Runner's to NOT secure communication
 // between extensions and host.
 func WithInsecureTransport() Option {
 	return func(cfg *runnerConfig) {
 		cfg.insecureTransport = true
+	}
+}
+
+// WithSocketEnv returns an option that configures
+// what environment variable to use to share the socket
+// with ad-hoc programs.
+func WithSocketEnv(env string) Option {
+	return func(cfg *runnerConfig) {
+		cfg.socketEnv = env
+	}
+}
+
+// WithDataDirEnv returns an option that configures
+// what environment variable to use to share the data directory
+// with ad-hoc programs.
+func WithDataDirEnv(env string) Option {
+	return func(cfg *runnerConfig) {
+		cfg.dataDirEnv = env
+	}
+}
+
+// WithAuthTokenEnv returns an option that configures
+// what environment variable to use to share the oauth2 token
+// with ad-hoc programs.
+func WithAuthTokenEnv(env string) Option {
+	return func(cfg *runnerConfig) {
+		cfg.authTokenEnv = env
+	}
+}
+
+// WithAuthCertEnv returns an option that configures
+// what environment variable to use to share the tls cert
+// with ad-hoc programs.
+func WithAuthCertEnv(env string) Option {
+	return func(cfg *runnerConfig) {
+		cfg.authCertEnv = env
 	}
 }
 
@@ -64,4 +100,8 @@ type runnerConfig struct {
 	version           string
 	insecureAuth      bool
 	insecureTransport bool
+	authCertEnv       string
+	authTokenEnv      string
+	socketEnv         string
+	dataDirEnv        string
 }

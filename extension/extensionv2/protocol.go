@@ -42,7 +42,7 @@ import (
 var _ io.Writer = (*protocol)(nil)
 var _ io.Reader = (*protocol)(nil)
 
-const tokenExpiresIn = 10 * 24 * 365 * time.Hour
+const extensionTokenExpiresIn = 10 * 24 * 365 * time.Hour
 
 type protocol struct {
 	write        bytes.Buffer
@@ -121,7 +121,7 @@ func (p *protocol) Write(data []byte) (int, error) {
 		}
 		claimsExtra := Extension{Metadata: meta}
 		accessToken, err := auth.SignToken(signKey,
-			meta.DeveloperID, meta.DeveloperEmail, claimsExtra, tokenExpiresIn)
+			meta.DeveloperID, meta.DeveloperEmail, claimsExtra, extensionTokenExpiresIn)
 		if err != nil {
 			return n, err
 		}

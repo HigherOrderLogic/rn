@@ -30,6 +30,7 @@ import (
 	"os"
 	"strconv"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	_ "net/http/pprof"
@@ -631,9 +632,9 @@ func TestWorkspaceExtensions(t *testing.T) {
 
 		extensions := map[string]Extension{
 			"myID": {
-				ID:     "myID",
-				Path:   "myPath2",
-				Config: config.MapConfig(map[string]interface{}{"a": "b"}),
+				ID:         "myID",
+				CmdAndArgs: "myPath2",
+				Config:     config.MapConfig(map[string]interface{}{"a": "b"}),
 			},
 		}
 
@@ -2779,6 +2780,16 @@ func (f fnRunner) Run(extensionID, path string, config config.Config) error {
 }
 
 func (f fnRunner) Close() error {
+	return nil
+}
+
+func (r fnRunner) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	return 0, nil
+}
+
+func (r fnRunner) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return nil
 }
 

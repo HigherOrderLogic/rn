@@ -25,13 +25,17 @@ package extensionv2
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
 	"sync"
+	"syscall"
+	"time"
 
 	"github.com/ernestrc/logd-go/logging"
+	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
@@ -45,7 +49,7 @@ import (
 
 var _ extension.Runner = (*workspaceRunner)(nil)
 
-// workspaceRunner satisfies extension.Runner with a simple
+// Runner satisfies extension.Runner with a simple
 // protocol that initially exchanges metadata and secrets
 // over stdin/stdout and secures resources via TLS and
 // per rpc authentication/authorization.
@@ -67,20 +71,24 @@ func newWorkspaceRunner(
 	executor schemeapi.Executor, grantor extension.Grantor,
 	workspace workspaceapi.URI, socket, dataDir string,
 	tlsCert []byte, keys auth.Keys, opts ...Option,
-) *workspaceRunner {
+) extension.Runner {
 	ret := new(workspaceRunner)
 	ret.init(executor, grantor, workspace,
 		socket, dataDir, tlsCert, keys, opts...)
 	return ret
 }
 
-// Init initializes this workspaceRunner with the given grantor and options.
+// Init initializes this Runner with the given grantor and options.
 func (m *workspaceRunner) init(
 	executor schemeapi.Executor, grantor extension.Grantor,
 	workspace workspaceapi.URI, socket, dataDir string,
 	tlsCert []byte, keys auth.Keys, opts ...Option,
 ) {
 	m.ctx, m.cancelCtx = context.WithCancel(context.Background())
+	m.cfg.authCertEnv = "IDE_CERT"
+	m.cfg.authTokenEnv = "IDE_TOKEN"
+	m.cfg.socketEnv = "IDE_SOCKET"
+	m.cfg.dataDirEnv = "IDE_DATADIR"
 	for _, o := range opts {
 		o(&m.cfg)
 	}
@@ -93,16 +101,61 @@ func (m *workspaceRunner) init(
 	m.tlsCert = tlsCert
 }
 
+// StartCommand runs an ad-hoc program and authorizes it to access resources.
+func (m *workspaceRunner) StartCommand(ctx context.Context, cmd workspaceapi.Cmd) (
+	workspaceapi.Pid, error,
+) {
+	const (
+		tokenExpiresIn = 30 * time.Minute
+	)
+	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.socketEnv, m.socket))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.dataDirEnv, m.dataDir))
+	cert := base64.StdEncoding.EncodeToString(m.tlsCert)
+	cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.authCertEnv, cert))
+	if !m.cfg.insecureAuth {
+		signKey, err := m.keys.Sign(ctx)
+		if err != nil {
+			return 0, fmt.Errorf("get sign key: %w", err)
+		}
+		name := fmt.Sprintf("%s_%s", cmd.Path, strings.Join(cmd.Args, "_"))
+		id := uuid.New()
+		// TODO refactor authorizer to prompt user rather than hardcoding permissions
+		// on client
+		permissions := extensionapi.AllPermissions()
+		m.log(log.DebugLevel, "creating one shot authentication for "+
+			"command %s, id: %d, permissions: %v", name, id, permissions)
+		claimsExtra := Extension{Metadata: extensionapi.Metadata{
+			DeveloperID:   "you",
+			DeveloperKey:  "",
+			ExtensionID:   id.String(),
+			ExtensionName: name,
+			Permissions:   permissions,
+		}}
+		accessToken, err := auth.SignToken(signKey,
+			claimsExtra.DeveloperID, claimsExtra.DeveloperEmail, claimsExtra,
+			tokenExpiresIn)
+		if err != nil {
+			return 0, fmt.Errorf("sign token: %w", err)
+		}
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.authTokenEnv, accessToken))
+	}
+	return m.executor.StartCommand(ctx, cmd)
+}
+
+// Signal sends a signal to the running process.
+func (m *workspaceRunner) Signal(pid workspaceapi.Pid, sig syscall.Signal) error {
+	return m.executor.Signal(pid, sig)
+}
+
 // Run runs the given extension with an executable at the given path,
 // with the given config.
-func (m *workspaceRunner) Run(name, path string, config config.Config) error {
-	if name == "" || path == "" {
-		return errors.New("extension name and path must not be empty")
+func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error {
+	if id == "" || cmdAndArgs == "" {
+		return errors.New("extension id and cmd must not be empty")
 	}
-	extensionID := name
 
 	ctx, cancel := context.WithCancel(m.ctx)
-	cmd, err := m.makeCommand(ctx, extensionID, path, config)
+	cmd, err := m.makeCommand(ctx, id, cmdAndArgs, config)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("make command: %w", err)
@@ -115,15 +168,15 @@ func (m *workspaceRunner) Run(name, path string, config config.Config) error {
 	}
 
 	m.log(log.DebugLevel, "running extension with name %q at path %q, pid: %d",
-		name, path, pid)
+		id, cmdAndArgs, pid)
 
-	m.pids.Store(extensionID, cancel)
+	m.pids.Store(id, cancel)
 
 	return nil
 }
 
 // Close stops all extensions and cleans up all resources associated
-// with this workspaceRunner.
+// with this Runner.
 func (m *workspaceRunner) Close() error {
 	m.cancelCtx() // kills all extensions
 	return nil

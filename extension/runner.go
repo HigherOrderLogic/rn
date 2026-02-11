@@ -24,13 +24,12 @@
 package extension
 
 import (
-	"io"
-
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
 )
 
 // Runner abstracts the ability to run and stop extensions.
 type Runner interface {
-	io.Closer
-	Run(extensionID, path string, config config.Config) error
+	schemeapi.Executor
+	Run(id, cmdAndArgs string, config config.Config) error
 }

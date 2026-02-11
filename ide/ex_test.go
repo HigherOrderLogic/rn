@@ -1341,7 +1341,7 @@ func newExForTestingWithWorkspace(
 		container, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, nil, finalOpts...))
 	ex.subscribeCommands()
-	ex.newEmulatorHandler = func(args []string, _ workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
+	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
 	}
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
@@ -1377,7 +1377,7 @@ func newExForTestingCommandsPreview(
 		container, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, previews, nil, finalOpts...))
 	ex.subscribeCommands()
-	ex.newEmulatorHandler = func(args []string, _ workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
+	ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 		return newTestVteWithConfig(args), nil
 	}
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
@@ -2411,7 +2411,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
-		ex.newEmulatorHandler = func(args []string, _ workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
+		ex.newEmulatorHandler = func(args []string) (vtereservoir.VTE, error) {
 			assert.Equal(t, "echo bla", strings.Join(args, " "))
 			return tvte, nil
 		}
@@ -2466,7 +2466,7 @@ func TestTerminalOnFocus(t *testing.T) {
 		ex := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme),
 			texttest.NopEditor(), testConfig, nopPublishEvent, clipboard.NewInMemory())
 		tvte := newTestVte()
-		ex.newEmulatorHandler = func([]string, workspaceapi.ProcessWatcher) (vtereservoir.VTE, error) {
+		ex.newEmulatorHandler = func([]string) (vtereservoir.VTE, error) {
 			return tvte, nil
 		}
 		t.Cleanup(func() { _ = ex.Close() })

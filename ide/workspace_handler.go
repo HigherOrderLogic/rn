@@ -277,11 +277,20 @@ func (h *workspaceManagerHandler) init(
 	go debug.CapturePanicReport(func() {
 		runner, err := h.buildExtensions(cfg, homeDirUri, h.homeWorkspace, h.empty)
 		if err != nil {
+			_, _ = h.notifications.Notify(browserapi.LevelError,
+				"Error building channel for extensions and plugins: %v", err)
 			log.Errorf("build home workspace extensions: %v", err)
 			return
 		}
 		h.initExtensions(runner, cfg)
 		h.homeRunner.Store(runner)
+		_, isNop := runner.(nopExtensionsRunner)
+		if isNop {
+			return
+		}
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		h.empty.setExecutor(runner)
 	})
 
 	h.bar.Init()
@@ -521,11 +530,11 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 		if pconfig == nil {
 			pconfig = config.MapConfig(make(map[string]any))
 		}
-		path := p.Path
+		cmdAndArgs := p.CmdAndArgs
 		id := id
 		go debug.CapturePanicReport(func() {
 			defer wg.Done()
-			err := manager.Run(id, path, pconfig)
+			err := manager.Run(id, cmdAndArgs, pconfig)
 			if err != nil {
 				log.Errorf("failed to run built-in extension with id %q: %v", id, err)
 			}
@@ -716,11 +725,20 @@ func (h *workspaceManagerHandler) addWorkspace(
 	go debug.CapturePanicReport(func() {
 		runner, err := h.buildExtensions(cfg, uri, cwd, ex)
 		if err != nil {
+			_, _ = h.notifications.Notify(browserapi.LevelError,
+				"Error building channel for extensions and plugins: %v", err)
 			log.Errorf("build extensions for workspace %s: %v", uri.String(), err)
 			return
 		}
 		wh.Extensions.Store(runner)
 		h.initExtensions(runner, cfg)
+		_, isNop := runner.(nopExtensionsRunner)
+		if isNop {
+			return
+		}
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		ex.setExecutor(runner)
 	})
 
 	if i == -1 {
@@ -776,11 +794,11 @@ func (h *workspaceManagerHandler) buildExtensions(
 
 	dataDir := h.sixDir
 	if err := os.MkdirAll(dataDir, 0777); err != nil {
-		return nil, fmt.Errorf("mkdir .extension: %v", err)
+		return nil, fmt.Errorf("mkdir %s: %v", dataDir, err)
 	}
 	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, dataDir, ex.Browser())
 	if err != nil {
-		return nil, fmt.Errorf("error initializing extension manager: %v", err)
+		return nil, fmt.Errorf("new workspace extensions runner: %v", err)
 	}
 	return runner, nil
 }

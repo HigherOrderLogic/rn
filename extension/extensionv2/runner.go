@@ -201,7 +201,11 @@ func (r *runner) WorkspaceExtensionsRunner(
 
 func (r *runner) newUnixListener(uri workspaceapi.URI) (ret net.Listener, err error) {
 	ctx := context.Background()
-	socket := path.Join(uri.Path(), fmt.Sprintf(".%s.sock", r.cfg.pkg))
+	sockname := r.cfg.pkg
+	if sockname == "" {
+		sockname = "ide"
+	}
+	socket := path.Join(uri.Path(), fmt.Sprintf(".%s.sock", sockname))
 	err = retry.Retry(ctx, retrySocketStrategy, func(context.Context) (bool, error) {
 		var cfg net.ListenConfig
 		ret, err = cfg.Listen(ctx, "unix", socket)

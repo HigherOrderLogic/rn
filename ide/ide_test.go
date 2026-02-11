@@ -24,10 +24,12 @@
 package ide
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -314,5 +316,15 @@ func (r testRunner) Run(extensionID, path string, config config.Config) error {
 }
 
 func (r testRunner) Close() error {
+	return nil
+}
+
+func (r testRunner) StartCommand(
+	ctx context.Context, cmd workspaceapi.Cmd,
+) (workspaceapi.Pid, error) {
+	return 0, nil
+}
+
+func (r testRunner) Signal(workspaceapi.Pid, syscall.Signal) error {
 	return nil
 }
