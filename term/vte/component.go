@@ -794,6 +794,8 @@ func (t *Component) systemCanDispatchBell(callback func(error)) {
 		if called.CompareAndSwap(false, true) {
 			cancel()
 			t.cfg.ScheduleNextTick(func() {
+				t.mu.Lock()
+				defer t.mu.Unlock()
 				callback(nil)
 			})
 		}
@@ -804,6 +806,8 @@ func (t *Component) systemCanDispatchBell(callback func(error)) {
 		<-ctx.Done()
 		if called.CompareAndSwap(false, true) {
 			t.cfg.ScheduleNextTick(func() {
+				t.mu.Lock()
+				defer t.mu.Unlock()
 				callback(fmt.Errorf("timeout waiting for bell: %w", ctx.Err()))
 			})
 		}
