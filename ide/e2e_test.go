@@ -124,8 +124,6 @@ editor:
   mode: modal
 command:
   key: ":"
-  key_bindings:
-    <a-m>: windowclose
 `)
 		require.NoError(t, err)
 
@@ -177,6 +175,66 @@ command:
 		assertAuthVarsPresent(t, filename1)
 		assertAuthVarsPresent(t, filename2)
 	})
+
+	t.Run("plugins executed via ! and !! cwd is the workspce", func(t *testing.T) {
+		t.Parallel()
+		dir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+		config, err := os.CreateTemp(dir, "bcd")
+		require.NoError(t, err)
+
+		_, err = config.Seek(0, 0)
+		require.NoError(t, err)
+		_, err = config.WriteString(`
+editor:
+  mode: modal
+command:
+  key: ":"
+`)
+		require.NoError(t, err)
+
+		var mu sync.Mutex
+		runner, err := extensionv2.NewRunner(context.Background(),
+			&mu, extension.GrantAll(), dir,
+		)
+		require.NoError(t, err)
+		i, err := ide.New(dir, config.Name(), dir,
+			ide.WithExtensionsRunner(runner),
+			ide.WithLocker(&mu),
+		)
+		require.NoError(t, err)
+
+		handler := i.Ready()
+
+		filename1, err := filepath.Abs(filepath.Join(dir, "ide.cwd"))
+		require.NoError(t, err)
+		file1, err := os.Create(filename1)
+		require.NoError(t, err)
+		require.NoError(t, file1.Close())
+
+		// allow for extension runner to be ready
+		time.Sleep(5 * time.Second)
+
+		keys, err := term.ParseKeys(
+			fmt.Sprintf(`:!<space>sh<space>-c<space>"pwd<space>|<space>tee<space>%s"<enter>`, filename1),
+		)
+		require.NoError(t, err)
+
+		mu.Lock()
+		defer mu.Unlock()
+		for _, key := range keys {
+			_, handled := handler.Handle(term.Event{Ch: key.Ch, Mod: key.Mod, Key: key.Key, Type: term.EventKey})
+			require.True(t, handled, key.String())
+		}
+
+		assertCwdVar(t, filename1, dir)
+	})
+}
+
+func assertCwdVar(t *testing.T, filename string, expectedValue string) {
+	data, err := os.ReadFile(filename)
+	require.NoError(t, err)
+	assert.Equal(t, expectedValue, strings.TrimSuffix(strings.Trim(string(data), " "), "\n"))
 }
 
 func assertAuthVarsPresent(t *testing.T, filename string) {

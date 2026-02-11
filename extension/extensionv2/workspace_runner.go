@@ -143,6 +143,11 @@ func (m *workspaceRunner) StartCommand(ctx context.Context, cmd workspaceapi.Cmd
 		}
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", m.cfg.authTokenEnv, accessToken))
 	}
+	// emulate the same logic as file scheme
+	dir, err := workspaceapi.ExpandPathWithURI(m.workspace.Path(), m.workspace)
+	if err == nil {
+		cmd.Dir = dir
+	}
 	return m.executor.StartCommand(ctx, cmd)
 }
 
