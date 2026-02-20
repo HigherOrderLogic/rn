@@ -2296,6 +2296,7 @@ func TestWorkspaceCommands(t *testing.T) {
 		return iterator.Empty[string](), "", nil
 	})
 
+	m.mu.Lock()
 	err = m.SubscribeCommandForWorkspace(uri1, xyzCmd, sub)
 	require.NoError(t, err)
 	err = m.SubscribeCommandForWorkspace(uri1, abcCmd, sub)
@@ -2308,6 +2309,7 @@ func TestWorkspaceCommands(t *testing.T) {
 	require.NoError(t, err)
 	err = m.SubscribeCommandForWorkspace(uri2, abcCmd, sub)
 	require.NoError(t, err)
+	m.mu.Unlock()
 
 	cases := []handlertest.SequenceTestCase{
 		{":workspacefocus 1>:xyz>:tttt>",

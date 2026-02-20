@@ -45,6 +45,7 @@ import (
 	"github.com/unstablebuild/blue/iterator"
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/idelsp"
+	"github.com/unstablebuild/idelsp/lspcmd"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
@@ -847,21 +848,35 @@ func (h *workspaceManagerHandler) buildExtensions(
 		extension.ConfigResources(config.MapConfig(cleanedExtensionConfig(cfg.cfg))))
 	res = extension.MergeResourceMap(res,
 		extension.SyntaxResources(syntax.NewSearcher(ex.workspace, h.pkgmanager, uri)))
-	browserapiBrowser := newBrowserAdapter(ex.Browser())
-	textapiEditor := newEditorAdapter(ed)
+	apibrowser := newBrowserAdapter(ex.Browser())
+	apieditor := newEditorAdapter(ed)
 
 	lspCallbackCfg := idelsp.CallbackHandlerConfig{
 		Config:           lspConfig(cfg),
 		ScheduleNextTick: cfg.scheduleNextTick,
 	}
-	callbacks := idelsp.NewCallbackHandler(notifications, browserapiBrowser, ex.Browser(),
-		textapiEditor, cwd, uri.String(), lspCallbackCfg)
+	callbacks := idelsp.NewCallbackHandler(notifications, apibrowser, ex.Browser(),
+		apieditor, cwd, uri.String(), lspCallbackCfg)
 	lspConfig := idelsp.Config{Callback: callbacks, MaxRetries: 5}
 	lsp := idelsp.New(uri, ex.workspace,
 		ex.workspace, h.pkgmanager, notifications,
 		ex.Browser(), lspConfig)
 	h.scheduleNextTick(func() {
 		err := ex.comp.SubscribeEvents(idelsp.EditorEvents(), lsp)
+		if err != nil {
+			log.Errorf("subscribe LSP manager: %v", err)
+		}
+		apiHandler, err := lspcmd.AllHandler(lsp, apieditor, apibrowser, apibrowser)
+		if err != nil {
+			log.Errorf("new lsp command handler: %v", err)
+			return
+		}
+		handler := text.FuncCommandHandler(apiHandler.HandleCommand,
+			func(ctx context.Context, cmd textapi.Command) (iterator.Iterator[string], string, error) {
+				ret, err := apiHandler.Complete(ctx, cmd.Name, cmd.Args)
+				return ret, "", err
+			})
+		err = ex.comp.SubscribeCommand(lspcmd.Manual(), handler)
 		if err != nil {
 			log.Errorf("subscribe LSP manager: %v", err)
 		}
