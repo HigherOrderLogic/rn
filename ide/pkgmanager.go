@@ -39,6 +39,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
+	log "github.com/sirupsen/logrus"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/debug"
@@ -119,6 +120,12 @@ func (m *pkgManager) init(
 	m.interrupter = interrupter
 	m.wh = wh
 	m.storage = storage
+	err := m.pkg.ProcessInstalledSettings(context.Background())
+	if err != nil {
+		log.Errorf("process installed settings: %v", err)
+	} else {
+		log.Debugf("processed all installed settings")
+	}
 }
 
 // LibDir installs package via prompt if not installed yet

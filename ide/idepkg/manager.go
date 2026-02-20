@@ -27,6 +27,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -338,6 +339,28 @@ func (m *Manager) ListInstalledPackages(ctx context.Context) (
 	}), nil
 }
 
+// ProcessInstalledSettings processes settings by packages.
+func (m *Manager) ProcessInstalledSettings(ctx context.Context) (ret error) {
+	dit, err := m.storage.List(ctx, nil)
+	if err != nil {
+		return err
+	}
+	it := iterator.FromDocumentIterator[pkgVersionValue](dit)
+	slice, err := iterator.ToSlice(ctx, it)
+	if err != nil {
+		return err
+	}
+	for _, pkv := range slice {
+		dir := makePackageVersionDirname(m.dataDir, pkv.Package, pkv.Version)
+		settings := filepath.Join(dir, "settings.json")
+		err := m.processSettings(pkv.Package, pkv.Version, settings)
+		if err != nil {
+			ret = errors.Join(ret, fmt.Errorf("process %s: %w", settings, err))
+		}
+	}
+	return ret
+}
+
 // ListInstalledPackageVersions lists the bundles installed for the given package.
 func (m *Manager) ListInstalledPackageVersions(ctx context.Context, pkgID string) (
 	iterator.Iterator[release.Version], error,
@@ -512,8 +535,15 @@ func (m *Manager) download(
 	m.log(log.TraceLevel, "extracting package %s version %s", pkgID, version)
 	// copy to pkg/<pkgID>/<version> for managing versions
 	pkgVersionDirname := makePackageVersionDirname(m.dataDir, pkgID, version)
-	executables, err := m.untar(tarfile, pkgVersionDirname)
+	settings, executables, err := m.untar(tarfile, pkgVersionDirname)
 	if err != nil {
+		m.abortDownload(err, pkgID, version, notificationID)
+		return
+	}
+
+	err = m.processSettings(pkgID, version, settings)
+	if err != nil {
+		_ = os.RemoveAll(pkgVersionDirname)
 		m.abortDownload(err, pkgID, version, notificationID)
 		return
 	}
@@ -630,33 +660,89 @@ func (m *Manager) linkLibCopyBin(
 	return nil
 }
 
-func (m *Manager) untar(
-	tarfile *os.File, dirname string,
-) ([]*tar.Header, error) {
+type settings struct {
+	Env map[string]any `json:"env"`
+}
+
+func (m *Manager) processSettings(
+	pkgID string, pkgVersion release.Version, settingsFile string,
+) error {
+	_, err := os.Stat(settingsFile)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stat settings.json: %v", err)
+	}
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(settingsFile)
+	if err != nil {
+		return fmt.Errorf("read settings: %w", err)
+	}
+
+	var set settings
+	err = json.Unmarshal(data, &set)
+	if err != nil {
+		return fmt.Errorf("unmarshal settings: %w", err)
+	}
+
+	var ret error
+	for k, v := range set.Env {
+		// refuse to set anything that's not on this whitelist
+		switch k {
+		case "GOROOT":
+		default:
+			continue
+		}
+		// expand env variables
+		str, ok := v.(string)
+		if !ok {
+			continue
+		}
+		str = os.Expand(str, func(key string) string {
+			switch key {
+			case "RUNE_DATADIR":
+				return m.dataDir
+			case "RUNE_PKG_ID":
+				return pkgID
+			case "RUNE_PKG_VERSION":
+				return string(pkgVersion)
+			}
+			return ""
+		})
+		if err := os.Setenv(k, str); err != nil {
+			ret = errors.Join(ret, err)
+		}
+	}
+
+	return ret
+}
+
+func (m *Manager) untar(tarfile *os.File, dirname string) (string, []*tar.Header, error) {
 	if err := os.MkdirAll(dirname, 0777); err != nil {
 		err = fmt.Errorf("mkdir: %w", err)
-		return nil, err
+		return "", nil, err
 	}
 	_, err := tarfile.Seek(0, 0)
 	if err != nil {
 		err = fmt.Errorf("seek tarball file: %w", err)
-		return nil, err
+		return "", nil, err
 	}
 
 	gzr, err := gzip.NewReader(tarfile)
 	if err != nil {
 		err = fmt.Errorf("new gzip reader: %w", err)
-		return nil, err
+		return "", nil, err
 	}
 	defer gzr.Close()
 
 	executables, err := untar(dirname, gzr)
 	if err != nil {
 		err = fmt.Errorf("untar into %s: %w", dirname, err)
-		return nil, err
+		return "", nil, err
 	}
 
-	return executables, nil
+	settings := filepath.Join(dirname, "settings.json")
+	return settings, executables, nil
 }
 
 func newReadyIterator(
