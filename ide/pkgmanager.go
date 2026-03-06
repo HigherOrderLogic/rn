@@ -38,6 +38,7 @@ import (
 	"github.com/unstablebuild/blue/release"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/schemeapi"
+	"github.com/unstablebuild/rune-go-sdk/api/syntaxapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
@@ -123,12 +124,14 @@ func (m *pkgManager) init(
 	fcs component.FrameCharSet,
 	interrupter term.Interrupter, wh *workspaceManagerHandler,
 	scheduleNextTick func(func()) bool,
+	parser syntaxapi.Parser,
 ) {
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
 		configPath, wm, scheduleNextTick, interrupter,
 		idepkg.WithCrashReportPackage(debug.Package),
 		idepkg.WithCrashReportVersion(debug.Tag),
 		idepkg.WithFrameCharSet(fcs),
+		idepkg.WithSyntaxParser(parser),
 	)
 	m.uc = idepkg.NewUpdateChecker(m.pkg)
 	m.scheduleNextTick = scheduleNextTick

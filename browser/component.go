@@ -799,11 +799,14 @@ func (c *Component) Prompt(
 		c:       c,
 		message: message,
 	}
+	withPadding := make([]string, len(options))
+	for i, o := range options {
+		withPadding[i] = fmt.Sprintf("  %s  ", o)
+	}
 	promptConfig := handler.PromptConfig{
 		PromptConfig: component.PromptConfig{
 			Message:              message,
-			Options:              options,
-			Frame:                c.config.FrameCharSet,
+			Options:              withPadding,
 			BackgroundAttributes: c.config.PromptConfig.BackgroundAttr,
 			MinWidth:             c.config.PromptConfig.MinWidth,
 		},
@@ -811,9 +814,6 @@ func (c *Component) Prompt(
 		OptionBindings: bindings,
 		OptionAttr:     c.config.PromptConfig.TextAttr,
 		HighlightAttr:  c.config.PromptConfig.HighlightAttr,
-	}
-	if c.config.Frame {
-		promptConfig.Frame = component.FrameCharSetDefault()
 	}
 
 	prompt := handler.NewPrompt(promptConfig)
