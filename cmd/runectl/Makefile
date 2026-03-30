@@ -9,6 +9,7 @@ PKG := $(abspath $(ROOT_DIR)/pkg/runectl)
 TAR := $(abspath $(ROOT_DIR)/runectl.tar.gz)
 NOTARIZE_ZIP := $(abspath $(ROOT_DIR)/runectl-notarize.zip)
 DIST_SH := ./dist.sh
+ROOT_DIST_SH := ./cmd/runectl/dist.sh
 
 .PHONY: clean build pkg sign notarize dist dist-notarized
 
@@ -39,10 +40,10 @@ $(TAR): sign
 	cd $(PKG) && tar -czvf $(TAR) .
 
 dist: clean $(TAR)
-	@$(DIST_SH)
+	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
 
 dist-notarized: clean notarize $(TAR)
-	@$(DIST_SH)
+	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
 else
 sign: pkg
 	@echo "Skipping codesign (not on macOS)"
@@ -54,7 +55,7 @@ $(TAR): pkg
 	cd $(PKG) && tar -czvf $(TAR) .
 
 dist: clean $(TAR)
-	@$(DIST_SH)
+	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
 
 dist-notarized: dist
 	@echo "Skipping notarized dist (not on macOS)"

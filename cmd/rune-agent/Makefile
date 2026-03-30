@@ -9,6 +9,7 @@ PKG := $(abspath $(ROOT_DIR)/pkg/rune-agent)
 TAR := $(abspath $(ROOT_DIR)/rune-agent.tar.gz)
 NOTARIZE_ZIP := $(abspath $(ROOT_DIR)/rune-agent-notarize.zip)
 DIST_SH := ./dist.sh
+ROOT_DIST_SH := ./cmd/rune-agent/dist.sh
 
 .PHONY: clean build pkg sign notarize dist dist-notarized
 
@@ -40,10 +41,10 @@ $(TAR): sign
 	cd $(PKG) && tar -czvf $(TAR) .
 
 dist: clean $(TAR)
-	@$(DIST_SH)
+	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
 
 dist-notarized: clean notarize $(TAR)
-	@$(DIST_SH)
+	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
 else
 sign: pkg
 	@echo "Skipping codesign (not on macOS)"
@@ -55,7 +56,7 @@ $(TAR): pkg
 	cd $(PKG) && tar -czvf $(TAR) .
 
 dist: clean $(TAR)
-	@$(DIST_SH)
+	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
 
 dist-notarized: dist
 	@echo "Skipping notarized dist (not on macOS)"
