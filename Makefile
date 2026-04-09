@@ -26,13 +26,15 @@ EXEC_PKGS=$(patsubst $(BIN)/%,./cmd/%,$(EXECS))
 RELEASE_EXEC_PKGS=$(EXEC_PKGS)
 GOMOCKS=$(wildcard **/**/*_gomock.go) $(wildcard **/*_gomock.go)
 RELEASE_FILES=$(wildcard release/*)
-.PHONY: debug clean test coverage generate sixdev rune rune-agent ox-api claudeimport \
+
+.PHONY: debug clean test coverage generate sixdev rune rune-agent extension_go ox-api claudeimport \
 	format docker-build-ci-gcp docker-push-ci-gcp cross-compile lint license assert_license \
 	rune-release rune-release-amd64 rune-release-arm64 rune-make-release \
 	rune-docker-build rune-docker-run rune-docker-build-gcp rune-docker-push-gcp \
 	rune-docker-build-ci-gcp rune-docker-push-ci-gcp rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize rune-agent-dist rune-agent-dist-notarized \
+	extension-go-pkg extension-go-sign extension-go-notarize extension-go-dist extension-go-dist-notarized \
 	runectl-pkg runectl-sign runectl-notarize runectl-dist runectl-dist-notarized \
 	notary-credentials runectl
 
@@ -56,6 +58,10 @@ rune: $(BIN)/rune
 rune-agent: CGO_ENABLED=CGO_ENABLED=1
 rune-agent: GOPRIVATE=github.com/unstablebuild,unstable.build/*
 rune-agent: $(BIN)/rune-agent
+
+extension_go: CGO_ENABLED=CGO_ENABLED=1
+extension_go: GOPRIVATE=github.com/unstablebuild,unstable.build/*
+extension_go: $(BIN)/extension_go
 
 ox-api: CGO_ENABLED=CGO_ENABLED=1
 ox-api: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -103,6 +109,7 @@ lint:
 clean:
 	@rm -rf $(BIN) $(TARGET)
 	@$(MAKE) -C cmd/rune-agent clean
+	@$(MAKE) -C cmd/extension_go clean
 	@$(MAKE) -C cmd/runectl clean
 	@$(MAKE) -C cmd/rune clean
 
@@ -219,6 +226,21 @@ rune-agent-dist:
 
 rune-agent-dist-notarized:
 	@$(MAKE) -C cmd/rune-agent dist-notarized
+
+extension-go-pkg:
+	@$(MAKE) -C cmd/extension_go pkg
+
+extension-go-sign:
+	@$(MAKE) -C cmd/extension_go sign
+
+extension-go-notarize:
+	@$(MAKE) -C cmd/extension_go notarize
+
+extension-go-dist:
+	@$(MAKE) -C cmd/extension_go dist
+
+extension-go-dist-notarized:
+	@$(MAKE) -C cmd/extension_go dist-notarized
 
 runectl-pkg:
 	@$(MAKE) -C cmd/runectl pkg
