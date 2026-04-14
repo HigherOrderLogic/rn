@@ -8,6 +8,8 @@ FROM --platform=$BUILDPLATFORM golang:1.26-bookworm AS build
 ARG TARGETOS
 ARG TARGETARCH
 ARG GIT_SSH_KEY
+ARG RUNE_BUILD_TAG
+ARG RUNE_BUILD_COMMIT
 
 WORKDIR /src
 
@@ -79,6 +81,8 @@ RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts
 #   rune.app/share/icons/hicolor/{512x512,1024x1024}/apps/rune.png
 RUN --mount=type=cache,target=/root/.cache/go-build \
 	set -eux; \
+	: "${RUNE_BUILD_TAG:?RUNE_BUILD_TAG build arg is required}"; \
+	: "${RUNE_BUILD_COMMIT:?RUNE_BUILD_COMMIT build arg is required}"; \
 	case "$TARGETARCH" in \
 		amd64) \
 			CC=x86_64-linux-gnu-gcc; \
@@ -100,7 +104,11 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	CGO_LDFLAGS='-Wl,-rpath,$ORIGIN/../lib' \
 	GOOS=$TARGETOS \
 	GOARCH=$TARGETARCH \
-	/usr/local/go/bin/go build -tags=ebitensinglethread -o /out/rune.app/bin/rune ./cmd/rune; \
+	/usr/local/go/bin/go build \
+		-tags=ebitensinglethread \
+		-ldflags="-X unstable.build/go-tui/debug.Tag=$RUNE_BUILD_TAG -X unstable.build/go-tui/debug.Commit=$RUNE_BUILD_COMMIT -X unstable.build/go-tui/debug.Package=rune" \
+		-o /out/rune.app/bin/rune \
+		./cmd/rune; \
 	\
 	echo "--- artifact validation ---"; \
 	file /out/rune.app/bin/rune | grep 'ELF 64-bit LSB'; \

@@ -175,6 +175,8 @@ linux-cross-compile:
 		-f deploy/rune-linux/Dockerfile \
 		--platform $(RUNE_LINUX_TARGET_OS)/$(RUNE_LINUX_TARGET_ARCH) \
 		--build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" \
+		--build-arg RUNE_BUILD_TAG="$(VERSION)" \
+		--build-arg RUNE_BUILD_COMMIT="$(COMMIT)" \
 		--output type=local,dest=$(RUNE_LINUX_OUTPUT_DIR) \
 		.
 
