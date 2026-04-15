@@ -177,18 +177,20 @@ func (w Window) Close() error {
 	}
 
 	// first find a candidate to be the next
-	// window in focus, prevFocus takes priority, otherwise
-	// find it via  wm.
+	// window in focus. If another floating window is open, prefer the frontmost
+	// one so focus stays aligned with the visible z-order. Otherwise, prevFocus
+	// takes priority, and then we find a candidate via wm.
 	isFocus := w.wm.focus == w
 	tile, ok := w.wm.Shiftable()
-	if isFocus && w.wm.prevFocus != (Window{}) {
-		ok = true
-		tile = w.wm.prevFocus
-	} else if isFocus {
+	if isFocus {
 		if floating, floatingOK := w.wm.findOtherFloatingWindow(w); floatingOK {
 			ok = true
 			tile = floating
 		}
+	}
+	if isFocus && !ok && w.wm.prevFocus != (Window{}) {
+		ok = true
+		tile = w.wm.prevFocus
 	}
 
 	// then close the window, so parent's other
@@ -245,9 +247,11 @@ func (w Window) SetFrameAttr(attr term.Attributes) (term.Attributes, bool) {
 func (wm *WindowManager) findOtherFloatingWindow(w Window) (Window, bool) {
 	var focus Window
 	wm.Iterate(func(candidate Window) {
-		if focus != (Window{}) || !candidate.IsFloating() || candidate.ID() == w.ID() {
+		if !candidate.IsFloating() || candidate.ID() == w.ID() {
 			return
 		}
+		// Floating windows are iterated in draw order, so the last matching
+		// candidate is the frontmost remaining floating window.
 		focus = candidate
 	})
 	return focus, focus != (Window{})

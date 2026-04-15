@@ -467,6 +467,31 @@ func TestWindowManagerClose(t *testing.T) {
 	}
 }
 
+func TestWindowManagerCloseFloatingFocusesFrontmostRemainingFloating(t *testing.T) {
+	cfg := DefaultWindowManagerConfig()
+	wm := NewWindowManager(handler.NewTestHandler(), cfg)
+	wm.Resize(20, 8)
+
+	f1 := wm.FloatingWindow(
+		handler.StaticFloating(handler.NewTestHandler(), 4, 4),
+		component.FloatingConfig{Alignment: compapi.AlignmentCentered},
+	)
+	f2 := wm.FloatingWindow(
+		handler.StaticFloating(handler.NewTestHandler(), 4, 4),
+		component.FloatingConfig{Alignment: compapi.AlignmentCentered},
+	)
+	f3 := wm.FloatingWindow(
+		handler.StaticFloating(handler.NewTestHandler(), 4, 4),
+		component.FloatingConfig{Alignment: compapi.AlignmentCentered},
+	)
+
+	wm.SetFocus(f3)
+	require.NoError(t, f3.Close())
+
+	assert.Equal(t, f2.ID(), wm.Focus().ID())
+	assert.NotEqual(t, f1.ID(), wm.Focus().ID())
+}
+
 func testWindowManagerContent(t *testing.T, frame bool) {
 	cfg := DefaultWindowManagerConfig()
 	cfg.Frame = frame
