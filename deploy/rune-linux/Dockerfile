@@ -10,6 +10,7 @@ ARG TARGETARCH
 ARG GIT_SSH_KEY
 ARG RUNE_BUILD_TAG
 ARG RUNE_BUILD_COMMIT
+ARG RUNE_RELEASE_TAR
 
 WORKDIR /src
 
@@ -153,5 +154,14 @@ RUN set -eux; \
 	cp /src/extra/osx/Rune.app/Contents/Resources/zdot/.zshenv /out/rune.app/share/zdot/; \
 	cp /src/extra/osx/Rune.app/Contents/Resources/zdot/.zshrc /out/rune.app/share/zdot/
 
+# Package the Linux bundle inside the Linux container so host-specific metadata
+# such as macOS xattrs cannot be written into the release archive. Use ustar for
+# broad compatibility with old and new Linux tar implementations.
+RUN set -eux; \
+	: "${RUNE_RELEASE_TAR:?RUNE_RELEASE_TAR build arg is required}"; \
+	cd /out; \
+	tar --format=ustar --no-xattrs --no-acls -czf "$RUNE_RELEASE_TAR" rune.app; \
+	tar -tzf "$RUNE_RELEASE_TAR" >/dev/null
+
 FROM scratch AS artifact
-COPY --from=build /out/rune.app/ /rune.app/
+COPY --from=build /out/ /

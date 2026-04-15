@@ -24,7 +24,10 @@ The `make rune-linux-cross-compile` rule works by:
    `rpath=$ORIGIN/../lib` so the binary finds its bundled libraries
 6. copying each NEEDED shared library (and their transitive deps) into
    `rune.app/lib/`, following symlinks so every file is a real ELF object
-7. exporting the `rune.app/` directory from the final scratch stage
+7. packaging `rune.app/` into a `ustar` `.tar.gz` inside the Linux container
+   so host-specific metadata such as macOS xattrs cannot enter the archive
+8. exporting both the `rune.app/` directory and `.tar.gz` from the final
+   scratch stage
 
 ## Build commands
 
@@ -47,8 +50,8 @@ make rune-linux-cross-compile RUNE_LINUX_TARGET_ARCH=arm64
 To build and package a release tarball:
 
 ```bash
-make rune-release-linux-amd64   # -> target/rune-release-linux-amd64-<tag>.tar.gz
-make rune-release-linux-arm64   # -> target/rune-release-linux-arm64-<tag>.tar.gz
+make rune-release-linux-amd64   # -> target/rune_linux_amd64/rune-release-linux-amd64-<tag>.tar.gz
+make rune-release-linux-arm64   # -> target/rune_linux_arm64/rune-release-linux-arm64-<tag>.tar.gz
 ```
 
 To build, package, and upload via `bluectl release upload`:

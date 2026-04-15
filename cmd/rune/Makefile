@@ -8,6 +8,7 @@ NOTARY_PROFILE ?= notary-profile
 RUNE_LINUX_TARGET_OS ?= linux
 RUNE_LINUX_TARGET_ARCH ?= amd64
 RUNE_LINUX_OUTPUT_DIR ?= $(TARGET)/rune_$(RUNE_LINUX_TARGET_OS)_$(RUNE_LINUX_TARGET_ARCH)
+RUNE_LINUX_RELEASE_TAR ?= rune-release-$(RUNE_LINUX_TARGET_OS)-$(RUNE_LINUX_TARGET_ARCH)-$(VERSION).tar.gz
 
 COMMON_LDFLAGS=-X unstable.build/go-tui/debug.Tag=$$(git describe --tags) -X unstable.build/go-tui/debug.Commit=$$(git rev-parse --short HEAD)
 GOFLAGS=-ldflags="$(COMMON_LDFLAGS) -X unstable.build/go-tui/debug.Package=six"
@@ -177,27 +178,26 @@ linux-cross-compile:
 		--build-arg GIT_SSH_KEY="$$GIT_SSH_KEY" \
 		--build-arg RUNE_BUILD_TAG="$(VERSION)" \
 		--build-arg RUNE_BUILD_COMMIT="$(COMMIT)" \
+		--build-arg RUNE_RELEASE_TAR="$(RUNE_LINUX_RELEASE_TAR)" \
 		--output type=local,dest=$(RUNE_LINUX_OUTPUT_DIR) \
 		.
 
 release-linux-amd64:
-	@RUNE_LINUX_TARGET_ARCH=amd64 $(MAKE) linux-cross-compile
-	@cd $(TARGET)/rune_linux_amd64 && tar -czvf $(TARGET)/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz rune.app
+	@RUNE_LINUX_TARGET_ARCH=amd64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz $(MAKE) linux-cross-compile
 
 release-linux-arm64:
-	@RUNE_LINUX_TARGET_ARCH=arm64 $(MAKE) linux-cross-compile
-	@cd $(TARGET)/rune_linux_arm64 && tar -czvf $(TARGET)/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz rune.app
+	@RUNE_LINUX_TARGET_ARCH=arm64 RUNE_LINUX_RELEASE_TAR=rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz $(MAKE) linux-cross-compile
 
 dist-linux-amd64: release-linux-amd64
 	@cd $(ROOT_DIR) && \
-		BLUE_RELEASE_TAR=$(TARGET)/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
+		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_amd64/rune-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=amd64 \
 		./cmd/rune/dist.sh
 
 dist-linux-arm64: release-linux-arm64
 	@cd $(ROOT_DIR) && \
-		BLUE_RELEASE_TAR=$(TARGET)/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
+		BLUE_RELEASE_TAR=$(TARGET)/rune_linux_arm64/rune-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=arm64 \
 		./cmd/rune/dist.sh
