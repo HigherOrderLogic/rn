@@ -25,6 +25,7 @@ package syntax
 
 import (
 	"context"
+	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
@@ -97,6 +98,54 @@ var defaultCaptureNamesAttributes = map[string]term.Attributes{
 	"number":           {Fg: tcell.ColorRed},
 	"constant.builtin": {},
 	"comment":          {Fg: tcell.ColorBlue},
+
+	// Markup captures are emitted by common tree-sitter queries for markdown,
+	// markdown_inline, djot, rst, latex, typst, vimdoc, gitcommit, pod, and
+	// other prose/markup-like languages.
+	"markup.heading":       {Fg: tcell.ColorYellow},
+	"markup.raw":           {Fg: tcell.ColorFuchsia},
+	"markup.raw.delimiter": {Fg: tcell.ColorYellow},
+	"markup.link":          {Fg: tcell.ColorYellow},
+	"markup.link.url":      {Fg: tcell.ColorFuchsia},
+	"markup.link.label":    {Fg: tcell.ColorYellow},
+	"markup.link.text":     {Fg: tcell.ColorYellow},
+	"markup.list":          {Fg: tcell.ColorYellow},
+	"markup.quote":         {Fg: tcell.ColorBlue},
+	"markup.strong":        {Fg: tcell.ColorYellow},
+	"markup.italic":        {Fg: tcell.ColorYellow},
+	"markup.strikethrough": {Fg: tcell.ColorBlue},
+	"markup.underline":     {Fg: tcell.ColorYellow},
+	"markup.math":          {Fg: tcell.ColorFuchsia},
+
+	// Legacy markdown captures used by older upstream queries.
+	"text.title":     {Fg: tcell.ColorYellow},
+	"text.literal":   {Fg: tcell.ColorFuchsia},
+	"text.uri":       {Fg: tcell.ColorFuchsia},
+	"text.reference": {Fg: tcell.ColorYellow},
+	"text.emphasis":  {Fg: tcell.ColorYellow},
+	"text.strong":    {Fg: tcell.ColorYellow},
+}
+
+func captureNameAttributes(
+	captureNamesAttributes map[string]term.Attributes, name string,
+) term.Attributes {
+	for {
+		if attr, ok := captureNamesAttributes[name]; ok {
+			return attr
+		}
+		if attr, ok := defaultCaptureNamesAttributes[name]; ok {
+			return attr
+		}
+		if !strings.HasPrefix(name, "markup.") && !strings.HasPrefix(name, "text.") {
+			return term.Attributes{}
+		}
+
+		idx := strings.LastIndexByte(name, '.')
+		if idx < 0 {
+			return term.Attributes{}
+		}
+		name = name[:idx]
+	}
 }
 
 type fnLocationList struct {

@@ -472,6 +472,62 @@ editor:
       fg: default
     comment:
       fg: blue
+    markup.heading:
+      fg: yellow
+      flags: bold
+    markup.raw:
+      fg: magenta
+    markup.raw.delimiter:
+      fg: yellow
+    markup.link:
+      fg: cyan
+      flags: underline
+    markup.link.url:
+      fg: cyan
+      flags: underline
+    markup.link.label:
+      fg: yellow
+      flags: underline
+    markup.link.text:
+      fg: cyan
+      flags: underline
+    markup.list:
+      fg: yellow
+      flags: bold
+    markup.quote:
+      fg: blue
+      flags: italic
+    markup.strong:
+      fg: yellow
+      flags: bold
+    markup.italic:
+      fg: yellow
+      flags: italic
+    markup.strikethrough:
+      fg: blue
+      flags: strikethrough
+    markup.underline:
+      fg: yellow
+      flags: underline
+    markup.math:
+      fg: magenta
+    text.title:
+      fg: yellow
+      flags: bold
+    text.literal:
+      fg: magenta
+    text.uri:
+      fg: cyan
+      flags: underline
+    text.reference:
+      fg: yellow
+      flags: underline
+    text.emphasis:
+      fg: yellow
+      flags: italic
+    text.strong:
+      fg: yellow
+      flags: bold
   # status_bar section configures the editor's bottom status bar.
   status_bar:
     # enabled determines whether the editor renders the status bar at all

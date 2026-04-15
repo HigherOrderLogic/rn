@@ -777,10 +777,7 @@ func getHighlights(
 				continue
 			}
 			name := captureNames[cap.Index]
-			attr, ok := captureNamesAttributes[name]
-			if !ok {
-				attr = defaultCaptureNamesAttributes[name]
-			} // if not ok, zero value attr works
+			attr := captureNameAttributes(captureNamesAttributes, name)
 			locations = append(locations, textapi.Location{
 				Attr: attr,
 				From: from,
