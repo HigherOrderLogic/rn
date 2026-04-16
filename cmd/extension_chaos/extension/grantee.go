@@ -26,15 +26,7 @@ package extension
 import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
-	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/extension/extutil"
 )
-
-// Grantee returns this extension's Grantee and the permissions required to run it.
-func Grantee() (extension.Grantee, []extensionapi.Permission) {
-	return extutil.NewEditorEventHandler(ChaosHandlerCommands, newChaosCommandHandler,
-		ChaosHandlerEvents, ChaosHandlerPermissions...)
-}
 
 var (
 	// ChaosHandlerCommands returns the commands that this extension is
@@ -77,8 +69,8 @@ var (
 		textapi.EventTypeUnfocus,
 		textapi.EventTypeCursor,
 	}
-	// ChaosHandlerPermissions are the required permissions for this
-	// extension to run.
+	// ChaosHandlerPermissions are the required permissions for this extension to run.
+	// Deprecated: use NewExtension metadata instead.
 	ChaosHandlerPermissions = []extensionapi.Permission{
 		extensionapi.PermissionBrowserWindowManager,
 		extensionapi.PermissionEditor,

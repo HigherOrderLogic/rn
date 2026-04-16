@@ -40,10 +40,6 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/go-tui/api/browserapi/browserext"
-	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/extension/extutil"
-	"unstable.build/go-tui/rpc"
 )
 
 const (
@@ -86,28 +82,50 @@ type chaosCommandHandler struct {
 	commandLatency atomic.Value
 }
 
+// NewExtension returns the chaos extension and its metadata.
+func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
+	return workspaceExtension{}, extensionapi.Metadata{
+		DeveloperID:      "Unstable Build",
+		DeveloperEmail:   "it@unstable.build",
+		DeveloperKey:     "064D4ABCFA6D9338",
+		ExtensionID:      "chaos",
+		ExtensionName:    "Chaos Extension",
+		ExtensionVersion: "development",
+		Permissions: extensionapi.NewPermissions(
+			extensionapi.PermissionBrowserWindowManager,
+			extensionapi.PermissionEditor,
+			extensionapi.PermissionCommands,
+		),
+	}
+}
+
+type workspaceExtension struct{}
+
+func (workspaceExtension) ExtendWorkspace(
+	ctx context.Context, w *extensionapi.Workspace, cfg config.Config,
+) error {
+	h := newChaosCommandHandler(ctx, w.Editor(ctx), w.WindowManager(ctx), cfg)
+	for _, cmd := range ChaosHandlerCommands {
+		if err := w.RegisterCommand(cmd, h); err != nil {
+			return fmt.Errorf("register command %q: %w", cmd.Name, err)
+		}
+	}
+	if err := h.ed.SubscribeEvents(ChaosHandlerEvents, h); err != nil {
+		return fmt.Errorf("subscribe events: %w", err)
+	}
+	return nil
+}
+
 func newChaosCommandHandler(
-	ctx context.Context, ed textapi.Editor, grants []extension.Grant,
-	broker rpc.MuxBroker, pconfig config.Config,
-) (extutil.CommandEventHandler, error) {
+	ctx context.Context, ed textapi.Editor, wm browserapi.WindowManager, pconfig config.Config,
+) *chaosCommandHandler {
 	ret := new(chaosCommandHandler)
 	ret.ed = ed
+	ret.wm = wm
 	ret.ctx, ret.cancelCtx = context.WithCancel(context.Background())
 	ret.eventLatency.Store(time.Duration(0))
 	ret.commandLatency.Store(time.Duration(0))
-
-	var err error
-	for _, grant := range grants {
-		switch grant.Permission {
-		case extensionapi.PermissionBrowserWindowManager:
-			ret.wm, err = browserext.WindowManager(ctx, grant, broker)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
-	return ret, nil
+	return ret
 }
 
 func (h *chaosCommandHandler) Handle(ctx context.Context, ev textapi.Event) bool {

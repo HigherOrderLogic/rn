@@ -47,7 +47,6 @@ import (
 	"github.com/unstablebuild/blue/release/cdnrelease"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
-	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
@@ -95,8 +94,6 @@ var (
 	// marked hidden
 	flagWorkspaceServer = flag.StringP("workspace-server", "x", "",
 		"Run a workspace server from standard input and output")
-	flagExtension = flag.String("rune-extension", "",
-		"Run as an instance of Rune's default extensions")
 	flagExtensionRunner = flag.String("rune-extension-runner", os.Args[0],
 		"Executable to use to run extensions")
 	flagWorkspaceServerLogFile = flag.StringP("workspace-server-log", "o", "",
@@ -263,9 +260,6 @@ func main() {
 	if err := flag.CommandLine.MarkHidden("workspace-server"); err != nil {
 		panic(err)
 	}
-	if err := flag.CommandLine.MarkHidden("rune-extension"); err != nil {
-		panic(err)
-	}
 	if err := flag.CommandLine.MarkHidden("workspace-server-log"); err != nil {
 		panic(err)
 	}
@@ -290,7 +284,7 @@ func main() {
 	exec, _ := os.Executable()
 	// If no manual tui/gui flag was set, assume we were launched as a desktop
 	// app and inject the same defaults the platform launcher would normally pass.
-	if !*flagGUI && !*flagTUI && *flagExtension == "" && *flagWorkspaceServer == "" {
+	if !*flagGUI && !*flagTUI && *flagWorkspaceServer == "" {
 		defaults, ok := appLaunchArgs(runtime.GOOS, exec)
 		if ok {
 			go initPATH(*flagDataPath)
@@ -408,22 +402,6 @@ func run() int {
 		err = fmt.Errorf("new extension runner: %v", err)
 		fmt.Fprintf(os.Stderr, "%s", err)
 		return 1
-	}
-
-	if *flagExtension != "" {
-		extension, meta, err := runner.Extension(*flagExtension)
-		if err != nil {
-			err = fmt.Errorf("extension %q: %v", *flagExtension, err)
-			fmt.Fprintf(os.Stderr, "%s", err)
-			return 1
-		}
-		err = extensionapi.ServeWorkspaceExtension(extension, meta)
-		if err != nil {
-			err = fmt.Errorf("extension %q: %v", *flagExtension, err)
-			fmt.Fprintf(os.Stderr, "%s", err)
-			return 1
-		}
-		return 0
 	}
 
 	if *flagConfigPath != defaultConfigPath {
