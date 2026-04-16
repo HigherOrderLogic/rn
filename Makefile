@@ -33,6 +33,7 @@ RELEASE_FILES=$(wildcard release/*)
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize rune-agent-dist rune-agent-dist-notarized \
+	fuzzy-search fuzzy-search-pkg fuzzy-search-dist \
 	runectl-pkg runectl-sign runectl-notarize runectl-dist runectl-dist-notarized \
 	notary-credentials runectl \
 	rune-release-linux-amd64 rune-release-linux-arm64 \
@@ -106,6 +107,7 @@ lint:
 clean:
 	@rm -rf $(BIN) $(TARGET)
 	@$(MAKE) -C cmd/rune-agent clean
+	@$(MAKE) -C cmd/extension_fuzzy_search clean
 	@$(MAKE) -C cmd/runectl clean
 	@$(MAKE) -C cmd/rune clean
 
@@ -243,6 +245,15 @@ rune-agent-dist: clean
 
 rune-agent-dist-notarized: clean
 	@$(MAKE) -C cmd/rune-agent dist-notarized
+
+fuzzy-search: CGO_ENABLED=CGO_ENABLED=1
+fuzzy-search: $(BIN)/extension_fuzzy_search
+
+fuzzy-search-pkg:
+	@$(MAKE) -C cmd/extension_fuzzy_search pkg
+
+fuzzy-search-dist: clean
+	@$(MAKE) -C cmd/extension_fuzzy_search dist
 
 runectl-pkg:
 	@$(MAKE) -C cmd/runectl pkg

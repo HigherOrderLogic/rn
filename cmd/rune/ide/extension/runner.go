@@ -25,7 +25,6 @@ package extension
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"syscall"
@@ -38,37 +37,16 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"unstable.build/go-tui/browser"
-	colorPalette "unstable.build/go-tui/cmd/extension_color_palette/extension"
-	fuzzyFile "unstable.build/go-tui/cmd/extension_fuzzy_file/extension"
-	fuzzyLine "unstable.build/go-tui/cmd/extension_fuzzy_line/extension"
-	fuzzySyntax "unstable.build/go-tui/cmd/extension_fuzzy_syntax/extension"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
 )
 
-// NewRunner returns an instance of ide.Extensions that knows
-// about Rune's default extensions, so it's able to map an empty
-// path to the extension's correct path.
-//
-// It exposes a extension.Grantee for each of the built-in extensions.
-// See New for more details.
+// NewRunner returns an extension runner for Rune workspace extensions.
 func NewRunner(
 	ctx context.Context, locker sync.Locker, dataDir, arg0 string,
 ) (*Extensions, error) {
-	legacyBuiltinExtensions := map[string]func() (
-		extension.Grantee, []extensionapi.Permission,
-	){
-		"color_palette": colorPalette.Grantee,
-		"fuzzy_file":    fuzzyFile.Grantee,
-		"fuzzy_line":    fuzzyLine.Grantee,
-		"fuzzy_syntax":  fuzzySyntax.Grantee,
-	}
-
-	builtinExtensions := map[string]func() (
-		extensionapi.WorkspaceExtension, extensionapi.Metadata){}
-
 	extensionOpts := []extensionv2.Option{
 		extensionv2.WithPackageName(debug.Package),
 		extensionv2.WithPackageVersion(debug.Tag),
@@ -84,23 +62,13 @@ func NewRunner(
 	}
 
 	return &Extensions{
-		runner:                    runner,
-		arg0:                      arg0,
-		extensionIDToGrantee:      legacyBuiltinExtensions,
-		extensionIDToWorkspaceExt: builtinExtensions,
+		runner: runner,
 	}, nil
 }
 
-// Extensions is a ide.Extensions implementation that also provides
-// a extension.Grantee for rune's default extensions to run in a
-// separete process.
+// Extensions is a ide.Extensions implementation.
 type Extensions struct {
-	runner               ide.ExtensionsRunner
-	arg0                 string
-	extensionIDToGrantee map[string]func() (
-		extension.Grantee, []extensionapi.Permission)
-	extensionIDToWorkspaceExt map[string]func() (
-		extensionapi.WorkspaceExtension, extensionapi.Metadata)
+	runner ide.ExtensionsRunner
 }
 
 // WorkspaceExtensionsRunner satisfies ide.ExtensionsRunner.
@@ -118,56 +86,17 @@ func (p *Extensions) WorkspaceExtensionsRunner(
 	if err != nil {
 		return nil, err
 	}
-	return extensionsRunner{
-		dataDir:                   dataDir,
-		arg0:                      p.arg0,
-		other:                     other,
-		extensionIDToGrantee:      p.extensionIDToGrantee,
-		extensionIDToWorkspaceExt: p.extensionIDToWorkspaceExt,
-	}, nil
-}
-
-// Extension returns a workspace extension that is capable of serving any of Rune's
-// default extensions.
-func (p *Extensions) Extension(extensionID string) (
-	extensionapi.WorkspaceExtension, extensionapi.Metadata, error,
-) {
-	extensionFn, ok := p.extensionIDToWorkspaceExt[extensionID]
-	if ok {
-		extension, meta := extensionFn()
-		return extension, meta, nil
-	}
-
-	granteeFn, ok := p.extensionIDToGrantee[extensionID]
-	if ok {
-		grantee, perms := granteeFn()
-		extension, metadata := extensionv2.NewGranteeShim(extensionID, extensionID,
-			debug.Tag, grantee, perms...)
-		return extension, metadata, nil
-	}
-
-	err := errors.New("unknown built-in extension")
-	return nil, extensionapi.Metadata{}, err
+	return extensionsRunner{other: other}, nil
 }
 
 type extensionsRunner struct {
-	arg0                 string
-	dataDir              string
-	other                extension.Runner
-	extensionIDToGrantee map[string]func() (
-		extension.Grantee, []extensionapi.Permission)
-	extensionIDToWorkspaceExt map[string]func() (
-		extensionapi.WorkspaceExtension, extensionapi.Metadata)
+	other extension.Runner
 }
 
 func (p extensionsRunner) Run(extensionID, path string, config config.Config) (ret error) {
 	const runCallType = "runExtension"
 	traceID := trace.New()
 
-	// override path if this is one of the built-in extensions
-	if _, ok := p.extensionIDToGrantee[extensionID]; ok {
-		path = fmt.Sprintf("%s --datadir=%s --rune-extension=%s", p.arg0, p.dataDir, extensionID)
-	}
 	fields := []logging.Field{
 		{Key: "extensionID", Value: extensionID},
 		{Key: "path", Value: path},

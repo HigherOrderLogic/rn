@@ -140,45 +140,46 @@ editor:
       bg: gray
 
 extensions:
-  fuzzy_file:
+  fuzzy_search:
+    path: extension_fuzzy_search
     config:
-      history_key: <c-p>
-      element_attr:
-        fg: *default
-        bg: *background
-      matched_text_attr:
-        fg: *highlight2
-        bg: *background
-        flags:
-          - bold
-      count_attr:
-        fg: *default
-        bg: *background
-      focus_element_attr:
-        fg: *highlight
-        bg: *background
-        flags:
-          - bold
-  fuzzy_line:
-    config:
-      history_key: <c-\\>
-      element_attr:
-        fg: *default
-        bg: *background
-      matched_text_attr:
-        fg: *highlight2
-        bg: *background
-        flags:
-          - bold
-          - italic
-      count_attr:
-        fg: *default
-        bg: *background
-      focus_element_attr:
-        fg: *highlight
-        bg: *background
-        flags:
-          - bold
+      file:
+        history_key: <c-p>
+        element_attr:
+          fg: *default
+          bg: *background
+        matched_text_attr:
+          fg: *highlight2
+          bg: *background
+          flags:
+            - bold
+        count_attr:
+          fg: *default
+          bg: *background
+        focus_element_attr:
+          fg: *highlight
+          bg: *background
+          flags:
+            - bold
+      line:
+        history_key: <c-\\>
+        element_attr:
+          fg: *default
+          bg: *background
+        matched_text_attr:
+          fg: *highlight2
+          bg: *background
+          flags:
+            - bold
+            - italic
+        count_attr:
+          fg: *default
+          bg: *background
+        focus_element_attr:
+          fg: *highlight
+          bg: *background
+          flags:
+            - bold
 
 command:
   key_bindings:

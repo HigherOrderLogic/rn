@@ -29,8 +29,8 @@ import (
 	_ "net/http/pprof"
 
 	log "github.com/sirupsen/logrus"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"unstable.build/go-tui/cmd/extension_rtc/extension"
-	"unstable.build/go-tui/extension/extensionv2"
 )
 
 var (
@@ -51,6 +51,9 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:2869", nil))
 	}()
 
-	grantee, perms := extension.Grantee()
-	extensionv2.ServeLegacy("rtc", "RTC", Version, grantee, perms...)
+	ext, meta := extension.NewExtension()
+	meta.ExtensionVersion = Version
+	if err := extensionapi.ServeWorkspaceExtension(ext, meta); err != nil {
+		log.Fatal(err)
+	}
 }

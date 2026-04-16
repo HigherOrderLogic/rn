@@ -45,21 +45,13 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
-	"unstable.build/go-tui/api/browserapi/browserext"
-	"unstable.build/go-tui/api/storageapi/storageext"
-	"unstable.build/go-tui/api/textapi/textext"
-	"unstable.build/go-tui/api/workspaceapi/workspaceext"
-	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/extension/extutil"
 	"unstable.build/go-tui/handler/search"
-	"unstable.build/go-tui/rpc"
 	"unstable.build/go-tui/text/modeless"
 )
 
 const (
-	readerBufferSize    = 64 * 1024
-	defaultStoreTimeout = 5 * time.Second
-	defaultMaxHistory   = 2000
+	readerBufferSize  = 64 * 1024
+	defaultMaxHistory = 2000
 )
 
 // Permissions returns the permissions required by this extension.
@@ -76,19 +68,32 @@ func Permissions() []extensionapi.Permission {
 	}
 }
 
-// New returns a tui.Handler that employs a search.List
-// to interactively search the command's stdout lines.
-//
-// The given context is passed back to the fallback
-// function along with any values stored with it.
-func New(
-	ctx context.Context, grants []extension.Grant, broker rpc.MuxBroker,
-	invokeWindow browserapi.Window, cfg config.Config,
+// Clients contains the workspace clients required by NewV2.
+type Clients struct {
+	Storage        storageapi.Service
+	ResourceOpener browserapi.ResourceOpener
+	WindowManager  browserapi.WindowManager
+	Interrupter    term.Interrupter
+	Notifications  browserapi.Notifications
+	Editor         textapi.Editor
+	FileSystem     workspaceapi.FileSystem
+	Executor       workspaceapi.Executor
+}
+
+// RedispatchHandler is a browser handler that can handle repeated command
+// invocations while its split window is already open.
+type RedispatchHandler interface {
+	browserapi.Handler
+	Redispatch(context.Context, textapi.Command) error
+}
+
+// NewV2 returns a tui handler that uses native extensionv2 workspace clients.
+func NewV2(
+	ctx context.Context, clients Clients, invokeWindow browserapi.Window, cfg config.Config,
 	historyKey term.KeyComb, historyDocumentID string, command string,
 	fallback func(workspaceapi.FileSystem, context.Context) (iterator.Iterator[string], error),
 	getResource func(exec workspaceapi.FileSystem, line string) (workspaceapi.URI, term.Coordinates, bool),
-) (extutil.RedispatchHandler, error) {
-	h := new(fuzzyFinderHandler)
+) (RedispatchHandler, error) {
 	maxHistory, err := cfg.GetInt("history")
 	if err != nil {
 		if err != config.ErrNotFound {
@@ -98,20 +103,35 @@ func New(
 	} else {
 		log.Tracef("loaded 'history' from config: %v", maxHistory)
 	}
-	err = h.initGrants(ctx, broker, grants, historyDocumentID, maxHistory)
-	if err != nil {
-		return nil, err
+
+	h := &fuzzyFinderHandler{
+		s:                    clients.Storage,
+		f:                    clients.ResourceOpener,
+		wm:                   clients.WindowManager,
+		p:                    clients.Interrupter,
+		m:                    clients.Notifications,
+		ed:                   clients.Editor,
+		fs:                   clients.FileSystem,
+		executor:             clients.Executor,
+		invokeWindow:         invokeWindow,
+		historyKey:           historyKey,
+		getResource:          getResource,
+		cmdStr:               command,
+		useWorkspaceFallback: command == "",
+		workspaceFallback:    fallback,
+		waitChan:             make(chan error),
+	}
+	if h.f == nil || h.p == nil {
+		return nil, errors.New("extension is missing critical permissions")
+	}
+	if h.s != nil {
+		h.history.Init(h.s, historyDocumentID, maxHistory)
+		if err := h.history.Load(); err != nil {
+			return nil, err
+		}
 	}
 
-	h.invokeWindow = invokeWindow
-	h.historyKey = historyKey
-	h.getResource = getResource
-	h.cmdStr = command
-	h.useWorkspaceFallback = command == ""
-	h.workspaceFallback = fallback
-
 	h.ctx, h.cancelCtx = context.WithCancel(context.Background())
-	h.waitChan = make(chan error)
 
 	listConfig := h.getListConfig(cfg)
 	h.list.Init(listConfig)
@@ -141,7 +161,7 @@ type fuzzyFinderHandler struct {
 	s                    storageapi.Service
 	f                    browserapi.ResourceOpener
 	wm                   browserapi.WindowManager
-	p                    browserapi.EventPublisher
+	p                    term.Interrupter
 	m                    browserapi.Notifications
 	ed                   textapi.Editor
 	fs                   workspaceapi.FileSystem
@@ -423,43 +443,6 @@ func (h *fuzzyFinderHandler) scanData() {
 		}
 	}
 
-}
-
-func (h *fuzzyFinderHandler) initGrants(
-	ctx context.Context, broker rpc.MuxBroker, grants []extension.Grant,
-	historyDocumentID string, maxHistory int,
-) (err error) {
-	for _, grant := range grants {
-		switch grant.Permission {
-		case extensionapi.Permission(extensionapi.PermissionFileSystem):
-			h.fs, err = workspaceext.FileSystem(ctx, grant, broker)
-		case extensionapi.PermissionExecute:
-			h.executor, err = workspaceext.Executor(ctx, grant, broker)
-		case extensionapi.PermissionEditor:
-			h.ed, err = textext.Editor(ctx, grant, broker)
-		case extensionapi.PermissionNotifications:
-			h.m, err = browserext.Notifications(ctx, grant, broker)
-		case extensionapi.PermissionBrowserWindowManager:
-			h.wm, err = browserext.WindowManager(ctx, grant, broker)
-		case extensionapi.PermissionInterrupt:
-			h.p, err = browserext.EventPublisher(ctx, grant, broker)
-		case extensionapi.PermissionBrowserResourceOpener:
-			h.f, err = browserext.ResourceOpener(ctx, grant, broker)
-		case extensionapi.PermissionStorage:
-			h.s, err = storageext.Storage(ctx, grant, broker)
-			if err == nil {
-				h.history.Init(h.s, historyDocumentID, maxHistory)
-				err = h.history.Load()
-			}
-		}
-		if err != nil {
-			return
-		}
-	}
-	if h.f == nil || h.p == nil {
-		return errors.New("extension is missing critical permissions")
-	}
-	return
 }
 
 func (h *fuzzyFinderHandler) getListConfig(c config.Config) search.ListConfig {

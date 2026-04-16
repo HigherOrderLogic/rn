@@ -1,0 +1,82 @@
+extensions:
+  fuzzy_search:
+    path: '$RUNE_DATADIR/bin/extension_fuzzy_search'
+    config:
+      file:
+        ## Command to use instead of native list files implementation.
+        ## The recommended commands are the silver searcher and ripgrep.
+        # command: rg -l ""
+        # Whether search is case sensitive.
+        case_sensitive: true
+        # Search algorithm. Options are fuzzy, contains and equal.
+        algo: fuzzy
+        # Key binding used to cycle through history.
+        history_key: <m-p>
+        # Max history stored.
+        history: 50000
+        # Colors.
+        element_attr:
+          fg: default
+          bg: default
+          flags:
+            - dim
+        matched_text_attr:
+          fg: blue
+          bg: default
+          flags:
+            - bold
+        count_attr:
+          fg: default
+          bg: default
+        focus_element_attr:
+          fg: purple
+          bg: default
+
+      line:
+        ## Command to use instead of native line search implementation.
+        ## The recommended commands are the silver searcher and ripgrep.
+        # command: rg --color never -n --no-heading --max-columns 500 ""
+        # Whether search is case sensitive.
+        case_sensitive: true
+        # Search algorithm. Options are fuzzy, contains and equal.
+        algo: fuzzy
+        # Key binding used to cycle through history.
+        history_key: <m-\\>
+        # Max history stored.
+        history: 2000
+        # Colors.
+        element_attr:
+          fg: default
+          bg: default
+          flags:
+            - dim
+        matched_text_attr:
+          fg: blue
+          bg: default
+          flags:
+            - bold
+        count_attr:
+          fg: default
+          bg: default
+        focus_element_attr:
+          fg: purple
+          bg: default
+
+      syntax:
+        # The searchast command currently takes query file and capture names as
+        # command arguments. It inherits finder styling defaults unless these
+        # fields are set here.
+        case_sensitive: true
+        algo: fuzzy
+
+command:
+  aliases:
+    searchfunc: echo {prompt}searchast<space>locals.scm<space>local.definition.method|local.definition.function<enter>
+    searchvar: echo {prompt}searchast<space>locals.scm<space>local.definition.var<enter>
+    searchtype: echo {prompt}searchast<space>locals.scm<space>local.definition.type<enter>
+  key_bindings:
+    <a-s-f>: searchfunc
+    <a-s-v>: searchvar
+    <a-s-s>: searchtype
+    <m-p>: searchfile
+    <m-\\>: searchtext

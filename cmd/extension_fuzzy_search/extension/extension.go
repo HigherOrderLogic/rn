@@ -1,0 +1,89 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+
+package extension
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"unstable.build/go-tui/cmd/extension_fuzzy_search/finder"
+)
+
+// NewExtension returns the combined fuzzy search extension and its metadata.
+func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
+	perms := append([]extensionapi.Permission{
+		extensionapi.PermissionCommands,
+		extensionapi.PermissionConfig,
+	}, finder.Permissions()...)
+	return workspaceExtension{}, extensionapi.Metadata{
+		DeveloperID:      "Unstable Build",
+		DeveloperEmail:   "it@unstable.build",
+		DeveloperKey:     "064D4ABCFA6D9338",
+		ExtensionID:      "fuzzy_search",
+		ExtensionName:    "Fuzzy Search",
+		ExtensionVersion: "development",
+		Permissions:      extensionapi.NewPermissions(perms...),
+	}
+}
+
+type workspaceExtension struct{}
+
+func (workspaceExtension) ExtendWorkspace(
+	ctx context.Context, w *extensionapi.Workspace, c config.Config,
+) error {
+	clients := finder.Clients{
+		Storage:        w.Storage(ctx),
+		ResourceOpener: w.ResourceOpener(ctx),
+		WindowManager:  w.WindowManager(ctx),
+		Interrupter:    w.Interrupter(ctx),
+		Notifications:  w.Notifications(ctx),
+		Editor:         w.Editor(ctx),
+		FileSystem:     w.FileSystem(ctx),
+		Executor:       w.Executor(ctx),
+	}
+	dataDir := w.DataDir(ctx)
+
+	registrations := []struct {
+		cmd textapi.CommandManual
+		key string
+		new func(context.Context, textapi.Command, finder.Clients, browserapi.Window, config.Config) (finder.RedispatchHandler, error)
+	}{
+		{cmd: cmdSearchFile, key: "file", new: newFileHandler},
+		{cmd: cmdSearchText, key: "line", new: newLineHandler},
+		{
+			cmd: cmdSearchSyntax,
+			key: "syntax",
+			new: func(
+				ctx context.Context, cmd textapi.Command,
+				clients finder.Clients, invokeWindow browserapi.Window, c config.Config,
+			) (finder.RedispatchHandler, error) {
+				return newSyntaxHandler(ctx, cmd, clients, invokeWindow, c, dataDir)
+			},
+		},
+	}
+
+	for _, reg := range registrations {
+		if err := w.RegisterCommand(reg.cmd, &splitCommandHandler{
+			clients: clients,
+			cfg:     commandConfig(c, reg.key),
+			new:     reg.new,
+		}); err != nil {
+			return fmt.Errorf("register command %q: %w", reg.cmd.Name, err)
+		}
+	}
+	return nil
+}
+
+func commandConfig(c config.Config, key string) config.Config {
+	sub, err := c.GetConfig(key)
+	if err == nil {
+		return sub
+	}
+	return config.NopConfig()
+}

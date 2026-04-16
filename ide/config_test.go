@@ -54,10 +54,11 @@ import (
 
 var sampleConfig = `
 extensions:
-    fuzzy_file:
-        path: "/path/extension_fuzzy_file"
+    fuzzy_search:
+        path: "/path/extension_fuzzy_search"
         config:
-            command: ag -g ""
+            file:
+                command: ag -g ""
 
 log_path: "/tmp/debug.log"
 log_level: "trace"
@@ -776,8 +777,8 @@ func TestConfigSetting(t *testing.T) {
 	assert.False(t, cfg.autoRestore())
 
 	assert.Len(t, cfg.extensions(), 1)
-	extensionCfgStruct := cfg.extensions()["fuzzy_file"]
-	assert.Equal(t, "fuzzy_file", extensionCfgStruct.id)
+	extensionCfgStruct := cfg.extensions()["fuzzy_search"]
+	assert.Equal(t, "fuzzy_search", extensionCfgStruct.id)
 	cfg.cfg["workspace"].(map[string]any)["wallpaper"] = ""
 	extensionCfgStruct.parent.cfg["workspace"].(map[string]any)["wallpaper"] = ""
 	cfg.defaultWallpaper.NewComponent = nil
@@ -791,7 +792,9 @@ func TestConfigSetting(t *testing.T) {
 	extensionCfg, ok := extensionCfgStruct.config()
 	require.True(t, ok)
 
-	cmd, err := extensionCfg.GetString("command")
+	fileCfg, err := extensionCfg.GetConfig("file")
+	require.NoError(t, err)
+	cmd, err := fileCfg.GetString("command")
 	require.NoError(t, err)
 	assert.Equal(t, "ag -g \"\"", cmd)
 

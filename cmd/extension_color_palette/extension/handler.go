@@ -26,31 +26,84 @@ package extension
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"github.com/unstablebuild/tcell/v3"
-	"unstable.build/go-tui/extension"
-	"unstable.build/go-tui/extension/extutil"
-	"unstable.build/go-tui/rpc"
 )
 
-// Grantee returns this extension's extension.Grantee, and it required permissions.
-func Grantee() (extension.Grantee, []extensionapi.Permission) {
-	return extutil.NewCommandSplitHandler(extutil.CommandSplitHandlerConfig{
-		SplitOrientation: browserapi.OrientationRight,
-		Handler: func(ctx context.Context, _ textapi.Command,
-			grants []extension.Grant, broker rpc.MuxBroker,
-			invokeWindow browserapi.Window, config config.Config) (extutil.RedispatchHandler, error) {
-			return extutil.NopRedispatchHandler(new(colorPaletteHandler)), nil
-		},
-		Command: colorPaletteCmd,
+// NewExtension returns the color palette extension and its metadata.
+func NewExtension() (extensionapi.WorkspaceExtension, extensionapi.Metadata) {
+	return workspaceExtension{}, extensionapi.Metadata{
+		DeveloperID:      "Unstable Build",
+		DeveloperEmail:   "it@unstable.build",
+		DeveloperKey:     "064D4ABCFA6D9338",
+		ExtensionID:      "color_palette",
+		ExtensionName:    "Color Palette",
+		ExtensionVersion: "development",
+		Permissions: extensionapi.NewPermissions(
+			extensionapi.PermissionCommands,
+			extensionapi.PermissionEditor,
+			extensionapi.PermissionBrowserWindowManager,
+		),
+	}
+}
+
+type workspaceExtension struct{}
+
+func (workspaceExtension) ExtendWorkspace(
+	ctx context.Context, w *extensionapi.Workspace, cfg config.Config,
+) error {
+	return w.RegisterCommand(colorPaletteCmd, &colorPaletteCommandHandler{
+		wm: w.WindowManager(ctx),
 	})
+}
+
+type colorPaletteCommandHandler struct {
+	mu     sync.Mutex
+	wm     browserapi.WindowManager
+	window browserapi.Window
+}
+
+func (h *colorPaletteCommandHandler) HandleCommand(
+	ctx context.Context, cmd textapi.Command,
+) error {
+	h.mu.Lock()
+	if h.window != nil {
+		h.mu.Unlock()
+		return nil
+	}
+	h.mu.Unlock()
+
+	palette := new(colorPaletteHandler)
+	cleaningHandler := browserapi.FuncHandler(palette, func() error {
+		h.mu.Lock()
+		h.window = nil
+		h.mu.Unlock()
+		return palette.Close()
+	})
+	window, err := h.wm.Split(browserapi.OrientationRight, cmd.Window, cleaningHandler)
+	if err != nil {
+		return err
+	}
+
+	h.mu.Lock()
+	h.window = window
+	h.mu.Unlock()
+	return err
+}
+
+func (*colorPaletteCommandHandler) Complete(
+	ctx context.Context, cmd string, args []string,
+) (iterator.Iterator[string], error) {
+	return iterator.FromSlice[string](nil), nil
 }
 
 var colorPaletteCmd = textapi.CommandManual{

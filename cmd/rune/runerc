@@ -662,71 +662,73 @@ extensions:
   # This extension adds a command colorPalette which opens a new window
   # and shows all the colors available to configure in the various
   # styles thorought this configuration.
-  color_palette: {}
-  # This extension adds a fuzzy file search component to the editor. Open
-  # via searchfile command.
-  fuzzy_file:
+  color_palette:
+    path: extension_color_palette
+  # This extension adds fuzzy file, line, and syntax search commands to the editor.
+  fuzzy_search:
+    path: extension_fuzzy_search
     config:
-      ## Command to use instead of native list files implementation.
-      ## The recommended commands are the silver searcher and ripgrep.
-      #command: rg -l ""
-      # Whether search is case sensitive
-      case_sensitive: true
-      # Search algorithm. Options are fuzzy, contains and equal.
-      algo: fuzzy
-      # Key binding used to cycle through history.
-      history_key: <m-p>
-      # Max history stored
-      history: 50000
-      # Colors
-      element_attr:
-        fg: default
-        bg: default
-        flags:
-          - dim
-      matched_text_attr:
-        fg: blue
-        bg: default
-        flags:
-          - bold
-      count_attr:
-        fg: default
-        bg: default
-      focus_element_attr:
-        fg: purple
-        bg: default
-  # This extension adds a fuzzy file line search component to the editor. Open
-  # via searchtext command.
-  fuzzy_line:
-    config:
-      ## Command to use instead of native list files implementation.
-      ## The recommended commands are the silver searcher and ripgrep.
-      #command: rg --color never -n --no-heading --max-columns 500 ""
-      # Whether search is case sensitive
-      case_sensitive: true
-      # Search algorithm. Options are fuzzy, contains and equal.
-      algo: fuzzy
-      # Key binding used to cycle through history.
-      history_key: <m-\\>
-      # Max history stored
-      history: 2000
-      # Colors
-      element_attr:
-        fg: default
-        bg: default
-        flags:
-          - dim
-      matched_text_attr:
-        fg: blue
-        bg: default
-        flags:
-          - bold
-      count_attr:
-        fg: default
-        bg: default
-      focus_element_attr:
-        fg: purple
-        bg: default
+      file:
+        ## Command to use instead of native list files implementation.
+        ## The recommended commands are the silver searcher and ripgrep.
+        #command: rg -l ""
+        # Whether search is case sensitive
+        case_sensitive: true
+        # Search algorithm. Options are fuzzy, contains and equal.
+        algo: fuzzy
+        # Key binding used to cycle through history.
+        history_key: <m-p>
+        # Max history stored
+        history: 50000
+        # Colors
+        element_attr:
+          fg: default
+          bg: default
+          flags:
+            - dim
+        matched_text_attr:
+          fg: blue
+          bg: default
+          flags:
+            - bold
+        count_attr:
+          fg: default
+          bg: default
+        focus_element_attr:
+          fg: purple
+          bg: default
+      line:
+        ## Command to use instead of native list files implementation.
+        ## The recommended commands are the silver searcher and ripgrep.
+        #command: rg --color never -n --no-heading --max-columns 500 ""
+        # Whether search is case sensitive
+        case_sensitive: true
+        # Search algorithm. Options are fuzzy, contains and equal.
+        algo: fuzzy
+        # Key binding used to cycle through history.
+        history_key: <m-\\>
+        # Max history stored
+        history: 2000
+        # Colors
+        element_attr:
+          fg: default
+          bg: default
+          flags:
+            - dim
+        matched_text_attr:
+          fg: blue
+          bg: default
+          flags:
+            - bold
+        count_attr:
+          fg: default
+          bg: default
+        focus_element_attr:
+          fg: purple
+          bg: default
+      syntax:
+        case_sensitive: true
+        algo: fuzzy
 # Configuration for the command prompt.
 command:
   # Key to open the command prompt.
@@ -790,9 +792,6 @@ command:
     # For example, the following alias utilizes the power of echo to repeat
     # the last echo sequence.
     # editfirst: echo {prompt}edit<space>{wait}<tab><enter>
-    searchfunc: echo {prompt}searchast<space>locals.scm<space>local.definition.method|local.definition.function<enter>
-    searchvar: echo {prompt}searchast<space>locals.scm<space>local.definition.var<enter>
-    searchtype: echo {prompt}searchast<space>locals.scm<space>local.definition.type<enter>
     # git worktree commands
     worktreenew:
       - '!! git worktree add "$RUNE_DATADIR/worktrees/$1" -b $1'
@@ -868,9 +867,6 @@ command:
     <a-f>: echo {prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>
     <a-v>: echo {prompt}jumptoast<space>locals.scm<space>local.definition.var<space>
     <a-s>: echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>
-    <a-s-f>: searchfunc
-    <a-s-v>: searchvar
-    <a-s-s>: searchtype
     <a-j>: lspnextdiagnostic
     <a-k>: lspprevdiagnostic
     <a-t>: lsp hover
@@ -888,8 +884,6 @@ command:
     <a-m>: go organize-imports
     <a-s-j>: gitnextchange
     <a-s-k>: gitprevchange
-    <m-p>: searchfile
-    <m-\\>: searchtext
     <m-enter>: terminalneworsplit
     <s-m-enter>: "!"
     <m-`>: workspacesearch
