@@ -81,13 +81,18 @@ type viSyncState struct {
 	vi        *vi.Vi
 	scroll    *component.Scroll
 	vteScroll *component.Scroll
-	editor    cell.Editor
 	selector  *cell.Buffer
 }
 
 type viCopyState struct {
 	vi     *vi.Vi
-	editor cell.Editor
+	// copyBuffer is the freshly-constructed buffer that applyCopyState
+	// will register copyEditor on. Storing the buffer rather than
+	// swapping editors in newCopyState mirrors the pattern used by
+	// viSyncState: editor installation always happens under the
+	// caller's lock to avoid races with concurrent writes to b.Cells
+	// (see applySyncState for the equivalent rationale).
+	copyBuffer *cell.Buffer
 }
 
 // for dependency injection purposes
@@ -156,7 +161,6 @@ func (v *viHandler) newSyncState(comp parentComponent, opts []vi.Option) viSyncS
 		vi:        syncVi,
 		scroll:    scroll,
 		vteScroll: vteScroll,
-		editor:    scroll.Buffer().WithEditor(v),
 		selector:  scroll.Buffer(),
 	}
 }
@@ -170,8 +174,8 @@ func (v *viHandler) newCopyState(comp parentComponent, opts []vi.Option) viCopyS
 	copyVi := new(vi.Vi)
 	copyVi.InitWithScroll(copyScroll, comp.URI(), text.IndentRuneTab, 0, opts...)
 	return viCopyState{
-		vi:     copyVi,
-		editor: copyScroll.Buffer().WithEditor(copyEditor{v: v}),
+		vi:         copyVi,
+		copyBuffer: copyScroll.Buffer(),
 	}
 }
 
@@ -180,13 +184,22 @@ func (v *viHandler) applySyncState(state viSyncState) {
 	v.sync.vi = state.vi
 	v.sync.scroll = state.scroll
 	v.sync.vteScroll = state.vteScroll
-	v.sync.editor = state.editor
 	v.sync.selector = state.selector
+	// Swap the editor under the caller's lock. Doing this in
+	// newSyncState (off-lock) would create a window where the
+	// underlying cell.Buffer routes edits through viHandler.Edit but
+	// v.sync.editor still references the previous buffer's editor —
+	// any mutation in that window writes to a dead buffer, leaving
+	// b.Cells unchanged. AltBuffer.WriteAt then sees CellAt(at) == nil
+	// forever and recurses with InsertAt → WriteAt → InsertAt …
+	// pegging a CPU core. See restorePrimaryScroll for the call site
+	// that exposed this race during terminal-session restore.
+	v.sync.editor = state.selector.WithEditor(v)
 }
 
 func (v *viHandler) applyCopyState(state viCopyState) {
 	v.copy.vi = state.vi
-	v.copy.editor = state.editor
+	v.copy.editor = state.copyBuffer.WithEditor(copyEditor{v: v})
 }
 
 func (s viSyncState) resize(width, height int) {

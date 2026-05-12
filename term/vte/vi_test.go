@@ -29,7 +29,6 @@ import (
 	"path"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/ernestrc/sensible/find"
 	"github.com/stretchr/testify/assert"
@@ -699,73 +698,51 @@ func TestViEditUnit(t *testing.T) {
 		assert.Equal(t, 0, actualBellsRung)
 	})
 
-	// Pins the invariant that bulk-replacing a cell.Buffer's contents
-	// (as AltBuffer.restore does for snapshot restore) preserves both
-	// *cell.Buffer and *rawCells identity. Without this invariant,
-	// any cached editor pointer (e.g. v.sync.editor, captured by
-	// scroll.Buffer().WithEditor in newSyncState) would silently go
-	// stale: v.sync.editor.Edit would write into a dead rawCells,
-	// AltBuffer.WriteAt would see CellAt(at) == nil forever, and the
-	// recursion InsertAt ↔ WriteAt would peg a CPU core during
-	// terminal-session restore.
-	t.Run("restore preserves cached editor target", func(t *testing.T) {
+	// Pins the contract that constructing a fresh viSyncState does not
+	// mutate the underlying cell.Buffer's editor. Doing so off-lock
+	// previously created a race where restorePrimaryScroll's
+	// newSyncState swapped b.Cells.editor → viHandler, but the
+	// follow-up applySyncState (which captures the prior editor as
+	// v.sync.editor) was still blocked on the component lock. A
+	// concurrent vte-parser Input then routed its mutation through the
+	// dangling v.sync.editor (an editor over the previous Cells), the
+	// new Cells was never extended, and AltBuffer.WriteAt looped
+	// forever calling InsertAt → WriteAt → InsertAt at full CPU.
+	//
+	// The fix moves the WithEditor swap into applySyncState (under the
+	// caller's lock). This test guards against regressions by
+	// asserting newSyncState leaves the buffer's editor untouched.
+	t.Run("newSyncState does not swap editor off-lock", func(t *testing.T) {
 		t.Parallel()
 		comp := newTestParentComponent("hi", term.Coordinates{})
 		var vi viHandler
 		vi.doInit(comp, DefaultConfig())
 
-		// Run the assertions on a watchdogged goroutine so a
-		// regression that causes WriteAt ↔ InsertAt to spin (the
-		// original symptom) fails the test fast instead of hanging
-		// the suite.
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
+		// doInit's applySyncState installed viHandler as the editor on
+		// comp.scroll.Buffer(). Restore it to a known sentinel so we
+		// can detect whether the next newSyncState alters it.
+		buf := comp.scroll.Buffer()
+		var sentinel sentinelEditor
+		prev := buf.WithEditor(&sentinel)
+		require.Equal(t, cell.Editor(&vi), prev,
+			"doInit must register viHandler as the buffer's editor; "+
+				"got %T", prev)
 
-			buf := comp.scroll.Buffer()
-			bufPtr := buf
-			require.NotEmpty(t, buf.RawCells())
+		_ = vi.newSyncState(comp, vi.viOptions())
 
-			// Snapshot the current editor that v.sync.editor points
-			// at; ResetCells must not invalidate it.
-			cachedEditor := vi.sync.editor
-
-			// Mutate buffer contents through the same path
-			// AltBuffer.restore uses.
-			newCells := term.StringToCells("restored")
-			buf.ResetCells(newCells)
-
-			require.Equal(t, bufPtr, comp.scroll.Buffer(),
-				"*cell.Buffer identity must survive ResetCells; "+
-					"otherwise viHandler.v.sync.* and "+
-					"component.Scroll.buf go stale")
-			require.Equal(t, "restored", buf.String(),
-				"buffer contents must reflect the ResetCells payload")
-
-			// Drive an Edit through the cached editor — exactly
-			// what the vte parser does via viHandler.Edit on a
-			// screen-context write. If ResetCells had replaced
-			// the *rawCells, cachedEditor would still point at
-			// the dead instance and this Edit would either be a
-			// no-op or panic. Either way, the new contents
-			// wouldn't appear via buf.String().
-			_, _, _ = cachedEditor.Edit(
-				vtescreen.NewContext(context.Background()),
-				term.Coordinates{Y: 0, X: 8},
-				term.Coordinates{Y: 0, X: 8},
-				"!")
-			assert.Equal(t, "restored!", buf.String(),
-				"cached v.sync.editor must continue to mutate "+
-					"the current rawCells after ResetCells")
-		}()
-
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Fatal("restore-preserves-cached-editor watchdog tripped; " +
-				"likely a regression of the AltBuffer.restore identity " +
-				"invariant causing WriteAt ↔ InsertAt to recurse")
-		}
+		// If newSyncState calls WithEditor (the regressed behavior),
+		// it would have replaced our sentinel with viHandler. Detect
+		// that by triggering a write through the buffer's editor: a
+		// hit on the sentinel proves newSyncState left it alone.
+		_, _, _ = buf.Editor().Edit(
+			context.Background(),
+			term.Coordinates{}, term.Coordinates{}, "x")
+		assert.True(t, sentinel.called,
+			"newSyncState must NOT mutate the buffer's editor "+
+				"off-lock; doing so opens a race with concurrent "+
+				"vte-parser writes that recurses AltBuffer.WriteAt "+
+				"↔ InsertAt forever. Editor swap belongs in "+
+				"applySyncState, under the caller's lock.")
 	})
 
 	suite := []struct {
@@ -1390,6 +1367,22 @@ func (nopLocker) Lock() {
 }
 
 func (nopLocker) Unlock() {
+}
+
+// sentinelEditor is a no-op cell.Editor used in tests to detect whether
+// a buffer's editor has been silently swapped behind the test's back.
+// Edit returns the start coordinates unchanged so the caller cannot
+// distinguish it from a successful no-op edit, and sets called=true so
+// the test can assert it was reached.
+type sentinelEditor struct {
+	called bool
+}
+
+func (s *sentinelEditor) Edit(
+	_ context.Context, start, _ term.Coordinates, _ string,
+) (from, to term.Coordinates, old string) {
+	s.called = true
+	return start, start, ""
 }
 
 type testRemote struct {
