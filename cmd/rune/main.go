@@ -29,8 +29,6 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net/http"
-	_ "net/http/pprof"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -108,8 +106,6 @@ var (
 		"If set to false, does not use GRPC over TLS or oauth2 credentials.")
 	flagTelemetryPeriod = flag.Duration("rune-telemetry-period", apicfg.TelemetryPeriod,
 		"How often to send aggregated usage data (requires --rune-enable-telemetry).")
-	flagEnableTelemetry = flag.Bool("rune-enable-telemetry", apicfg.EnableTelemetry,
-		"Enable sending aggregated usage data to rune servers.")
 	flagReleaseCollection = flag.String("rune-release-collection",
 		apicfg.ReleaseCollection,
 		"Collection name for the release manager.")
@@ -267,9 +263,6 @@ func startWorkspaceServer() int {
 }
 
 func main() {
-	go debug.CapturePanicReport(func() {
-		log.Println(http.ListenAndServe("localhost:8112", nil))
-	})
 	if err := flag.CommandLine.MarkHidden("rune-http-address"); err != nil {
 		panic(err)
 	}
@@ -286,9 +279,6 @@ func main() {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("rune-telemetry-period"); err != nil {
-		panic(err)
-	}
-	if err := flag.CommandLine.MarkHidden("rune-enable-telemetry"); err != nil {
 		panic(err)
 	}
 	if err := flag.CommandLine.MarkHidden("rune-release-collection"); err != nil {
@@ -772,7 +762,6 @@ func setupReleaseManager(i *ide.IDE, storage storageapi.Service) (
 	apicfg.GRPCEndpointAddress = *flagGRPCAddress
 	apicfg.InsecureTransport = *flagGRPCInsecure
 	apicfg.TelemetryPeriod = *flagTelemetryPeriod
-	apicfg.EnableTelemetry = *flagEnableTelemetry
 	apicfg.ReleaseCollection = *flagReleaseCollection
 	client, err := apiclient.New(i.Notifications(), storage, apicfg, *flagDataPath)
 	if err != nil {
