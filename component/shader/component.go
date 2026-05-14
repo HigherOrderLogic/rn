@@ -96,10 +96,27 @@ func (c *Component) Draw(w term.Writer) {
 
 	for y, row := range cells {
 		for x, cell := range row {
+			// Strip the renderer's vertical-offset hints before
+			// emitting the shaded cell. These attrs are meant for the
+			// original glyph drawn by the wrapped component (tabbars,
+			// statusbars, etc.). A shader that overwrites the glyph
+			// inherits them through cells[y][x] and would otherwise
+			// render its fresh glyph shifted by half a cell, producing
+			// visible artifacts along the chrome rows. The mask is
+			// cleared on the outbound copy so the source matrix stays
+			// intact for snapshot-based shaders (e.g. Burn's pre-burn
+			// paint).
+			cell.Attrs &^= stripRenderOffsetAttrs
 			w.SetCell(term.Coordinates{Y: y, X: x}, cell)
 		}
 	}
 }
+
+// stripRenderOffsetAttrs is the set of cell attrs cleared from every
+// shaded cell before it leaves [Component.Draw]. See the call site for
+// the rationale.
+const stripRenderOffsetAttrs = term.AttrVerticalRenderOffset |
+	term.AttrNegativeVerticalRenderOffset
 
 // Resize satisfies tui.Component.
 func (c *Component) Resize(width, height int) {

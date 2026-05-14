@@ -35,6 +35,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component/comptest"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"go.uber.org/goleak"
+	"unstable.build/go-tui/cell"
 )
 
 func TestShader(t *testing.T) {
@@ -190,3 +191,71 @@ func (t *testShader) Shade(frame, total int, in [][]term.Cell) {
 		}
 	}
 }
+
+// TestComponentDrawStripsRenderOffsetAttrs guards that
+// [Component.Draw] clears [term.AttrVerticalRenderOffset] and
+// [term.AttrNegativeVerticalRenderOffset] from cells before forwarding
+// them to the writer, so shaders overwriting glyphs on top of a
+// tabbar/statusbar do not inherit a half-cell vertical render offset
+// and produce visible artifacts.
+func TestComponentDrawStripsRenderOffsetAttrs(t *testing.T) {
+	defer goleak.VerifyNone(t)
+
+	const (
+		width  = 4
+		height = 2
+	)
+
+	for _, tc := range []struct {
+		name string
+		attr term.Attributes
+	}{
+		{
+			name: "vertical render offset",
+			attr: term.Attributes{Attrs: term.AttrVerticalRenderOffset},
+		},
+		{
+			name: "negative vertical render offset",
+			attr: term.Attributes{Attrs: term.AttrNegativeVerticalRenderOffset},
+		},
+		{
+			name: "both offsets",
+			attr: term.Attributes{
+				Attrs: term.AttrVerticalRenderOffset |
+					term.AttrNegativeVerticalRenderOffset,
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			child := &component.TestComponent{Ch: 'A'}
+			child.SetAttr(tc.attr)
+
+			interrupter := term.FuncInterrupter(func(_ context.Context) error {
+				return nil
+			})
+			s := New(child, &nopShader{}, interrupter, 1, 10*time.Second)
+			defer func() { require.NoError(t, s.Close()) }()
+			s.Resize(width, height)
+
+			w := cell.NewBufferWriter(context.Background(), width, height)
+			s.Draw(w)
+
+			const mask = term.AttrVerticalRenderOffset |
+				term.AttrNegativeVerticalRenderOffset
+			for y, row := range w.RawCells() {
+				for x, got := range row {
+					assert.Zerof(
+						t, got.Attrs&mask,
+						"cell (%d,%d) should have render offset attrs cleared", x, y,
+					)
+				}
+			}
+		})
+	}
+}
+
+// nopShader is a [Shader] that leaves cells untouched. Used to assert
+// behavior of [Component.Draw] itself rather than of a specific shader.
+type nopShader struct{}
+
+func (nopShader) Shade(_, _ int, _ [][]term.Cell) {}
