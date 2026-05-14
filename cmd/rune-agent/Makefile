@@ -51,10 +51,12 @@ $(TAR): sign
 	cd $(PKG) && tar -czvf $(TAR) .
 
 dist: clean $(TAR)
-	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use rune-agent-prod-dist or rune-agent-staging-dist}
+	@cd $(ROOT_DIR) && BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR $(ROOT_DIST_SH)
 
 dist-notarized: clean notarize $(TAR)
-	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use rune-agent-prod-dist-notarized or rune-agent-staging-dist-notarized}
+	@cd $(ROOT_DIR) && BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR $(ROOT_DIST_SH)
 else
 sign: pkg
 	@echo "Skipping codesign (not on macOS)"
@@ -66,7 +68,8 @@ $(TAR): pkg
 	cd $(PKG) && tar -czvf $(TAR) .
 
 dist: clean $(TAR)
-	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use rune-agent-prod-dist or rune-agent-staging-dist}
+	@cd $(ROOT_DIR) && BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR $(ROOT_DIST_SH)
 
 dist-notarized: dist
 	@echo "Skipping notarized dist (not on macOS)"
@@ -99,15 +102,19 @@ release-linux-arm64:
 		$(MAKE) linux-cross-compile
 
 dist-linux-amd64: release-linux-amd64
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use rune-agent-prod-dist-linux-amd64 or rune-agent-staging-dist-linux-amd64}
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune-agent_linux_amd64/rune-agent-release-linux-amd64-$$(git describe --tags --dirty).tar.gz \
+		BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR \
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=amd64 \
-		./cmd/rune/dist.sh
+		$(ROOT_DIST_SH)
 
 dist-linux-arm64: release-linux-arm64
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use rune-agent-prod-dist-linux-arm64 or rune-agent-staging-dist-linux-arm64}
 	@cd $(ROOT_DIR) && \
 		BLUE_RELEASE_TAR=$(TARGET)/rune-agent_linux_arm64/rune-agent-release-linux-arm64-$$(git describe --tags --dirty).tar.gz \
+		BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR \
 		BLUE_TARGET_OS=linux \
 		BLUE_TARGET_ARCH=arm64 \
-		./cmd/rune/dist.sh
+		$(ROOT_DIST_SH)

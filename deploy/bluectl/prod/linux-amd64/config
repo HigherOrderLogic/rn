@@ -1,0 +1,5 @@
+auth:
+  project-id: rune-prod
+  credentials-file: ""
+release:
+  collection: rune-release-linux-amd64
