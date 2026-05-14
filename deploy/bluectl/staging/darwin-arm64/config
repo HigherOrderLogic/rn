@@ -1,0 +1,6 @@
+auth:
+  project-id: unstable-build-blue-dev
+  credentials-file: ""
+release:
+  collection: rune-release-darwin-arm64
+  bucket: rune-dev-darwin-arm64

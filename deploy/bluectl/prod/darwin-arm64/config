@@ -1,0 +1,6 @@
+auth:
+  project-id: rune-prod
+  credentials-file: ""
+release:
+  collection: rune-release-darwin-arm64
+  bucket: rune-release-darwin-arm64

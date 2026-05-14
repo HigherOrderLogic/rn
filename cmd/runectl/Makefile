@@ -40,10 +40,12 @@ $(TAR): sign
 	cd $(PKG) && tar -czvf $(TAR) .
 
 dist: clean $(TAR)
-	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use runectl-prod-dist or runectl-staging-dist}
+	@cd $(ROOT_DIR) && BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR $(ROOT_DIST_SH)
 
 dist-notarized: clean notarize $(TAR)
-	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use runectl-prod-dist-notarized or runectl-staging-dist-notarized}
+	@cd $(ROOT_DIR) && BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR $(ROOT_DIST_SH)
 else
 sign: pkg
 	@echo "Skipping codesign (not on macOS)"
@@ -55,7 +57,8 @@ $(TAR): pkg
 	cd $(PKG) && tar -czvf $(TAR) .
 
 dist: clean $(TAR)
-	@cd $(ROOT_DIR) && $(ROOT_DIST_SH)
+	@: $${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR not set; use runectl-prod-dist or runectl-staging-dist}
+	@cd $(ROOT_DIR) && BLUECTL_CONFIG_DIR=$$BLUECTL_CONFIG_DIR $(ROOT_DIST_SH)
 
 dist-notarized: dist
 	@echo "Skipping notarized dist (not on macOS)"
