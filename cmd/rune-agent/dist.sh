@@ -6,7 +6,8 @@ GIT_AUTHOR_EMAIL=$(git log -1 --pretty=format:'%ae')
 GIT_TAG=$(git describe --tags --dirty)
 GIT_HEAD=$(git rev-parse HEAD)
 BLUE_RELEASE_TAR=rune-agent.tar.gz
-BLUE_EXEC=bluectl
+: "${BLUECTL_CONFIG_DIR:?BLUECTL_CONFIG_DIR is not set. Use the rune-agent-{prod,staging}-dist make targets so the bluectl project-id is pinned to the right environment.}"
+BLUE_EXEC=(bluectl -c "$BLUECTL_CONFIG_DIR")
 OS=$(uname | awk '{print tolower($0)}')
 ARCH=$([ "$(sysctl -n hw.optional.arm64)" -eq 1 ] && echo "arm64" || uname -m)
 BLUE_RELEASE_TAG="$GIT_TAG"
@@ -28,7 +29,7 @@ blue_release_dist() {
 	printf "\n$GIT_LOG\n";
 
 	echo "uploading $BLUE_RELEASE_TAG"
-	$BLUE_EXEC release upload \
+	"${BLUE_EXEC[@]}" release upload \
 		-d target-os=$OS \
 		-d target-arch=$ARCH \
 		-d git-remote-url=$GIT_REMOTE_URL \

@@ -35,12 +35,18 @@ RELEASE_FILES=$(wildcard release/*)
 	ox-api-docker-build-gcp-prod ox-api-docker-push-gcp-prod \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
-	rune-agent-pkg rune-agent-sign rune-agent-notarize rune-agent-dist rune-agent-dist-notarized \
+	rune-agent-pkg rune-agent-sign rune-agent-notarize \
+	rune-agent-prod-dist rune-agent-staging-dist \
+	rune-agent-prod-dist-notarized rune-agent-staging-dist-notarized \
 	rune-agent-linux-cross-compile \
 	rune-agent-release-linux-amd64 rune-agent-release-linux-arm64 \
-	rune-agent-dist-linux-amd64 rune-agent-dist-linux-arm64 \
-	fuzzy-search fuzzy-search-pkg fuzzy-search-dist \
-	runectl-pkg runectl-sign runectl-notarize runectl-dist runectl-dist-notarized \
+	rune-agent-prod-dist-linux-amd64 rune-agent-staging-dist-linux-amd64 \
+	rune-agent-prod-dist-linux-arm64 rune-agent-staging-dist-linux-arm64 \
+	fuzzy-search fuzzy-search-pkg \
+	fuzzy-search-prod-dist fuzzy-search-staging-dist \
+	runectl-pkg runectl-sign runectl-notarize \
+	runectl-prod-dist runectl-staging-dist \
+	runectl-prod-dist-notarized runectl-staging-dist-notarized \
 	notary-credentials runectl \
 	rune-release-linux-amd64 rune-release-linux-arm64 \
 	rune-prod-dist-linux-amd64 rune-prod-dist-linux-arm64 \
@@ -54,6 +60,13 @@ RELEASE_FILES=$(wildcard release/*)
 	$(filter workspace/workspacessh/manual_test/%.sh,$(MAKECMDGOALS))
 
 LLAMACPP_STAMP=$(TARGET)/llamacpp-libs.stamp
+
+# bluectl config dirs that pin auth.project-id for release uploads. The
+# *-prod-dist* / *-staging-dist* targets pass these via BLUECTL_CONFIG_DIR
+# so the publishing env is selected by the make target rather than by
+# whatever happens to be in ~/.bluectl/config.
+BLUECTL_PROD_CONFIG    := $(abspath deploy/bluectl/prod)
+BLUECTL_STAGING_CONFIG := $(abspath deploy/bluectl/staging)
 
 default: CGO_ENABLED=CGO_ENABLED=1
 default: GOPRIVATE=github.com/unstablebuild,unstable.build/*
@@ -344,11 +357,17 @@ rune-agent-sign:
 rune-agent-notarize:
 	@$(MAKE) -C cmd/rune-agent notarize
 
-rune-agent-dist: clean
-	@$(MAKE) -C cmd/rune-agent dist
+rune-agent-prod-dist: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_PROD_CONFIG) $(MAKE) -C cmd/rune-agent dist
 
-rune-agent-dist-notarized: clean
-	@$(MAKE) -C cmd/rune-agent dist-notarized
+rune-agent-staging-dist: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_STAGING_CONFIG) $(MAKE) -C cmd/rune-agent dist
+
+rune-agent-prod-dist-notarized: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_PROD_CONFIG) $(MAKE) -C cmd/rune-agent dist-notarized
+
+rune-agent-staging-dist-notarized: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_STAGING_CONFIG) $(MAKE) -C cmd/rune-agent dist-notarized
 
 rune-agent-linux-cross-compile:
 	@$(MAKE) -C cmd/rune-agent linux-cross-compile
@@ -359,11 +378,17 @@ rune-agent-release-linux-amd64:
 rune-agent-release-linux-arm64:
 	@$(MAKE) -C cmd/rune-agent release-linux-arm64
 
-rune-agent-dist-linux-amd64: clean
-	@$(MAKE) -C cmd/rune-agent dist-linux-amd64
+rune-agent-prod-dist-linux-amd64: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_PROD_CONFIG) $(MAKE) -C cmd/rune-agent dist-linux-amd64
 
-rune-agent-dist-linux-arm64: clean
-	@$(MAKE) -C cmd/rune-agent dist-linux-arm64
+rune-agent-staging-dist-linux-amd64: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_STAGING_CONFIG) $(MAKE) -C cmd/rune-agent dist-linux-amd64
+
+rune-agent-prod-dist-linux-arm64: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_PROD_CONFIG) $(MAKE) -C cmd/rune-agent dist-linux-arm64
+
+rune-agent-staging-dist-linux-arm64: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_STAGING_CONFIG) $(MAKE) -C cmd/rune-agent dist-linux-arm64
 
 fuzzy-search: CGO_ENABLED=CGO_ENABLED=1
 fuzzy-search: $(BIN)/extension_fuzzy_search
@@ -371,8 +396,11 @@ fuzzy-search: $(BIN)/extension_fuzzy_search
 fuzzy-search-pkg:
 	@$(MAKE) -C cmd/extension_fuzzy_search pkg
 
-fuzzy-search-dist: clean
-	@$(MAKE) -C cmd/extension_fuzzy_search dist
+fuzzy-search-prod-dist: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_PROD_CONFIG) $(MAKE) -C cmd/extension_fuzzy_search dist
+
+fuzzy-search-staging-dist: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_STAGING_CONFIG) $(MAKE) -C cmd/extension_fuzzy_search dist
 
 runectl-pkg:
 	@$(MAKE) -C cmd/runectl pkg
@@ -383,11 +411,17 @@ runectl-sign:
 runectl-notarize:
 	@$(MAKE) -C cmd/runectl notarize
 
-runectl-dist: clean
-	@$(MAKE) -C cmd/runectl dist
+runectl-prod-dist: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_PROD_CONFIG) $(MAKE) -C cmd/runectl dist
 
-runectl-dist-notarized: clean
-	@$(MAKE) -C cmd/runectl dist-notarized
+runectl-staging-dist: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_STAGING_CONFIG) $(MAKE) -C cmd/runectl dist
+
+runectl-prod-dist-notarized: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_PROD_CONFIG) $(MAKE) -C cmd/runectl dist-notarized
+
+runectl-staging-dist-notarized: clean
+	@BLUECTL_CONFIG_DIR=$(BLUECTL_STAGING_CONFIG) $(MAKE) -C cmd/runectl dist-notarized
 
 notary-credentials:
 	xcrun notarytool store-credentials "$(NOTARY_PROFILE)" --team-id "YYZRWD888J"

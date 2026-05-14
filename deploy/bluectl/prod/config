@@ -1,0 +1,5 @@
+auth:
+  project-id: rune-prod
+release:
+  collection: rune-release-darwin-arm64
+  bucket: rune-release-darwin-arm64
