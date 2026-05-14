@@ -64,6 +64,16 @@ var (
 	keya = term.KeyComb{Ch: 'a'}
 )
 
+// awaitErr blocks on a (chan error, error) pair and collapses it into
+// a single error so existing sync-style assertions keep working
+// against the async FlusherCloser API.
+func awaitErr(ch <-chan error, err error) error {
+	if err != nil {
+		return err
+	}
+	return <-ch
+}
+
 type testFlusherCloser struct {
 	buf       *cell.Buffer
 	closeFn   func() error
@@ -79,32 +89,41 @@ func (t *testFlusherCloser) Close() error {
 	}
 	return nil
 }
-func (t *testFlusherCloser) Flush() error {
+func (t *testFlusherCloser) Flush(context.Context) (<-chan error, error) {
+	var err error
 	if t.flushFn != nil {
-		return t.flushFn()
+		err = t.flushFn()
 	}
-	return nil
+	return doneChanErr(err), nil
 }
 
-func (t *testFlusherCloser) ForceFlush() error {
+func (t *testFlusherCloser) ForceFlush(context.Context) (<-chan error, error) {
+	var err error
 	if t.flushFn != nil {
-		return t.flushFn()
+		err = t.flushFn()
 	}
-	return nil
+	return doneChanErr(err), nil
 }
 
 func (t *testFlusherCloser) LastFlush() time.Time {
 	return t.lastFlush
 }
 
-func (t *testFlusherCloser) Reload() error {
+func (t *testFlusherCloser) Reload(context.Context) (<-chan error, error) {
+	var err error
 	if t.reloadFn != nil {
-		return t.reloadFn()
-	}
-	if t.content != "" {
+		err = t.reloadFn()
+	} else if t.content != "" {
 		t.buf.Replace(t.content)
 	}
-	return nil
+	return doneChanErr(err), nil
+}
+
+func doneChanErr(err error) <-chan error {
+	ch := make(chan error, 1)
+	ch <- err
+	close(ch)
+	return ch
 }
 
 type testLoader struct {
@@ -196,6 +215,9 @@ func (t *testLoader) ReadDir(name string) ([]os.DirEntry, error) {
 
 func newTestComponentErr(ed text.Editor, cfg text.Config) (*text.Component, *testLoader, error) {
 	loader := &testLoader{}
+	if cfg.ScheduleNextTick == nil {
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	}
 	c, err := text.NewComponent(ed, loader, cfg)
 	if err != nil {
 		return nil, nil, err
@@ -211,6 +233,13 @@ func newTestComponentConfig(t *testing.T, ed text.Editor, cfg text.Config) (
 	*text.Component, *testLoader,
 ) {
 	cfg.NoMaxSize = false
+	if cfg.ScheduleNextTick == nil {
+		// text.Component requires a non-nil scheduler at construction.
+		// Tests that don't care about event-loop ordering get the
+		// trivial inline runner; tests that drive concurrent UI
+		// mutations must pass their own.
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	}
 	c, loader, err := newTestComponentErr(ed, cfg)
 	require.NoError(t, err)
 	return c, loader
@@ -218,7 +247,9 @@ func newTestComponentConfig(t *testing.T, ed text.Editor, cfg text.Config) (
 
 func TestComponentInterfaces(t *testing.T) {
 	// this test is just a compile-time test
-	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
+	cfgc := text.DefaultConfig()
+	cfgc.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	c, err := text.NewComponent(NopEditor(), &testLoader{}, cfgc)
 	require.NoError(t, err)
 
 	var ed text.Editor
@@ -245,6 +276,7 @@ func TestComponentCommandKeyBinding(t *testing.T) {
 
 	t.Run("returns mapped command", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandKeyBindings[keya] = [][]string{{"myCmd"}}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		cmd, ok := c.CommandKeyBinding(keya)
@@ -254,6 +286,7 @@ func TestComponentCommandKeyBinding(t *testing.T) {
 
 	t.Run("returns mapped command and args", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandKeyBindings[keya] = [][]string{{"myCmd", "1"}}
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		cmd, ok := c.CommandKeyBinding(keya)
@@ -263,6 +296,7 @@ func TestComponentCommandKeyBinding(t *testing.T) {
 
 	t.Run("returns multiple mapped commands and args", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandKeyBindings[keya] = [][]string{
 			{"myCmd", "1"},
 			{"GZA", "Duel Of The Iron Mic", "Masta Killa", "Dreddy Kruger"},
@@ -588,6 +622,7 @@ func TestComponentOpen(t *testing.T) {
 
 	t.Run("routes before opening recovery prompt if err == workspaceapi.ErrFileAlreadyOpen", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		router := new(testOpenRouter)
 		cfg.OpenRouter = router
 		c, loader := newTestComponentConfig(t, NopEditor(), cfg)
@@ -614,6 +649,7 @@ func TestComponentOpen(t *testing.T) {
 
 	t.Run("falls back to recovery prompt when router does not handle open", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		router := new(testOpenRouter)
 		cfg.OpenRouter = router
 		c, loader := newTestComponentConfig(t, NopEditor(), cfg)
@@ -656,6 +692,7 @@ func TestComponentOpen(t *testing.T) {
 
 	t.Run("routes before opening recovery prompt if err == workspace.OpenInOtherWorkspaceError", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		router := new(testOpenRouter)
 		cfg.OpenRouter = router
 		c, loader := newTestComponentConfig(t, NopEditor(), cfg)
@@ -738,6 +775,7 @@ func TestComponentOpen(t *testing.T) {
 Do not edit this file. Instead edit its [corresponding wiki page](https://x.unstable.build/docs/repos/go-tui)
 `
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		// give the focus tab icon attr an explicit fg so the
 		// term.StringWriter's ForegroundCh substitution renders the
 		// icon in the expected layout below.
@@ -826,7 +864,7 @@ func TestComponentEditorSubscriber(t *testing.T) {
 
 				require.NoError(t, win.SetContent(h))
 
-				assert.NoError(t, c.Flush(win))
+				assert.NoError(t, awaitErr(c.Flush(context.Background(), win)))
 			},
 			nil,
 		},
@@ -1314,6 +1352,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("uses aliases from config to dispatch", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandAliases = map[string]text.CommandAlias{
 			"workstation_layout": text.CommandAlias{
 				Commands: []string{"newWindow", "edit /tmp/todo.md"},
@@ -1356,6 +1395,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("commands dispatched via alias have ctx set", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandAliases = map[string]text.CommandAlias{
 			"workstation_layout": text.CommandAlias{
 				Commands: []string{"newWindow"},
@@ -1389,6 +1429,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("passes echo-syntax alias body verbatim", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandAliases = map[string]text.CommandAlias{
 			"searchfunc": {
 				Commands: []string{
@@ -1425,6 +1466,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("replaces aliases positional commands with dispatched cmds", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandAliases = map[string]text.CommandAlias{
 			"yeti": {
 				Commands: []string{"newWindow wasup '$2' $name $$1", "edit $1 hellagood"},
@@ -1473,6 +1515,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("replaces aliases multiple positional commands with dispatched cmds", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandAliases = map[string]text.CommandAlias{
 			"yeti": {
 				Commands: []string{"newWindow wasup '$2' $name $1", "edit $1 hellagood"},
@@ -1516,6 +1559,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("returns error if alias expects positional arg and it's not passed", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandAliases = map[string]text.CommandAlias{
 			"yeti": {
 				Commands: []string{"newWindow wasup '$2' $name $$1", "edit $1 hellagood"},
@@ -1559,6 +1603,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("replaces commands % arg with current file", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		win, _ := c.Focus()
 
@@ -1614,6 +1659,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("handles bad aliases", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandAliases = map[string]text.CommandAlias{
 			"bad1": text.CommandAlias{Commands: []string{""}},
 			"bad2": text.CommandAlias{Commands: []string{}},
@@ -1637,6 +1683,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("handles aliases missing from config", func(t *testing.T) {
 		config := text.DefaultConfig()
+		config.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		config.CommandAliases = nil
 		c, _ := newTestComponentConfig(t, NopEditor(), config)
 		win, _ := c.Focus()
@@ -1654,6 +1701,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("NewComponent returns error if aliases create an infinite loop of command calls", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{Commands: []string{"bleh"}},
 			"bleh": text.CommandAlias{Commands: []string{"blah"}},
@@ -1665,6 +1713,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("NewComponent does not return error if aliases simply embeds another alias", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{Commands: []string{"bleh"}},
 			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
@@ -1675,6 +1724,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("NewComponent returns error if aliases create an infinite loop of nested command calls", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{Commands: []string{"bleh"}},
 			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
@@ -1687,6 +1737,7 @@ func TestDispatchCommand(t *testing.T) {
 
 	t.Run("NewComponent does not return error if aliases simply embeds another nested alias", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{Commands: []string{"bleh"}},
 			"bleh": text.CommandAlias{Commands: []string{"bloh"}},
@@ -1706,6 +1757,7 @@ func TestCompleteCommand(t *testing.T) {
 			})
 		}
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{
 				Commands:   []string{"bleh"},
@@ -1734,6 +1786,7 @@ func TestCompleteCommand(t *testing.T) {
 			})
 		}
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{
 				Commands:   []string{"bleh"},
@@ -1757,6 +1810,7 @@ func TestCompleteCommand(t *testing.T) {
 
 	t.Run("returns empty iterator if attempting to complete alias with no completer defined", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"workstation_layout": text.CommandAlias{
 				Commands: []string{
@@ -1806,6 +1860,7 @@ func TestCompleteCommand(t *testing.T) {
 			})
 		}
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"chain": text.CommandAlias{
 				Commands: []string{"e"},
@@ -1906,6 +1961,7 @@ func TestComponentCommands(t *testing.T) {
 	})
 	t.Run("returns configured aliases", func(t *testing.T) {
 		cfg := text.DefaultConfig()
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		cfg.CommandAliases = map[string]text.CommandAlias{
 			"blah": text.CommandAlias{Commands: []string{"myCmd"}},
 		}
@@ -1968,7 +2024,9 @@ func TestComponentRegister(t *testing.T) {
 }
 
 func TestComponentRegisterREPLCommand(t *testing.T) {
-	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
+	cfgc := text.DefaultConfig()
+	cfgc.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	c, err := text.NewComponent(NopEditor(), &testLoader{}, cfgc)
 	require.NoError(t, err)
 
 	h := &testREPLHandler{}
@@ -2010,7 +2068,9 @@ func TestUnregisterCommand(t *testing.T) {
 	require.NoError(t, err)
 	myArgs := []string{"a", "bbbbbbbbbbbbbbbbbbbbb"}
 	myCmd := "BUY"
-	c, err := text.NewComponent(NopEditor(), &testLoader{}, text.DefaultConfig())
+	cfgc := text.DefaultConfig()
+	cfgc.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	c, err := text.NewComponent(NopEditor(), &testLoader{}, cfgc)
 	require.NoError(t, err)
 
 	win, _ := c.Focus()
@@ -2110,7 +2170,11 @@ func TestFlush(t *testing.T) {
 		mockWorkspace := NewMockWorkspace(ctrl)
 		mockFlusherCloser := workspacetest.NewMockFlusherCloser(ctrl)
 
-		c, err := text.NewComponent(mockEditor, mockWorkspace, text.DefaultConfig())
+		cfgc := text.DefaultConfig()
+
+		cfgc.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+
+		c, err := text.NewComponent(mockEditor, mockWorkspace, cfgc)
 		require.NoError(t, err)
 
 		win, err := c.Focus()
@@ -2128,8 +2192,13 @@ func TestFlush(t *testing.T) {
 		h, err := c.OpenFileTab(resource1, true)
 		require.NoError(t, win.SetContent(h))
 
-		mockFlusherCloser.EXPECT().Flush().Times(1)
-		require.NoError(t, c.Flush(win))
+		doneCh := make(chan error, 1)
+		doneCh <- nil
+		close(doneCh)
+		var doneRecvCh <-chan error = doneCh
+		mockFlusherCloser.EXPECT().Flush(gomock.Any()).
+			Return(doneRecvCh, nil).Times(1)
+		require.NoError(t, awaitErr(c.Flush(context.Background(), win)))
 	})
 
 	t.Run("returns ErrInvalidSave if called on tab with nil closer handle", func(t *testing.T) {
@@ -2141,7 +2210,7 @@ func TestFlush(t *testing.T) {
 		h, err := c.Tab(resource1, 'x', "Rupi Kaur", mock)
 		require.NoError(t, win.SetContent(h))
 
-		require.Equal(t, textapi.ErrInvalidSave, c.Flush(win))
+		require.Equal(t, textapi.ErrInvalidSave, awaitErr(c.Flush(context.Background(), win)))
 	})
 
 	t.Run("returns ErrInvalidSave if called on non-tab", func(t *testing.T) {
@@ -2155,7 +2224,7 @@ func TestFlush(t *testing.T) {
 		_, err = c.Split(browserapi.OrientationTop, win, mock)
 		require.NoError(t, err)
 
-		require.Equal(t, textapi.ErrInvalidSave, c.Flush(win))
+		require.Equal(t, textapi.ErrInvalidSave, awaitErr(c.Flush(context.Background(), win)))
 	})
 }
 
@@ -2170,7 +2239,11 @@ func TestReload(t *testing.T) {
 		mockWorkspace := NewMockWorkspace(ctrl)
 		mockFlusherCloser := workspacetest.NewMockFlusherCloser(ctrl)
 
-		c, err := text.NewComponent(mockEditor, mockWorkspace, text.DefaultConfig())
+		cfgc := text.DefaultConfig()
+
+		cfgc.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+
+		c, err := text.NewComponent(mockEditor, mockWorkspace, cfgc)
 		require.NoError(t, err)
 
 		win, err := c.Focus()
@@ -2189,8 +2262,13 @@ func TestReload(t *testing.T) {
 		mock.EXPECT().CellView().
 			Return(cell.NewBuffer().View()).Times(1)
 
-		mockFlusherCloser.EXPECT().Reload().Times(1)
-		require.NoError(t, c.Reload(win))
+		doneCh := make(chan error, 1)
+		doneCh <- nil
+		close(doneCh)
+		var doneRecvCh <-chan error = doneCh
+		mockFlusherCloser.EXPECT().Reload(gomock.Any()).
+			Return(doneRecvCh, nil).Times(1)
+		require.NoError(t, awaitErr(c.Reload(context.Background(), win)))
 	})
 
 	t.Run("returns ErrInvalidSave if called on tab with nil closer handle", func(t *testing.T) {
@@ -2202,7 +2280,7 @@ func TestReload(t *testing.T) {
 		h, err := c.Tab(resource1, 'x', "Rupi Kaur", mock)
 		require.NoError(t, win.SetContent(h))
 
-		require.Equal(t, textapi.ErrInvalidReload, c.Reload(win))
+		require.Equal(t, textapi.ErrInvalidReload, awaitErr(c.Reload(context.Background(), win)))
 	})
 
 	t.Run("returns ErrInvalidReload if called on non-tab", func(t *testing.T) {
@@ -2216,7 +2294,7 @@ func TestReload(t *testing.T) {
 		_, err = c.Split(browserapi.OrientationTop, win, mock)
 		require.NoError(t, err)
 
-		require.Equal(t, textapi.ErrInvalidReload, c.Reload(win))
+		require.Equal(t, textapi.ErrInvalidReload, awaitErr(c.Reload(context.Background(), win)))
 	})
 
 	t.Run("bubbles up file reload errors", func(t *testing.T) {
@@ -2232,7 +2310,7 @@ func TestReload(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, win.SetContent(h))
 
-		err = c.Reload(win)
+		err = awaitErr(c.Reload(context.Background(), win))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "boom")
 	})
@@ -2251,6 +2329,8 @@ func TestReload(t *testing.T) {
 		require.NoError(t, win.SetContent(h))
 
 		cfg := text.DefaultConfig()
+
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		tracker := extutil.NewResourceTracker(cfg.Tabspaces, false)
 		err = c.SubscribeEvents(textapi.AllEvents(), tracker)
 		require.NoError(t, err)
@@ -2275,7 +2355,7 @@ func TestReload(t *testing.T) {
 
 		assertContent(t, "ABC"+content)
 
-		require.NoError(t, c.Reload(win))
+		require.NoError(t, awaitErr(c.Reload(context.Background(), win)))
 
 		assertContent(t, content)
 	})
@@ -2303,7 +2383,7 @@ func TestReload(t *testing.T) {
 		require.True(t, ok)
 		assert.True(t, isDirty)
 
-		require.NoError(t, c.Reload(win))
+		require.NoError(t, awaitErr(c.Reload(context.Background(), win)))
 
 		isDirty, ok = c.IsDirty(resource1)
 		require.True(t, ok)
@@ -2329,6 +2409,8 @@ func TestOverwrite(t *testing.T) {
 		require.NoError(t, win.SetContent(h))
 
 		cfg := text.DefaultConfig()
+
+		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 		tracker := extutil.NewResourceTracker(cfg.Tabspaces, false)
 		err = c.SubscribeEvents([]textapi.EventType{
 			textapi.EventTypeFlush, textapi.EventTypeOpen,
@@ -2352,7 +2434,7 @@ func TestOverwrite(t *testing.T) {
 			assert.Equal(t, expected, res.Buffer().String())
 		}
 
-		require.NoError(t, c.Overwrite(win))
+		require.NoError(t, awaitErr(c.Overwrite(context.Background(), win)))
 		assertContent(t, "ABC"+content)
 	})
 
@@ -2380,7 +2462,7 @@ func TestOverwrite(t *testing.T) {
 		require.True(t, ok)
 		assert.True(t, isDirty)
 
-		require.NoError(t, c.Overwrite(win))
+		require.NoError(t, awaitErr(c.Overwrite(context.Background(), win)))
 
 		isDirty, ok = c.IsDirty(resource1)
 		require.True(t, ok)

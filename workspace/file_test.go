@@ -80,6 +80,15 @@ diff_buf_adjust(win_T *win)
 
 // INTEGRATION TESTS
 
+// awaitFlushErr collapses the async (chan, err) result back into a
+// single error so existing sync-style tests keep working.
+func awaitFlushErr(ch <-chan error, err error) error {
+	if err != nil {
+		return err
+	}
+	return <-ch
+}
+
 func newIntegrationTestCase(t *testing.T, endsInEOL bool) (
 	*cell.Buffer, *os.File,
 ) {
@@ -157,7 +166,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		_, err = os.Stat(filename)
 		require.Error(t, err)
 
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 
 		_, err = os.Stat(filename)
 		require.NoError(t, err)
@@ -193,7 +202,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		defer f.Close()
 
 		buf.WriteString("meh")
-		assert.Error(t, f.Flush())
+		assert.Error(t, awaitFlushErr(f.Flush(context.Background())))
 
 		data, err := os.ReadFile(filename)
 		require.NoError(t, err)
@@ -278,7 +287,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		require.NoError(t, err)
 		assert.Equal(t, os.FileMode(0700), fileInfo.Mode())
 
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 
 		fileInfo, err = os.Stat(filename)
 		require.NoError(t, err)
@@ -303,14 +312,14 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		f, err := openFile(filename, buf, "", false)
 		require.NoError(t, err)
 		defer f.Close()
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 		b, err := os.ReadFile(filename)
 		require.NoError(t, err)
 		assert.Equal(t, "", string(b))
 
 		buf.InsertString(term.Coordinates{}, "blah\n")
 
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 
 		fileInfo, err = os.Lstat(filename)
 		require.NoError(t, err)
@@ -337,7 +346,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		_, err = os.Stat(filename)
 		require.Error(t, err)
 
-		require.Error(t, f.Flush())
+		require.Error(t, awaitFlushErr(f.Flush(context.Background())))
 	})
 
 	t.Run("if file does not exist, Reload errors", func(t *testing.T) {
@@ -352,7 +361,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		_, err = os.Stat(filename)
 		require.Error(t, err)
 
-		require.Error(t, f.Reload())
+		require.Error(t, awaitFlushErr(f.Reload(context.Background())))
 	})
 
 	t.Run("no swap file is open, creates one; removes on close", func(t *testing.T) {
@@ -386,7 +395,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 			require.NoError(t, err)
 
 			if reload {
-				require.NoError(t, f.Reload())
+				require.NoError(t, awaitFlushErr(f.Reload(context.Background())))
 			}
 
 			buf, err := os.ReadFile(f.swap.Name())
@@ -419,7 +428,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 
 		buf, err := os.ReadFile(file.Name())
 		require.NoError(t, err)
@@ -450,7 +459,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.Reload())
+		require.NoError(t, awaitFlushErr(f.Reload(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), sampleSnippet, endsInEOL)
 		require.NoError(t, f.Close())
 	})
@@ -464,14 +473,14 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 
-		require.NoError(t, f.Reload())
+		require.NoError(t, awaitFlushErr(f.Reload(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 
 		b.InsertString(term.Coordinates{}, writeStr)
-		require.NoError(t, f.Reload())
+		require.NoError(t, awaitFlushErr(f.Reload(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 	})
 
@@ -485,7 +494,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 
 		require.NoError(t, os.WriteFile(file.Name(), []byte("deep purple\n"), 0666))
 
-		require.NoError(t, f.Reload())
+		require.NoError(t, awaitFlushErr(f.Reload(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), "deep purple", true)
 	})
 
@@ -501,7 +510,7 @@ func testFileBufferIntegration(t *testing.T, endsInEOL bool) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.Reload())
+		require.NoError(t, awaitFlushErr(f.Reload(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), sampleSnippet, endsInEOL)
 		assert.Equal(t, sampleSnippet+"\n", buf.String()) // buf doesn't have unix view
 
@@ -670,7 +679,7 @@ func TestFileBufferRecover(t *testing.T) {
 
 		time.Sleep(10 * time.Millisecond)
 
-		require.Equal(t, workspaceapi.ErrStaleData, f1.Flush())
+		require.Equal(t, workspaceapi.ErrStaleData, awaitFlushErr(f1.Flush(context.Background())))
 
 		_, err = openFile(file.Name(), b, swapDir, false)
 		require.Error(t, err)
@@ -687,7 +696,7 @@ func TestForceFlush(t *testing.T) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.ForceFlush())
+		require.NoError(t, awaitFlushErr(f.ForceFlush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 	})
 
@@ -700,8 +709,8 @@ func TestForceFlush(t *testing.T) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.Reload())
-		require.NoError(t, f.ForceFlush())
+		require.NoError(t, awaitFlushErr(f.Reload(context.Background())))
+		require.NoError(t, awaitFlushErr(f.ForceFlush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), sampleSnippet, true)
 	})
 
@@ -714,7 +723,7 @@ func TestForceFlush(t *testing.T) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 
 		require.NoError(t, os.WriteFile(file.Name(), []byte("abv"), 0))
@@ -722,7 +731,7 @@ func TestForceFlush(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "abv", string(data))
 
-		require.NoError(t, f.ForceFlush())
+		require.NoError(t, awaitFlushErr(f.ForceFlush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 	})
 
@@ -735,12 +744,12 @@ func TestForceFlush(t *testing.T) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 
 		require.NoError(t, os.Remove(file.Name()))
 
-		require.NoError(t, f.ForceFlush())
+		require.NoError(t, awaitFlushErr(f.ForceFlush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 	})
 
@@ -753,7 +762,7 @@ func TestForceFlush(t *testing.T) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.ForceFlush())
+		require.NoError(t, awaitFlushErr(f.ForceFlush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 	})
 
@@ -763,7 +772,7 @@ func TestForceFlush(t *testing.T) {
 		f, err := openFile(file.Name(), b, "", true)
 		require.NoError(t, err)
 
-		require.NoError(t, f.ForceFlush())
+		require.NoError(t, awaitFlushErr(f.ForceFlush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), sampleSnippet, true)
 	})
 
@@ -776,12 +785,12 @@ func TestForceFlush(t *testing.T) {
 		const writeStr = "XXXXXX"
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.ForceFlush())
+		require.NoError(t, awaitFlushErr(f.ForceFlush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+sampleSnippet, true)
 
 		b.InsertString(term.Coordinates{}, writeStr)
 
-		require.NoError(t, f.Flush())
+		require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 		assertFileAndBufferOnDisk(t, b, file.Name(), writeStr+writeStr+sampleSnippet, true)
 	})
 }
@@ -1227,7 +1236,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		f.scheme.(*testScheme).statFunc = func(name string) (os.FileInfo, error) {
 			return nil, myErr
 		}
-		assert.Equal(t, myErr, f.Flush())
+		assert.Equal(t, myErr, awaitFlushErr(f.Flush(context.Background())))
 	})
 
 	t.Run("flush syncs the contents of the buffer to disk", func(t *testing.T) {
@@ -1244,7 +1253,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
 
-		assert.NoError(t, f.Flush())
+		assert.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 		assert.True(t, called)
 	})
 
@@ -1259,7 +1268,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		}
 
 		mock.EXPECT().Close().Return(nil).Times(2)
-		assert.Equal(t, myErr, f.Flush())
+		assert.Equal(t, myErr, awaitFlushErr(f.Flush(context.Background())))
 	})
 
 	t.Run("flush returns error if file was modified", func(t *testing.T) {
@@ -1270,7 +1279,7 @@ func testFileBufferFlush(t *testing.T, newBuffer newBufferFunc) {
 		f.scheme.(*testScheme).statFunc = func(name string) (os.FileInfo, error) {
 			return testFileInfo{modTime: time.Now()}, nil
 		}
-		assert.Error(t, workspaceapi.ErrStaleData, f.Flush())
+		assert.Error(t, workspaceapi.ErrStaleData, awaitFlushErr(f.Flush(context.Background())))
 	})
 }
 
@@ -1282,7 +1291,7 @@ func TestNewFileBufferFlush(t *testing.T) {
 		defer ctrl.Finish()
 
 		f, _, _ := newReadOnlyTestFileBuffer(t, ctrl)
-		assert.Equal(t, workspaceapi.ErrFileIsNotWritable, f.Flush())
+		assert.Equal(t, workspaceapi.ErrFileIsNotWritable, awaitFlushErr(f.Flush(context.Background())))
 	})
 
 	t.Run("if file is created after NewFileBuffer is called returns error", func(t *testing.T) {
@@ -1296,7 +1305,7 @@ func TestNewFileBufferFlush(t *testing.T) {
 			assert.NotZero(t, flag&os.O_CREATE)
 			return nil, os.ErrExist
 		}
-		assert.Equal(t, workspaceapi.ErrStaleData, f.Flush())
+		assert.Equal(t, workspaceapi.ErrStaleData, awaitFlushErr(f.Flush(context.Background())))
 	})
 }
 
@@ -1365,7 +1374,7 @@ func testFileBufferInsert(
 
 		mock.EXPECT().Close().Return(nil).Times(2)
 		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
-		assert.NoError(t, f.Flush())
+		assert.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 	})
 
 	t.Run("if copy to swap fails, retries on next Flush and fails, bubbles up error", func(t *testing.T) {
@@ -1380,8 +1389,126 @@ func testFileBufferInsert(
 		buf.InsertString(term.Coordinates{}, myString)
 		f.wg.Wait()
 
+		// Replay on Flush fails the same way (e.g. fd genuinely
+		// broken, not just stale). recoverFiles then attempts to
+		// re-open against the scheme; here the re-open also fails,
+		// which is what bubbles up to the caller.
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(myError)
-		assert.Error(t, f.Flush())
+		mock.EXPECT().Close().Return(nil).Times(2)
+		recoverErr := errors.New("scheme down")
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
+			return nil, recoverErr
+		}
+		assert.Error(t, awaitFlushErr(f.Flush(context.Background())))
+	})
+
+	// TestFlushRecoversAfterStaleSwapFD reproduces the post-reconnect
+	// "invalid file descriptor" symptom: the background swap worker
+	// failed while the scheme was disconnected, then the scheme
+	// reconnected, so the in-memory swap fd is stale. The first
+	// retry on :write fails with the same stale-fd error; flush
+	// must recover by re-opening orig/swap and re-staging the
+	// buffer, then complete the rename normally.
+	t.Run("if copy to swap fails after replay, recovers fds and retries", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, mock, buf := newBuffer(t, ctrl)
+		myString := "post-reconnect content\n"
+		dropErr := errors.New("connection reset by peer")
+		staleFd := errors.New("rpc error: code = Unknown desc = invalid file descriptor")
+
+		// Background swap write that fails while the transport is down.
+		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(dropErr)
+		buf.InsertString(term.Coordinates{}, myString)
+		f.wg.Wait()
+
+		// First flush attempt after reconnect: the cached swap fd is
+		// still wired to the dead session, so copyFlushSwapFile fails
+		// again with the gRPC "invalid file descriptor" surface error.
+		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(staleFd)
+
+		// recoverFiles: close cached orig + swap, remove the on-disk
+		// swap, then re-open both against the now-live scheme.
+		mock.EXPECT().Close().Return(nil).Times(2)
+		f.scheme.(*testScheme).removeFunc = func(name string) error { return nil }
+		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
+
+		// Successful re-staging of the buffer into the freshly
+		// opened swap, followed by the rest of the flush path.
+		wait := expectCopyToSwap(f, mock, myString)
+		defer wait()
+
+		// flush's tail: close orig + swap before rename, then reopen
+		// the files for continued editing.
+		mock.EXPECT().Close().Return(nil).Times(2)
+		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
+
+		assert.NoError(t, awaitFlushErr(f.Flush(context.Background())))
+	})
+
+	// If a recoverFiles attempt fails partway (e.g. the scheme is
+	// still flaky on the user's first post-reconnect :write so
+	// initFiles errors), the file used to get stuck reporting
+	// ErrFileIsNotWritable on every subsequent :write because
+	// f.swap was left nil. Verify that a later :write retries
+	// recovery once the scheme is healthy and succeeds.
+	t.Run("retries recovery on next Flush after partial recovery failure", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		f, mock, buf := newBuffer(t, ctrl)
+		myString := "edited under flaky link\n"
+		dropErr := errors.New("connection reset by peer")
+
+		// Worker fails while transport is down, sets delayedError.
+		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(dropErr)
+		buf.InsertString(term.Coordinates{}, myString)
+		f.wg.Wait()
+
+		// First flush after a flaky reconnect: the replay swap copy
+		// fails again (stale fd), recoverFiles tries to re-open and
+		// also fails because the scheme is still partially down.
+		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(dropErr)
+		mock.EXPECT().Close().Return(nil).Times(2)
+
+		stillDown := errors.New("connection refused")
+		ts := f.scheme.(*testScheme)
+		ts.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
+			return nil, stillDown
+		}
+
+		err := awaitFlushErr(f.Flush(context.Background()))
+		require.Error(t, err)
+		// State after partial recovery: swap is nil, readOnly is
+		// false (we never observed a permission denied), so the
+		// file is in the "stuck" state we want to test.
+		require.Nil(t, f.swap)
+		require.False(t, f.readOnly)
+
+		// Second flush after the scheme is fully back up: must
+		// retry recovery rather than short-circuit on
+		// ErrFileIsNotWritable. Restore openFunc so initFiles
+		// works, expect the recover-init swap setup, and then the
+		// rest of the flush path.
+		ts.openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
+			return mock, nil
+		}
+		ts.removeFunc = func(name string) error { return nil }
+		// recoverFiles → initFiles → initSwap. f.orig was nil after
+		// the failed recovery so no Close calls precede this run.
+		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
+
+		// Replay of delayedError-cleared copyFlushSwapFile happens
+		// on the freshly opened swap.
+		wait := expectCopyToSwap(f, mock, myString)
+		defer wait()
+
+		// flush tail: close orig + swap, rename, reopen.
+		mock.EXPECT().Close().Return(nil).Times(2)
+		expectInitSwap(mock, defaultFileName, testFileInfo{}, defaultFileData)
+
+		assert.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 	})
 
 	t.Run("if copy to swap fails, errors contains details of swap file", func(t *testing.T) {
@@ -1397,7 +1524,14 @@ func testFileBufferInsert(
 		f.wg.Wait()
 
 		mock.EXPECT().Truncate(gomock.Eq(int64(0))).Return(myError)
-		err := f.Flush()
+		// Replay fails; recoverFiles attempts to re-open and fails
+		// as well — the error returned to the user must still
+		// reference the swap file name.
+		mock.EXPECT().Close().Return(nil).Times(2)
+		f.scheme.(*testScheme).openFunc = func(name string, flag int, perm os.FileMode) (workspaceapi.File, error) {
+			return nil, myError
+		}
+		err := awaitFlushErr(f.Flush(context.Background()))
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), defaultFileName)
 	})
@@ -1504,11 +1638,92 @@ func TestFileMissingLastCopySwap(t *testing.T) {
 		buf.WriteString("a")
 		builder.WriteString("a")
 	}
-	require.NoError(t, f.Flush())
+	require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 
 	builder.Write([]byte("\n"))
 	want := builder.String()
 	actual, err := os.ReadFile(file.Name())
-	require.NoError(t, f.Flush())
+	require.NoError(t, awaitFlushErr(f.Flush(context.Background())))
 	assert.Equal(t, want, string(actual))
+}
+
+// TestFileFlushConcurrentRejected verifies that a second Flush
+// invoked while the first is in flight returns ErrFlushInProgress.
+func TestFileFlushConcurrentRejected(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	f, err := openFile(fileObj.Name(), buf, "", false)
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Hold the file's mutex via a long-running Flush by simulating
+	// an in-flight goroutine. We can't easily intercept the scheme,
+	// so we manually set the flushing flag and verify Flush returns
+	// ErrFlushInProgress.
+	f.mu.Lock()
+	f.flushing = true
+	f.mu.Unlock()
+
+	ch, err := f.Flush(context.Background())
+	assert.Nil(t, ch)
+	assert.ErrorIs(t, err, ErrFlushInProgress)
+
+	// Clean up so deferred Close doesn't deadlock.
+	f.mu.Lock()
+	f.flushing = false
+	f.mu.Unlock()
+}
+
+// TestFileFlushCtxCancel verifies that cancelling ctx after Flush
+// is started delivers context.Canceled on the result channel even
+// if the underlying work completes successfully.
+func TestFileFlushCtxCancel(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	f, err := openFile(fileObj.Name(), buf, "", false)
+	require.NoError(t, err)
+	defer f.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	// Cancel immediately so the goroutine observes ctx.Err() when it
+	// finishes its work.
+	cancel()
+	ch, err := f.Flush(ctx)
+	require.NoError(t, err)
+	res := <-ch
+	assert.ErrorIs(t, res, context.Canceled)
+}
+
+// TestFileFlushAsyncReturnsImmediately verifies that the (chan, err)
+// pair is returned promptly. This is the freeze-regression guard: a
+// slow scheme must not block the caller of Flush.
+func TestFileFlushAsyncReturnsImmediately(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	f, err := openFile(fileObj.Name(), buf, "", false)
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Real local FS is fast, so we cannot directly observe the
+	// async-ness — but we can at least verify the API contract:
+	// Flush must return (non-nil ch, nil err) without blocking on
+	// the channel.
+	ch, err := f.Flush(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, ch)
+	// Drain the channel so the goroutine cleans up.
+	res := <-ch
+	require.NoError(t, res)
+}
+
+// TestFileReloadAsync verifies that Reload follows the same async
+// contract as Flush.
+func TestFileReloadAsync(t *testing.T) {
+	buf, fileObj := newIntegrationTestCase(t, true)
+	f, err := openFile(fileObj.Name(), buf, "", false)
+	require.NoError(t, err)
+	defer f.Close()
+
+	ch, err := f.Reload(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, ch)
+	res := <-ch
+	require.NoError(t, res)
 }

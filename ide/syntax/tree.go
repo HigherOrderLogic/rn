@@ -278,15 +278,21 @@ func (t *Tree) InitialFolds() (iterator.Iterator[term.Range], bool) {
 // Close closes all resources associated with this Tree.
 func (t *Tree) Close() (ret error) {
 	t.mu.Lock()
-	defer t.mu.Unlock()
-
 	if t.closed {
+		t.mu.Unlock()
 		return nil
 	}
 	t.closed = true
+	t.mu.Unlock()
+	// fc.Close may block (waiting for in-flight async flush/reload
+	// goroutines that, in turn, may need t.mu via OnDidEdit). Run it
+	// without holding the mutex; OnDidEdit / incrementalParse short
+	// out on t.closed and return immediately.
 	if err := t.fc.Close(); err != nil {
 		ret = multierror.Append(ret, err)
 	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	if !t.ready {
 		return nil
 	}
@@ -349,22 +355,35 @@ func (t *internalTree) OnDidEdit(ctx context.Context, from, to term.Coordinates,
 	t.incrementalParse(t.onWillEditStart, t.onWillEditEnd, from, to, t.onWillEditStr)
 }
 
-func (t *internalTree) Flush() error {
-	ret := t.fc.Flush()
-	t.reparse()
-	return ret
+func (t *internalTree) Flush(ctx context.Context) (<-chan error, error) {
+	return t.wrapReparse(t.fc.Flush(ctx))
 }
 
-func (t *internalTree) Reload() error {
-	ret := t.fc.Reload()
-	t.reparse()
-	return ret
+func (t *internalTree) Reload(ctx context.Context) (<-chan error, error) {
+	return t.wrapReparse(t.fc.Reload(ctx))
 }
 
-func (t *internalTree) ForceFlush() error {
-	ret := t.fc.ForceFlush()
-	t.reparse()
-	return ret
+func (t *internalTree) ForceFlush(ctx context.Context) (<-chan error, error) {
+	return t.wrapReparse(t.fc.ForceFlush(ctx))
+}
+
+// wrapReparse forwards the inner channel's result and triggers a
+// re-parse on completion (regardless of success/failure, matching the
+// previous sync behaviour).
+func (t *internalTree) wrapReparse(
+	inner <-chan error, err error,
+) (<-chan error, error) {
+	if err != nil {
+		return nil, err
+	}
+	out := make(chan error, 1)
+	go func() {
+		res := <-inner
+		t.reparse()
+		out <- res
+		close(out)
+	}()
+	return out, nil
 }
 
 func (t *internalTree) LastFlush() time.Time {

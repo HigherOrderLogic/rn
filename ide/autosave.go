@@ -31,6 +31,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/workspace"
 )
 
 // defaultAutoSaveDelay is the idle time after the last edit before the
@@ -54,7 +55,7 @@ var autoSaveEvents = []textapi.EventType{
 // on. Defined as an interface so tests can stub out the disk I/O.
 type autoSaverFlusher interface {
 	Resource(uri workspaceapi.URI) (browserapi.Handler, bool)
-	FlushTab(h browserapi.Handler) error
+	FlushTab(ctx context.Context, h browserapi.Handler) (<-chan error, error)
 }
 
 // autoSaver debounces editor edits per URI and triggers a buffer flush
@@ -76,6 +77,9 @@ func newAutoSaver(
 	sched func(func()) bool,
 	delay time.Duration,
 ) *autoSaver {
+	if sched == nil {
+		panic("ide.autoSaver: sched must not be nil")
+	}
 	return &autoSaver{
 		comp:          comp,
 		notifications: notifications,
@@ -126,24 +130,51 @@ func (a *autoSaver) flushURI(uri workspaceapi.URI) {
 	if !ok {
 		return
 	}
-	err := a.comp.FlushTab(h)
-	if err == nil {
-		return
+	ch, err := a.comp.FlushTab(context.Background(), h)
+	if err != nil {
+		switch {
+		case errors.Is(err, textapi.ErrInvalidSave):
+			// not a file tab (e.g. terminal/file-explorer); silently skip.
+			return
+		case errors.Is(err, workspace.ErrFlushInProgress):
+			// previous save still in flight; next edit's debounce
+			// will retry. Silently skip.
+			return
+		case errors.Is(err, workspaceapi.ErrFileIsNotWritable):
+			_, _ = a.notifications.Notify(browserapi.LevelWarn,
+				"auto-save skipped: %s is not writable", uri.Path())
+			return
+		case errors.Is(err, workspaceapi.ErrStaleData):
+			_, _ = a.notifications.Notify(browserapi.LevelWarn,
+				"auto-save skipped: %s changed on disk", uri.Path())
+			return
+		default:
+			_, _ = a.notifications.Notify(browserapi.LevelError,
+				"auto-save failed for %s: %v", uri.Path(), err)
+			return
+		}
 	}
-	switch {
-	case errors.Is(err, textapi.ErrInvalidSave):
-		// not a file tab (e.g. terminal/file-explorer); silently skip.
-		return
-	case errors.Is(err, workspaceapi.ErrFileIsNotWritable):
-		_, _ = a.notifications.Notify(browserapi.LevelWarn,
-			"auto-save skipped: %s is not writable", uri.Path())
-		return
-	case errors.Is(err, workspaceapi.ErrStaleData):
-		_, _ = a.notifications.Notify(browserapi.LevelWarn,
-			"auto-save skipped: %s changed on disk", uri.Path())
-		return
-	default:
-		_, _ = a.notifications.Notify(browserapi.LevelError,
-			"auto-save failed for %s: %v", uri.Path(), err)
-	}
+	// Async completion: dispatch the result back through sched so
+	// the notification runs on the UI goroutine.
+	go func() {
+		ferr := <-ch
+		if ferr == nil {
+			return
+		}
+		a.sched(func() {
+			switch {
+			case errors.Is(ferr, workspaceapi.ErrFileIsNotWritable):
+				_, _ = a.notifications.Notify(browserapi.LevelWarn,
+					"auto-save skipped: %s is not writable", uri.Path())
+			case errors.Is(ferr, workspaceapi.ErrStaleData):
+				_, _ = a.notifications.Notify(browserapi.LevelWarn,
+					"auto-save skipped: %s changed on disk", uri.Path())
+			case errors.Is(ferr, context.Canceled):
+				// caller cancelled; do nothing.
+			default:
+				_, _ = a.notifications.Notify(browserapi.LevelError,
+					"auto-save failed for %s: %v", uri.Path(), ferr)
+			}
+		})
+	}()
 }

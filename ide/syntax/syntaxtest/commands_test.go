@@ -250,6 +250,7 @@ func newTestComponentWithFile(
 	scheduleNextTick func(func()) bool,
 ) (*text.Component, *mockPkgManager) {
 	cfg := text.DefaultConfig()
+	cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 	pkg := newInstalledPkgManager(t)
 	cfg.PkgManager = pkg
 	cfg.NoMaxSize = false

@@ -186,6 +186,17 @@ func (i *IDE) WaitWorkspaces() {
 	i.workspaceHandler.pendingWG.Wait()
 }
 
+// WaitInflight blocks until every active workspace's in-flight async
+// save / reload awaiter goroutines have completed and their completion
+// callbacks have been dispatched to the event-loop scheduler. Intended
+// for tests that assert post-:write state in the same input turn (or
+// during shutdown when callers need a strict drain).
+//
+// Callers must not hold the IDE locker when invoking this.
+func (i *IDE) WaitInflight() {
+	i.workspaceHandler.waitInflight()
+}
+
 // SetReleaseManager sets the release.Manager of the IDE.
 // This should be called before Run or Handler are called for the first time.
 func (i *IDE) SetReleaseManager(m release.Manager) {

@@ -47,6 +47,20 @@ import (
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
+// awaitFlush starts an async FlusherCloser operation and blocks until
+// it completes. Test helper used throughout the suite to keep the
+// existing sync-style test bodies readable now that FlusherCloser is
+// asynchronous.
+func awaitFlush(
+	t *testing.T,
+	start func(context.Context) (<-chan error, error),
+) error {
+	t.Helper()
+	ch, err := start(context.Background())
+	require.NoError(t, err)
+	return <-ch
+}
+
 func TestWorkspaceSchemeExecutor(
 	t *testing.T,
 	schemeFn func(t *testing.T) schemeapi.Scheme,
@@ -352,7 +366,7 @@ func TestWorkspaceLoadIntegration(
 		_, err = write(buf, []byte("newData"))
 		require.NoError(t, err)
 
-		require.NoError(t, fc.Flush())
+		require.NoError(t, awaitFlush(t, fc.Flush))
 
 		f, werr := scheme.Open("myFile")
 		require.Nil(t, werr)
@@ -379,7 +393,7 @@ func TestWorkspaceLoadIntegration(
 		_, err = write(buf, []byte("short"))
 		require.NoError(t, err)
 
-		require.NoError(t, fc.Flush())
+		require.NoError(t, awaitFlush(t, fc.Flush))
 
 		f, werr := scheme.Open("myExistingFile")
 		require.Nil(t, werr)
@@ -456,7 +470,7 @@ func TestWorkspaceLoadIntegration(
 		_, err = write(buf, []byte("short"))
 		require.NoError(t, err)
 
-		require.NoError(t, fc.Flush())
+		require.NoError(t, awaitFlush(t, fc.Flush))
 		require.NoError(t, fc.Close())
 
 		buf = cell.NewBuffer()
@@ -465,7 +479,7 @@ func TestWorkspaceLoadIntegration(
 		_, err = write(buf, []byte("short"))
 		require.NoError(t, err)
 
-		require.NoError(t, fc.Flush())
+		require.NoError(t, awaitFlush(t, fc.Flush))
 
 		f, werr := scheme.OpenFile("myCloseTest", os.O_RDONLY, 0)
 		require.Nil(t, werr)
@@ -496,7 +510,7 @@ func TestWorkspaceLoadIntegration(
 		buf = cell.NewBuffer()
 		fc2, err := wp.Recover(fileuri, swapfileuri, buf, true)
 		require.NoError(t, err)
-		require.NoError(t, fc2.Flush())
+		require.NoError(t, awaitFlush(t, fc2.Flush))
 
 		f, werr := scheme.OpenFile("dataAtRestTest", os.O_RDONLY, 0)
 		require.Nil(t, werr)
@@ -529,7 +543,7 @@ func TestWorkspaceLoadIntegration(
 		_, err = write(buf, []byte("short"))
 		require.NoError(t, err)
 
-		require.NoError(t, fc.Flush())
+		require.NoError(t, awaitFlush(t, fc.Flush))
 
 		f, werr := scheme.OpenFile("myCloseTest", os.O_RDONLY, 0)
 		require.Nil(t, werr)

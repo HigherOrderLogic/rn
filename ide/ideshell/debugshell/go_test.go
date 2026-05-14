@@ -1189,6 +1189,7 @@ func newIDEHarness(t *testing.T, dlvBin, dir string) *ideHarness {
 		ScheduleNextTick: func(fn func()) bool { fn(); return true },
 	}))
 	tcfg := text.DefaultConfig()
+	tcfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 	comp, err := text.NewComponent(ed, ws, tcfg)
 	require.NoError(t, err)
 	comp.Browser().Resize(120, 40)
@@ -1318,7 +1319,7 @@ func (h *ideHarness) pollOnce(dir string, sizes map[string]int64) {
 		if !open {
 			continue
 		}
-		_ = h.comp.ReloadTab(t)
+		_, _ = h.comp.ReloadTab(context.Background(), t)
 	}
 }
 

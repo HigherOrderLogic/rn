@@ -94,25 +94,32 @@ type testFileBuffer struct {
 	lastFlush time.Time
 }
 
-func (t *testFileBuffer) Flush() error {
+func (t *testFileBuffer) Flush(context.Context) (<-chan error, error) {
 	if t.readOnly {
-		return workspaceapi.ErrFileIsNotWritable
+		return testFBDone(workspaceapi.ErrFileIsNotWritable), nil
 	}
 	t.lastFlush = time.Now()
-	return t.flushErr
+	return testFBDone(t.flushErr), nil
 }
 
-func (t *testFileBuffer) Reload() error {
+func (t *testFileBuffer) Reload(context.Context) (<-chan error, error) {
 	t.lastFlush = time.Now()
-	return t.reloadErr
+	return testFBDone(t.reloadErr), nil
 }
 
-func (t *testFileBuffer) ForceFlush() error {
+func (t *testFileBuffer) ForceFlush(context.Context) (<-chan error, error) {
 	if t.readOnly {
 		t.readOnly = false
 	}
 	t.lastFlush = time.Now()
-	return t.flushErr
+	return testFBDone(t.flushErr), nil
+}
+
+func testFBDone(err error) <-chan error {
+	ch := make(chan error, 1)
+	ch <- err
+	close(ch)
+	return ch
 }
 
 func (t *testFileBuffer) LastFlush() time.Time {
@@ -1988,6 +1995,13 @@ func (t testEx) Handle(ev term.Event) (bool, bool) {
 		t.ex.companionShell.Wait()
 	}
 	t.ex.Wait()
+	// Wait for async flush completions to deliver their callbacks
+	// to the scheduler queue, then drain the scheduler once under
+	// t.mu (mirroring the host event loop). New callbacks
+	// scheduled by tasks (e.g. tcell colour resets) are intentionally
+	// not awaited here — they ride the next Handle/Draw turn the
+	// same way the production event loop processes them.
+	t.ex.waitInflight()
 	t.flushScheduled()
 	return quit, handle
 }
@@ -2071,6 +2085,41 @@ func (s *queuedScheduler) Flush(lock sync.Locker) {
 	}
 }
 
+// installDefaultTestScheduler installs a queued, lock-serializing
+// scheduler into cfg if the caller didn't supply one (i.e. cfg still
+// has the inline default from vte.DefaultConfig). It returns the
+// scheduler and the lock so testEx can drain pending callbacks before
+// Handle/Draw assertions, mirroring the production event loop where
+// scheduled callbacks run under the host's UI lock.
+//
+// We can't compare function values directly; instead we detect the
+// inline default by exercising it: it runs the callback synchronously
+// and returns true. A custom scheduler that queues for later won't run
+// the probe inline.
+func installDefaultTestScheduler(cfg *vte.Config) (*queuedScheduler, sync.Locker) {
+	if cfg.ScheduleNextTick == nil {
+		scheduler := newQueuedScheduler()
+		mu := &sync.Mutex{}
+		cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+		return scheduler, mu
+	}
+	var ran atomic.Bool
+	cfg.ScheduleNextTick(func() { ran.Store(true) })
+	if !ran.Load() {
+		// Custom scheduler that queues; trust the caller.
+		return nil, nil
+	}
+	scheduler := newQueuedScheduler()
+	cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+	// Callbacks queued by scheduler.ScheduleNextTick run only when
+	// testEx.Handle/Draw drains the queue (via flushScheduled). The
+	// drain is on the test goroutine so there is no concurrent
+	// access to serialise — we therefore pass nil for the locker,
+	// which avoids deadlocks when Handle is invoked re-entrantly
+	// (e.g. echo → publishEvent → testEx.Handle).
+	return scheduler, nil
+}
+
 type testWorkspaceWithURI struct {
 	*testLoader
 	uri workspaceapi.URI
@@ -2139,11 +2188,12 @@ func newExForTestingTerminal(
 	require.NoError(t, err)
 	opts = append(opts, text.WithCommandOverlayConfig(testCommandOverlayConfig()))
 	opts = append(opts, defCommandKeyBindings()...)
+	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
 	require.NoError(t, ex.init(ed, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(), publishEvent,
 		0, clipboard.NewInMemory(), nil, nil, nil, nil, opts...))
 	ex.subscribeCommands()
-	return testEx{ex: ex}
+	return testEx{ex: ex, mu: mu, scheduler: scheduler}
 }
 
 func newExForTestingWithWorkspace(
@@ -2169,6 +2219,7 @@ func newExForTestingWithWorkspace(
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
 
+	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
 	require.NoError(t, ex.init(ed, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, nil, nil, nil, finalOpts...))
@@ -2180,7 +2231,7 @@ func newExForTestingWithWorkspace(
 		return newTestVteWithConfig(args), nil
 	}
 	ex.pluginWaitTimeout = 1 * time.Second
-	return testEx{ex: ex}
+	return testEx{ex: ex, mu: mu, scheduler: scheduler}
 }
 
 func newExForTestingCommandsPreview(
@@ -2207,6 +2258,7 @@ func newExForTestingCommandsPreview(
 	uri, err := workspace.URI(".")
 	require.NoError(t, err)
 
+	scheduler, mu := installDefaultTestScheduler(&emulatorCfg)
 	require.NoError(t, ex.init(ed, workspace, svc,
 		notifications, uri, emulatorCfg, plugin.DefaultBarConfig(),
 		publishEvent, 0, clip, nil, previews, nil, nil, finalOpts...))
@@ -2217,7 +2269,7 @@ func newExForTestingCommandsPreview(
 	ex.newPluginHandler = func(args ...string) (pluginHandler, error) {
 		return newTestVteWithConfig(args), nil
 	}
-	return testEx{ex: ex}
+	return testEx{ex: ex, mu: mu, scheduler: scheduler}
 }
 
 func newExForTesting(t *testing.T, ed text.Editor, opts ...text.Option) testEx {
@@ -5100,12 +5152,12 @@ func TestViewForceWrite(t *testing.T) {
 └────────────────────────────┘`},
 		{":write>",
 			`┌━━━━━━━━━━────┌─────────────┐
-│o caliu.go    │ flush:      │
-├──────────────│ file is     │
+│o caliu.go    │ save        │
+├──────────────│ 'caliu.go': │
+│BBBBBBBBBBBBBB│  file is    │
 │BBBBBBBBBBBBBB│ not         │
 │BBBBBBBBBBBBBB│ writable    │
 │BBBBBBBBBBBBBB└─────────────┘
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
 │BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
@@ -5178,19 +5230,19 @@ func TestViewForceWriteAll(t *testing.T) {
 └────────────────────────────┘`},
 		{":writeall>",
 			`┌────────────━━┌─────────────┐
-│o caliu.go  o │ 2 errors    │
-├──────────────│ occurred:   │
-│BBBBBBBBBBBBBB│ flush:      │
-│BBBBBBBBBBBBBB│ file is     │
-│BBBBBBBBBBBBBB│ not         │
-│BBBBBBBBBBBBBB│ writable;   │
-│BBBBBBBBBBBBBB│ flush:      │
-│BBBBBBBBBBBBBB│ file is     │
+│o caliu.go  o │ save        │
+├──────────────│ 'boira.go': │
+│BBBBBBBBBBBBBB│  file is    │
 │BBBBBBBBBBBBBB│ not         │
 │BBBBBBBBBBBBBB│ writable    │
 │BBBBBBBBBBBBBB└─────────────┘
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
-│BBBBBBBBBBBBBBBBBBBBBBBBBBBB│
+│BBBBBBBBBBBBBB┌─────────────┐
+│BBBBBBBBBBBBBB│ save        │
+│BBBBBBBBBBBBBB│ 'caliu.go': │
+│BBBBBBBBBBBBBB│  file is    │
+│BBBBBBBBBBBBBB│ not         │
+│BBBBBBBBBBBBBB│ writable    │
+│BBBBBBBBBBBBBB└─────────────┘
 └────────────────────────────┘`},
 		{":notificationCloseAll>:writeall!>",
 			`┌────────────━━━━━━━━━━──────┐

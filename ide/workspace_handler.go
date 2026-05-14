@@ -2442,6 +2442,24 @@ func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
 	return nil
 }
 
+// waitInflight blocks until every workspace's in-flight async save /
+// reload completion goroutines have delivered their callbacks via
+// sched. Intended for tests and graceful shutdown.
+func (h *workspaceManagerHandler) waitInflight() {
+	h.mu.Lock()
+	exes := make([]*ex, 0, len(h.workspaces))
+	for _, w := range h.workspaces {
+		if w == nil || w.ex == nil {
+			continue
+		}
+		exes = append(exes, w.ex)
+	}
+	h.mu.Unlock()
+	for _, e := range exes {
+		e.waitInflight()
+	}
+}
+
 func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manager) {
 	notifications := h.notifications.current()
 	if h.pkgmanager == nil {

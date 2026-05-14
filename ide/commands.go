@@ -211,6 +211,17 @@ var (
 			},
 			handler: (*ex).flush,
 		},
+		"writecancel": {
+			man: textapi.CommandManual{
+				Summary: "Cancel the save in progress on the current buffer. " +
+					"The remote operation may still complete in the background; " +
+					"its result is discarded. The buffer remains editable; you " +
+					"can issue :write again. Use this when a remote save is " +
+					"stuck because the SSH connection was lost. To quit without " +
+					"waiting, use :q! or :wq",
+			},
+			handler: (*ex).writeCancel,
+		},
 		"writeall": {
 			man: textapi.CommandManual{
 				Summary: "Like `write` but applies to all open tabs.",

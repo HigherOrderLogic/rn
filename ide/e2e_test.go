@@ -37,6 +37,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide"
@@ -56,6 +57,102 @@ func hostScheduleNextTick(mu sync.Locker) func(func()) bool {
 		}()
 		return true
 	}
+}
+
+// schedTracker wraps a scheduler with a pending-callback counter so
+// the test can wait for every queued scheduled callback to actually
+// run, not just the IDE flusher's onDone. The IDE flusher's
+// WaitInflight only blocks for awaiter goroutines; text/component's
+// dispatchFlush is scheduled independently and otherwise has no
+// observable completion handle in tests.
+type schedTracker struct {
+	inner   func(func()) bool
+	muCount sync.Mutex
+	cond    *sync.Cond
+	pending int
+}
+
+func newSchedTracker(inner func(func()) bool) *schedTracker {
+	s := &schedTracker{inner: inner}
+	s.cond = sync.NewCond(&s.muCount)
+	return s
+}
+
+func (s *schedTracker) Schedule(fn func()) bool {
+	s.muCount.Lock()
+	s.pending++
+	s.muCount.Unlock()
+	return s.inner(func() {
+		defer func() {
+			s.muCount.Lock()
+			s.pending--
+			if s.pending == 0 {
+				s.cond.Broadcast()
+			}
+			s.muCount.Unlock()
+		}()
+		fn()
+	})
+}
+
+func (s *schedTracker) Wait() {
+	s.muCount.Lock()
+	for s.pending > 0 {
+		s.cond.Wait()
+	}
+	s.muCount.Unlock()
+}
+
+// e2eLockedHandler mirrors the way the production event loop drives
+// the IDE handler: every Handle/Draw acquires mu before delegating
+// and releases it afterwards so scheduled callbacks (spawned by
+// hostScheduleNextTick) can run in between. After each Handle, the
+// wrapper waits for in-flight async saves/reloads so the next
+// Draw/Handle observes the post-completion state.
+type e2eLockedHandler struct {
+	tui.Handler
+	mu    *sync.Mutex
+	ide   *ide.IDE
+	sched *schedTracker
+}
+
+func (h e2eLockedHandler) Handle(ev term.Event) (bool, bool) {
+	h.mu.Lock()
+	quit, handled := h.Handler.Handle(ev)
+	h.mu.Unlock()
+	h.ide.WaitInflight()
+	// WaitInflight only waits for the IDE flusher's awaiter
+	// goroutines. text/component.dispatchFlush is scheduled
+	// independently through the same scheduler and would otherwise
+	// race the next Draw — wait for the scheduler to drain too.
+	if h.sched != nil {
+		h.sched.Wait()
+	}
+	return quit, handled
+}
+
+func (h e2eLockedHandler) Draw(w term.Writer) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Handler.Draw(w)
+}
+
+func (h e2eLockedHandler) Resize(width, height int) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.Handler.Resize(width, height)
+}
+
+func (h e2eLockedHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Cursor()
+}
+
+func (h e2eLockedHandler) Selection() (string, bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.Handler.Selection()
 }
 
 func TestE2E(t *testing.T) {
@@ -97,9 +194,10 @@ command:
 		require.NoError(t, err)
 
 		var mu sync.Mutex
+		tracker := newSchedTracker(hostScheduleNextTick(&mu))
 		i, err := ide.New(dir, config.Name(), dir,
 			ide.WithLocker(&mu),
-			ide.WithScheduleNextTick(hostScheduleNextTick(&mu)),
+			ide.WithScheduleNextTick(tracker.Schedule),
 			ide.WithPublishEvent(func(term.Event) bool { return true }),
 		)
 		require.NoError(t, err)
@@ -137,9 +235,14 @@ command:
 └──────────────────┘`},
 		}
 
-		mu.Lock()
-		defer mu.Unlock()
-		handlertest.RunHandlerSequence(t, handler, 20, 10, cases)
+		// Drive the sequence through a wrapper that locks per
+		// Handle/Draw and drains in-flight async saves/reloads
+		// between turns. Holding mu across the whole sequence
+		// would deadlock with the host scheduler (which spawns
+		// goroutines that acquire mu themselves).
+		handlertest.RunHandlerSequence(t, e2eLockedHandler{
+			Handler: handler, mu: &mu, ide: i, sched: tracker,
+		}, 20, 10, cases)
 	})
 
 	t.Run("plugins executed via ! and !! get auth env vars", func(t *testing.T) {

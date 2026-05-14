@@ -92,6 +92,16 @@ type Config struct {
 	Clipboard               clipboard.Register
 	OpenRouter              OpenRouter
 	Comments                CommentConfig
+	// ScheduleNextTick is used by async flush completion to run
+	// UI-mutating callbacks (notably the EventTypeFlush dispatch and
+	// the dirty-attribute reset) on the event-loop goroutine instead
+	// of on the awaiter goroutine that delivered the result. When
+	// nil at NewComponent time, NewComponent panics — embedders must
+	// wire it. Production: ide.ex.init forwards
+	// emulatorConfig.ScheduleNextTick. Tests must install their own
+	// scheduler (a queueing or lock-serialising one for fixtures that
+	// also drive UI mutations from another goroutine).
+	ScheduleNextTick func(func()) bool
 	// FileExplorerIndentAttr selects the attributes applied to the
 	// indent guide rune drawn at the start of every depth level in
 	// the file explorer. Defaults to tcell.ColorGray when zero.

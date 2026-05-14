@@ -384,8 +384,9 @@ func (h *fileChangedPrompt) discard() {
 
 func (h *fileChangedPrompt) overwrite() {
 	h.selected = true
-	if err := h.ex.comp.OverwriteTab(h.h); err != nil {
-		_, _ = h.ex.comp.Notify(browserapi.LevelError, "failed to overwrite tab: %v", err)
+	if err := h.ex.flusher.overwrite(h.uri, h.h); err != nil {
+		_, _ = h.ex.comp.Notify(browserapi.LevelError,
+			"failed to overwrite tab: %v", err)
 	}
 }
 
@@ -426,8 +427,9 @@ func (h *areYouSurePrompt) reopen() {
 func (h *areYouSurePrompt) discard() {
 	h.selected = true
 	if h.reload {
-		if err := h.ex.comp.ReloadTab(h.h); err != nil {
-			_, _ = h.ex.comp.Notify(browserapi.LevelError, "failed to reload tab: %v", err)
+		if err := h.ex.flusher.reloadAsync(h.uri, h.h); err != nil {
+			_, _ = h.ex.comp.Notify(browserapi.LevelError,
+				"failed to reload tab: %v", err)
 		}
 	} else {
 		if err := h.ex.comp.RemoveTab(h.h); err != nil {

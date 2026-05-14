@@ -73,6 +73,19 @@ type file struct {
 	delayedError    error
 	unflushed       bool
 	lastFlush       time.Time
+	// asyncWG tracks in-flight Flush/ForceFlush/Reload goroutines so
+	// Close can wait for them before tearing down resources.
+	asyncWG sync.WaitGroup
+	// flushing is true while an async Flush/ForceFlush/Reload is in
+	// flight. Guarded by mu. Gates concurrent attempts via
+	// ErrFlushInProgress, and makes OnDidEdit defer its swap write
+	// until the async op completes.
+	flushing bool
+	// pendingEdits is set by OnDidEdit when an edit arrives while
+	// flushing == true. The async goroutine consumes it on completion
+	// to enqueue a catch-up swap write against the freshly opened
+	// swap file.
+	pendingEdits bool
 }
 
 func newFile(p schemeapi.Scheme, path string, buf *cell.Buffer, swapDir string, readOnly bool) (
@@ -389,6 +402,49 @@ func (f *file) delayCopySwapError(err error) {
 	f.delayedError = fmt.Errorf("swap file error %s: %s", f.swapFileName, err)
 }
 
+// recoverFiles closes the cached orig/swap descriptors and re-opens
+// them against the current scheme. It is used when a previous swap
+// write failed and may have left us with stale file descriptors —
+// for example after an ssh scheme reconnected following a transient
+// network drop. The on-disk swap file is removed before re-opening
+// because the in-memory buffer is the source of truth at this point
+// (a subsequent copyFlushSwapFile will re-stage it).
+//
+// recoverFiles intentionally does not touch the buffer or set
+// f.reloading: the swap-copy worker is quiescent because the caller
+// (flush) is already running with f.wg drained.
+//
+// On error f.orig / f.swap are left nil and f.readOnly stays at the
+// pre-recovery value. flush() is expected to retry recovery on the
+// next call: see the swap == nil && !readOnly branch.
+func (f *file) recoverFiles() error {
+	prevReadOnly := f.readOnly
+	if f.orig != nil {
+		_ = f.orig.Close()
+		f.orig = nil
+	}
+	if f.swap != nil {
+		_ = f.swap.Close()
+		f.swap = nil
+	}
+	// Best-effort removal of any leftover swap file from the dead
+	// session. If the scheme is still flaky this may fail; that's
+	// fine, initFiles → initSwap will surface a clearer error.
+	if f.swapFileName != "" {
+		_ = f.scheme.Remove(f.swapFileName)
+	}
+	err := f.initFiles(f.fileName, f.swapDir, prevReadOnly)
+	if err != nil {
+		// Don't leave the file flagged read-only just because a
+		// transient recovery attempt failed; otherwise a later
+		// successful recovery would still surface as
+		// ErrFileIsNotWritable. readOnly is only meaningful once
+		// initFiles has succeeded against a live scheme.
+		f.readOnly = prevReadOnly
+	}
+	return err
+}
+
 func (f *file) copyFlushSwapFile(str string) (ok bool) {
 	if f.swap == nil {
 		return
@@ -448,7 +504,18 @@ func (f *file) OnDidEdit(ctx context.Context, from, to term.Coordinates, old str
 	// copyFlushSwap to run uses the up-to-date version.
 	f.mu.Lock()
 	f.content = f.buf.String()
+	flushing := f.flushing
+	if flushing {
+		f.pendingEdits = true
+	}
 	f.mu.Unlock()
+	if flushing {
+		// async Flush/ForceFlush/Reload owns the swap file right now;
+		// the goroutine will enqueue a catch-up swap write upon
+		// completion.
+		f.wg.Done()
+		return
+	}
 	select {
 	case f.ch <- struct{}{}:
 	default:
@@ -470,28 +537,39 @@ func (f *file) touchFile() (isExist bool) {
 	return false
 }
 
-// Flush saves the contents of the buffer to disk. If file was modified by some
-// other process, this method returns ErrStaleData. Flush blocks until
-// all edits have been processed.
-func (f *file) Flush() error {
-	return f.flush(false)
+// Flush saves the contents of the buffer to disk asynchronously. If
+// the file was modified by some other process, the returned channel
+// will receive workspaceapi.ErrStaleData. See FlusherCloser for the
+// full channel contract.
+func (f *file) Flush(ctx context.Context) (<-chan error, error) {
+	return f.startAsync(ctx, false, func() error { return f.flush(false) })
 }
 
-// ForceFlush forces saving the contents of the buffer to disk, overwritting
-// any changes if a file was modified by another process. ForceFlush blocks until
-// all edits have been processed.
-func (f *file) ForceFlush() error {
-	return f.flush(true)
+// ForceFlush forces saving the contents of the buffer to disk,
+// overwriting any changes if the file was modified by another
+// process. See Flush for the channel contract.
+func (f *file) ForceFlush(ctx context.Context) (<-chan error, error) {
+	return f.startAsync(ctx, false, func() error { return f.flush(true) })
 }
 
 // LastFlush returns the last time this file was flushed or a zero value time
 // if this file has not been flushed yet.
 func (f *file) LastFlush() time.Time {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.lastFlush
 }
 
-// Reload reloads the contents of the buffer from disk.
-func (f *file) Reload() error {
+// Reload reloads the contents of the buffer from disk asynchronously.
+// See Flush for the channel contract.
+func (f *file) Reload(ctx context.Context) (<-chan error, error) {
+	return f.startAsync(ctx, true, f.reload)
+}
+
+// reload performs the synchronous reload work. It must be invoked
+// from the async goroutine (via startAsync) so that f.reloading and
+// the worker quiescing protocol hold.
+func (f *file) reload() error {
 	// stop worker and copy swap while we're reloading swap
 	f.reloading = true
 	defer func() {
@@ -537,14 +615,84 @@ func (f *file) Reload() error {
 	if err != nil {
 		return fmt.Errorf("seek: %w", err)
 	}
+	f.mu.Lock()
 	f.lastFlush = f.infoModTime
+	f.mu.Unlock()
 	return nil
+}
+
+// startAsync runs work on a background goroutine and returns a
+// buffered channel that will receive the result. Returns
+// ErrFlushInProgress if another async op is in flight. If
+// suppressKick is true (reload), the pendingEdits catch-up worker
+// kick is skipped — reload intentionally resets the buffer to the
+// on-disk contents and edits in flight are discarded by design.
+func (f *file) startAsync(
+	ctx context.Context, suppressKick bool, work func() error,
+) (<-chan error, error) {
+	f.mu.Lock()
+	if f.flushing {
+		f.mu.Unlock()
+		return nil, ErrFlushInProgress
+	}
+	f.flushing = true
+	f.pendingEdits = false
+	f.mu.Unlock()
+
+	ch := make(chan error, 1)
+	f.asyncWG.Add(1)
+	go debug.CapturePanicReport(func() {
+		defer f.asyncWG.Done()
+
+		err := work()
+
+		f.mu.Lock()
+		f.flushing = false
+		kick := !suppressKick && f.pendingEdits && f.swap != nil
+		f.pendingEdits = false
+		f.mu.Unlock()
+
+		if kick {
+			f.wg.Add(1)
+			select {
+			case f.ch <- struct{}{}:
+			default:
+				f.wg.Done()
+			}
+		}
+
+		// Honor ctx cancellation: deliver ctx.Err() instead of the real
+		// result so callers see a uniform "cancelled" signal.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			ch <- ctxErr
+		} else {
+			ch <- err
+		}
+		close(ch)
+	})
+	return ch, nil
 }
 
 func (f *file) flush(force bool) error {
 	f.wg.Wait()
 
-	if f.swap == nil && !force {
+	// If a previous recoverFiles call failed partway (e.g. the
+	// scheme was still flaky when the user retried :write right
+	// after a reconnect), f.swap may be nil even though the file
+	// isn't actually read-only. Retry recovery once before
+	// declaring the file unwritable so the next :write is not
+	// stuck on a stale state. We skip this for genuinely
+	// read-only files (readOnly == true) where initFiles
+	// purposefully left swap nil. force flushes always proceed —
+	// they handle f.swap == nil themselves further down.
+	if f.swap == nil && !force && !f.readOnly && f.fileName != "" {
+		if rerr := f.recoverFiles(); rerr != nil {
+			return workspaceapi.ErrFileIsNotWritable
+		}
+		if f.swap == nil {
+			return workspaceapi.ErrFileIsNotWritable
+		}
+	} else if f.swap == nil && !force {
 		return workspaceapi.ErrFileIsNotWritable
 	}
 
@@ -552,7 +700,32 @@ func (f *file) flush(force bool) error {
 	if err != nil {
 		f.delayedError = nil
 		if !f.copyFlushSwapFile(f.buf.String()) {
-			return err
+			// Replay failed. The most likely cause is that the
+			// underlying scheme dropped (e.g. ssh transport died,
+			// scheme reconnected) and our cached file descriptors
+			// are stale against the new session. Try recovering
+			// the file handles and retry the copy once before
+			// giving up. If recovery still fails we surface the
+			// most recent error so the user can see what's wrong.
+			// Capture the replay's swap-file error before recovery
+			// (recovery clears f.delayedError on success) so we can
+			// fall back to it when recovery itself fails — keeping
+			// the user-facing "swap file error <name>: ..." surface.
+			replayErr := f.delayedError
+			if replayErr == nil {
+				replayErr = err
+			}
+			if rerr := f.recoverFiles(); rerr != nil {
+				return replayErr
+			}
+			f.delayedError = nil
+			if !f.copyFlushSwapFile(f.buf.String()) {
+				retErr := f.delayedError
+				if retErr == nil {
+					retErr = replayErr
+				}
+				return retErr
+			}
 		}
 	}
 
@@ -640,7 +813,9 @@ func (f *file) flush(force bool) error {
 	}
 
 	f.unflushed = false
+	f.mu.Lock()
 	f.lastFlush = f.infoModTime
+	f.mu.Unlock()
 
 	return nil
 }
@@ -650,6 +825,10 @@ func (f *file) Close() (ret error) {
 	if f.fileName == "" {
 		return errors.New("trying to Close an uninitialized file")
 	}
+
+	// wait for any in-flight async Flush/ForceFlush/Reload before
+	// tearing down resources they may still be using
+	f.asyncWG.Wait()
 
 	f.fileName = ""
 

@@ -195,6 +195,9 @@ func (c *Component) newFileBuffer(
 func (c *Component) Init(
 	ed Editor, w Workspace, config Config,
 ) error {
+	if config.ScheduleNextTick == nil {
+		panic("text.Component: config.ScheduleNextTick must not be nil")
+	}
 	c.config = config
 	c.ctx, c.cancelCtx = context.WithCancel(context.Background())
 
@@ -328,41 +331,38 @@ func (c *Component) OpenFileTab(file workspaceapi.URI, readOnly bool) (
 }
 
 // Reload reloads the content of the tab at the given window. If the content
-// is not a tab, then this method returns an error.
-func (c *Component) Reload(win browser.Window) error {
+// is not a tab, then this method returns an error. Reload is asynchronous;
+// see workspace.FlusherCloser for the channel contract.
+func (c *Component) Reload(ctx context.Context, win browser.Window) (<-chan error, error) {
 	content, err := win.Content()
 	if err != nil {
-		return fmt.Errorf("get window content: %w", err)
+		return nil, fmt.Errorf("get window content: %w", err)
 	}
 	t, ok := content.(*browser.Tab)
 	if !ok {
-		return textapi.ErrInvalidReload
+		return nil, textapi.ErrInvalidReload
 	}
 
-	return c.ReloadTab(t)
+	return c.ReloadTab(ctx, t)
 }
 
 // ReloadTab reloads the given handler, if it is a tab,
-// and if it can be reloaded.
-func (c *Component) ReloadTab(h browserapi.Handler) error {
+// and if it can be reloaded. Asynchronous; see workspace.FlusherCloser.
+func (c *Component) ReloadTab(ctx context.Context, h browserapi.Handler) (<-chan error, error) {
 	t, ok := h.(*browser.Tab)
 	if !ok {
-		return textapi.ErrInvalidReload
+		return nil, textapi.ErrInvalidReload
 	}
 
 	if t.Closer() == nil {
-		return textapi.ErrInvalidReload
+		return nil, textapi.ErrInvalidReload
 	}
 
 	fc, ok := t.Closer().(workspace.FlusherCloser)
 	if !ok {
-		return textapi.ErrInvalidReload
+		return nil, textapi.ErrInvalidReload
 	}
-	err := fc.Reload()
-	if err != nil {
-		return fmt.Errorf("reload: %w", err)
-	}
-	return nil
+	return fc.Reload(ctx)
 }
 
 // RemoveTab removes the given handler, if it is a tab,
@@ -375,39 +375,41 @@ func (c *Component) RemoveTab(h browserapi.Handler) error {
 	return nil
 }
 
-// Overwrite overwrites the content of the tab at the given window. If the content
-// is not a tab, then this method returns an error.
-func (c *Component) Overwrite(win browser.Window) error {
+// Overwrite overwrites the content of the tab at the given window
+// asynchronously. If the content is not a tab, then this method
+// returns an error. See workspace.FlusherCloser for the channel
+// contract.
+func (c *Component) Overwrite(ctx context.Context, win browser.Window) (<-chan error, error) {
 	content, err := win.Content()
 	if err != nil {
-		return fmt.Errorf("get window content: %w", err)
+		return nil, fmt.Errorf("get window content: %w", err)
 	}
 	t, ok := content.(*browser.Tab)
 	if !ok {
-		return textapi.ErrInvalidReload
+		return nil, textapi.ErrInvalidReload
 	}
 
-	return c.OverwriteTab(t)
+	return c.OverwriteTab(ctx, t)
 }
 
-// OverwriteTab overwrites the given handler from persistence, if it is a tab,
-// and if it can be overwritten.
-func (c *Component) OverwriteTab(h browserapi.Handler) error {
+// OverwriteTab overwrites the given handler from persistence, if it
+// is a tab, and if it can be overwritten. Asynchronous.
+func (c *Component) OverwriteTab(ctx context.Context, h browserapi.Handler) (<-chan error, error) {
 	t, ok := h.(*browser.Tab)
 	if !ok {
-		return textapi.ErrInvalidOverwrite
+		return nil, textapi.ErrInvalidOverwrite
 	}
 
 	if t.Closer() == nil {
-		return textapi.ErrInvalidOverwrite
+		return nil, textapi.ErrInvalidOverwrite
 	}
 
 	fc, ok := t.Closer().(workspace.FlusherCloser)
 	if !ok {
-		return textapi.ErrInvalidOverwrite
+		return nil, textapi.ErrInvalidOverwrite
 	}
 
-	return fc.ForceFlush()
+	return fc.ForceFlush(ctx)
 }
 
 // recoverOpenFileTab recovers the file at filename by using the file at recoverFilename
@@ -842,63 +844,59 @@ func (c *Component) Edit(
 }
 
 // Flush flushes the contents of the tab at the given window,
-// if there's one.
-func (c *Component) Flush(win browser.Window) error {
+// asynchronously. See workspace.FlusherCloser for the channel
+// contract.
+func (c *Component) Flush(ctx context.Context, win browser.Window) (<-chan error, error) {
 	content, err := win.Content()
 	if err != nil {
-		return fmt.Errorf("get window content: %w", err)
+		return nil, fmt.Errorf("get window content: %w", err)
 	}
-	return c.FlushTab(content)
+	return c.FlushTab(ctx, content)
 }
 
-// ForceFlush flushes the contents of the tab at the given window,
-// if there's one, overriding read-only mode, and ignoring
-// stale data errors and others.
-func (c *Component) ForceFlush(win browser.Window) error {
+// ForceFlush flushes the contents of the tab at the given window
+// asynchronously, overriding read-only mode, and ignoring stale data
+// errors and others. See workspace.FlusherCloser for the channel
+// contract.
+func (c *Component) ForceFlush(ctx context.Context, win browser.Window) (<-chan error, error) {
 	content, err := win.Content()
 	if err != nil {
-		return fmt.Errorf("get window content: %w", err)
+		return nil, fmt.Errorf("get window content: %w", err)
 	}
-	return c.ForceFlushTab(content)
+	return c.ForceFlushTab(ctx, content)
 }
 
-// FlushTab flushes the contents of the given handler, if it is a tab.
-func (c *Component) FlushTab(h browserapi.Handler) error {
+// FlushTab flushes the contents of the given handler, if it is a
+// tab, asynchronously.
+func (c *Component) FlushTab(ctx context.Context, h browserapi.Handler) (<-chan error, error) {
 	t, ok := h.(*browser.Tab)
 	if !ok || t.Closer() == nil {
-		return textapi.ErrInvalidSave
+		return nil, textapi.ErrInvalidSave
 	}
 
 	fc, ok := t.Closer().(workspace.FlusherCloser)
 	if !ok {
-		return textapi.ErrInvalidSave
+		return nil, textapi.ErrInvalidSave
 	}
 
-	err := fc.Flush()
-	if err != nil {
-		return fmt.Errorf("flush: %w", err)
-	}
-	return nil
+	return fc.Flush(ctx)
 }
 
-// ForceFlushTab force-flushes the contents of the given handler, if it is a tab,
-// overriding read-only mode, and ignoring stale data errors and others.
-func (c *Component) ForceFlushTab(h browserapi.Handler) error {
+// ForceFlushTab force-flushes the contents of the given handler, if
+// it is a tab, asynchronously, overriding read-only mode, and
+// ignoring stale data errors and others.
+func (c *Component) ForceFlushTab(ctx context.Context, h browserapi.Handler) (<-chan error, error) {
 	t, ok := h.(*browser.Tab)
 	if !ok || t.Closer() == nil {
-		return textapi.ErrInvalidSave
+		return nil, textapi.ErrInvalidSave
 	}
 
 	fc, ok := t.Closer().(workspace.FlusherCloser)
 	if !ok {
-		return textapi.ErrInvalidSave
+		return nil, textapi.ErrInvalidSave
 	}
 
-	err := fc.ForceFlush()
-	if err != nil {
-		return fmt.Errorf("flush: %w", err)
-	}
-	return nil
+	return fc.ForceFlush(ctx)
 }
 
 // LastFlush returns the last time this handler was flushed, if it is a valid
@@ -1349,32 +1347,65 @@ func (c editorFlusherCloser) OnDidEdit(
 	c.parent.setDirtyFileAttr(c.uri, c.buf, c.lastFlush)
 }
 
-func (e *editorFlusherCloser) ForceFlush() error {
-	err := e.fc.ForceFlush()
-	if derr := e.dispatchFlush(); derr != nil {
-		return multierror.Append(err, derr)
+func (e *editorFlusherCloser) ForceFlush(ctx context.Context) (<-chan error, error) {
+	inner, err := e.fc.ForceFlush(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return err
+	return e.wrapAndDispatch(inner, false), nil
 }
 
 func (e *editorFlusherCloser) LastFlush() time.Time {
 	return e.fc.LastFlush()
 }
 
-func (e *editorFlusherCloser) Flush() error {
-	err := e.fc.Flush()
-	if derr := e.dispatchFlush(); derr != nil {
-		return multierror.Append(err, derr)
+func (e *editorFlusherCloser) Flush(ctx context.Context) (<-chan error, error) {
+	inner, err := e.fc.Flush(ctx)
+	if err != nil {
+		return nil, err
 	}
-	return err
+	return e.wrapAndDispatch(inner, false), nil
 }
 
-func (e *editorFlusherCloser) Reload() error {
-	err := e.fc.Reload()
+func (e *editorFlusherCloser) Reload(ctx context.Context) (<-chan error, error) {
+	inner, err := e.fc.Reload(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return e.dispatchFlush()
+	return e.wrapAndDispatch(inner, true), nil
+}
+
+// wrapAndDispatch awaits the inner channel result and emits the
+// EventTypeFlush event before forwarding the result on the returned
+// channel. When skipOnErr is true (Reload), dispatchFlush is only
+// invoked on success — preserving the original sync Reload behaviour.
+func (e *editorFlusherCloser) wrapAndDispatch(
+	inner <-chan error, skipOnErr bool,
+) <-chan error {
+	out := make(chan error, 1)
+	go func() {
+		err := <-inner
+		doDispatch := err == nil || !skipOnErr
+		if !doDispatch {
+			out <- err
+			close(out)
+			return
+		}
+		// dispatchFlush mutates UI-owned state (tab attrs, event
+		// publisher). Schedule it via the configured next-tick
+		// scheduler so it runs on the UI goroutine, then forward
+		// the result immediately — we do NOT block on the
+		// scheduled callback because the caller might be the one
+		// driving the scheduler, which would deadlock if we waited.
+		//
+		// text.Config.ScheduleNextTick must be wired by the embedder
+		// (ide.ex.init forwards emulatorConfig.ScheduleNextTick). A
+		// nil scheduler here is a programming error — fail loudly.
+		e.parent.config.ScheduleNextTick(func() { _ = e.dispatchFlush() })
+		out <- err
+		close(out)
+	}()
+	return out
 }
 
 func (e *editorFlusherCloser) dispatchFlush() error {

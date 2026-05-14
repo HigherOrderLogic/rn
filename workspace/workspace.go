@@ -66,11 +66,41 @@ type WorkspaceManager interface {
 
 var ErrOpenInOtherWorkspace = errors.New("file should be opened in another workspace")
 
+// ErrFlushInProgress is returned by Flush, ForceFlush and Reload when a
+// previous async flush or reload for the same buffer has not yet
+// completed.
+var ErrFlushInProgress = errors.New(
+	"save or reload already in progress for this buffer")
+
+// ErrNoFlushInProgress is returned by callers that need to cancel an
+// in-flight flush/reload when there is nothing pending. It is not
+// produced by FlusherCloser itself; it is exported here so that
+// higher layers can share a single sentinel.
+var ErrNoFlushInProgress = errors.New("no save in progress for this buffer")
+
 // FlusherCloser wraps methods to manipulate a cell.Buffer's persistence.
+//
+// Flush, ForceFlush and Reload are asynchronous. Each returns a buffered
+// channel (capacity 1) that will receive exactly one value and then
+// close:
+//   - nil on success,
+//   - workspaceapi.ErrStaleData / ErrFileIsNotWritable / scheme errors,
+//   - ctx.Err() if ctx is cancelled before the operation completes.
+//
+// If a flush (or reload) for this buffer is already in flight, the
+// method returns a nil channel and ErrFlushInProgress; the caller must
+// wait for the previous operation to complete (or cancel its ctx)
+// before retrying.
+//
+// Cancelling ctx signals disinterest in the result. The underlying
+// scheme calls (for example, gRPC Rename) cannot themselves be aborted
+// today: the work goroutine continues until the transport responds,
+// at which point its result is discarded and a new flush may be
+// started.
 type FlusherCloser interface {
-	Flush() error
+	Flush(ctx context.Context) (<-chan error, error)
+	ForceFlush(ctx context.Context) (<-chan error, error)
+	Reload(ctx context.Context) (<-chan error, error)
 	LastFlush() time.Time
-	ForceFlush() error
-	Reload() error
 	io.Closer
 }

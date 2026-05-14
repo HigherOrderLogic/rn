@@ -165,7 +165,9 @@ func TestEventDispatching(t *testing.T) {
 				}
 				win, err := x.comp.Focus()
 				require.NoError(t, err)
-				require.NoError(t, x.comp.Flush(win))
+				ch, err := x.comp.Flush(context.Background(), win)
+				require.NoError(t, err)
+				require.NoError(t, <-ch)
 
 				res, ok := x.comp.Resource(testURI)
 				require.True(t, ok)
@@ -468,6 +470,8 @@ func TestEventDispatching(t *testing.T) {
 		fsev := testEventInfo{e: schemeapi.Rename, u: testURI}
 		dispatchFilesystemEvent(x, &mu, ignores, fsev)
 
+		x.waitInflight()
+
 		lastFlush, err := x.comp.LastFlush(res)
 		require.NoError(t, err)
 		assert.NotEqual(t, flush, lastFlush)
@@ -542,6 +546,10 @@ func TestEventDispatching(t *testing.T) {
 
 func assertFileContent(t *testing.T, x *ex, file workspaceapi.URI, content string) {
 	t.Helper()
+	// Reloads, flushes and overwrites are asynchronous; wait for
+	// any in-flight ops to settle so the assertion reflects the
+	// post-completion state instead of a snapshot mid-flight.
+	x.waitInflight()
 	data, err := os.ReadFile(file.Path())
 	require.NoError(t, err)
 	assert.Equal(t, content+"\n", string(data))
@@ -549,6 +557,7 @@ func assertFileContent(t *testing.T, x *ex, file workspaceapi.URI, content strin
 
 func assertBufferContent(t *testing.T, x *ex, file workspaceapi.URI, content string) {
 	t.Helper()
+	x.waitInflight()
 	ed, err := x.comp.Editor(file)
 	require.NoError(t, err)
 	cells := ed.CellView().RawCells()

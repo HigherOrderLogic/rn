@@ -104,10 +104,23 @@ var _ workspace.Workspace = (*testWorkspace)(nil)
 
 type testFlusherCloser struct{}
 
-func (testFlusherCloser) Flush() error         { return nil }
+func (testFlusherCloser) Flush(context.Context) (<-chan error, error) {
+	return testFlusherCloserDone(), nil
+}
 func (testFlusherCloser) LastFlush() time.Time { return time.Time{} }
-func (testFlusherCloser) ForceFlush() error    { return nil }
-func (testFlusherCloser) Reload() error        { return nil }
-func (testFlusherCloser) Close() error         { return nil }
+func (testFlusherCloser) ForceFlush(context.Context) (<-chan error, error) {
+	return testFlusherCloserDone(), nil
+}
+func (testFlusherCloser) Reload(context.Context) (<-chan error, error) {
+	return testFlusherCloserDone(), nil
+}
+func (testFlusherCloser) Close() error { return nil }
+
+func testFlusherCloserDone() <-chan error {
+	ch := make(chan error, 1)
+	ch <- nil
+	close(ch)
+	return ch
+}
 
 var _ io.Closer = testFlusherCloser{}

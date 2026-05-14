@@ -3011,12 +3011,21 @@ func (f *integrationFlusher) Resource(uri workspaceapi.URI) (browserapi.Handler,
 	return integrationHandler{uri: uri}, true
 }
 
-func (f *integrationFlusher) FlushTab(_ browserapi.Handler) error {
+func (f *integrationFlusher) FlushTab(
+	_ context.Context, _ browserapi.Handler,
+) (<-chan error, error) {
 	f.mu.Lock()
 	f.called = true
 	err := f.err
 	f.mu.Unlock()
-	return err
+	if err != nil {
+		// pre-flight error (e.g. ErrInvalidSave)
+		return nil, err
+	}
+	ch := make(chan error, 1)
+	ch <- nil
+	close(ch)
+	return ch, nil
 }
 
 func (f *integrationFlusher) flushed() bool {
@@ -3508,7 +3517,7 @@ func TestExternalEvents(t *testing.T) {
 │                            │
 │                      NORMAL│
 └────────────────────────────┘`},
-			{"iabc<:write>", // edit + flush
+			{"iabc<:write>", // edit + flush (async, drained by testEx.Handle wrapper)
 				`┌━━━─────────────────────────┐
 │o a                         │
 ├────────────────────────────┤
@@ -4237,7 +4246,7 @@ func TestWorkspaceBarTabClickIntegration(t *testing.T) {
 		// only 3 cells (sep + name) → widths 5/3/5 → tab spans
 		// X∈[0,5], X∈[6,8], X∈[9,13].
 		// Clicking the left or right filled tab moves focus off the
-		// empty slot, which then disappears from the bar — the bar
+		// empty slot, whiy slot, which then disappears from the bar — the bar
 		// collapses back to the dense two-tab layout.
 		{
 			name:      "focused_empty_middle_click_left_filled_focuses_slot_1",
@@ -4575,19 +4584,45 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		component.FrameCharSetDefault())
 
 	mu := new(sync.Mutex)
+	// schedTracker counts scheduled-but-not-yet-run callbacks
+	// emitted by the default cfg.scheduleNextTick stub below.
+	// Tests drain by waiting on Cond until the count hits zero.
+	// Using a WaitGroup here trips the race detector because
+	// schedWG.Add can race with schedWG.Wait.
+	var schedMu sync.Mutex
+	schedCond := sync.NewCond(&schedMu)
+	var schedCount int
+	// trackSched is true when we install the default stub below;
+	// only then should m.schedWG point to the tracked WaitGroup.
+	trackSched := false
 	if cfg.scheduleNextTick == nil {
 		// Default scheduleNextTick stub mirrors the host event
 		// loop's UserFunc dispatch (gui.Update at
 		// term/gui/gui.go:248): fn runs on a fresh goroutine
 		// while holding mu, the same locker init receives.
+		// We also track every scheduled callback via schedCond so
+		// tests can drain queued callbacks before asserting on
+		// Draw output (see testWorkspaceManagerHandler.drainSched).
 		cfg.scheduleNextTick = func(fn func()) bool {
+			schedMu.Lock()
+			schedCount++
+			schedMu.Unlock()
 			go func() {
+				defer func() {
+					schedMu.Lock()
+					schedCount--
+					if schedCount == 0 {
+						schedCond.Broadcast()
+					}
+					schedMu.Unlock()
+				}()
 				mu.Lock()
 				defer mu.Unlock()
 				fn()
 			}()
 			return true
 		}
+		trackSched = true
 	}
 
 	notiConfig := notificationsConfig()
@@ -4609,6 +4644,15 @@ func newTestWorkspaceManagerHandlerWithManagerAndExtensions(
 		// interacting with the handler, so block here until that has
 		// happened (or fail with a clear deadline).
 		m.waitForWorkspace(t, *uri)
+	}
+	if trackSched {
+		m.schedDrain = func() {
+			schedMu.Lock()
+			for schedCount > 0 {
+				schedCond.Wait()
+			}
+			schedMu.Unlock()
+		}
 	}
 	return m
 }
@@ -4727,6 +4771,19 @@ func newTestWorkspaceManagerHandler(
 type testWorkspaceManagerHandler struct {
 	*workspaceManagerHandler
 	forceSyncCommandPrompt bool
+	// schedDrain blocks until every callback dispatched through the
+	// default test scheduleNextTick stub has finished. Tests that
+	// assert post-:write or post-:reload state should call drainSched
+	// (via safeHandler or directly) to ensure scheduled completion
+	// callbacks have run.
+	schedDrain func()
+}
+
+func (t *testWorkspaceManagerHandler) drainSched() {
+	if t == nil || t.schedDrain == nil {
+		return
+	}
+	t.schedDrain()
 }
 
 func (t *testWorkspaceManagerHandler) enableSyncCommandPrompt() {

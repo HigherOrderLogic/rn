@@ -147,28 +147,41 @@ func handleFSChange(ex *ex, flag schemeapi.Event, uri workspaceapi.URI) {
 
 	switch flag {
 	case schemeapi.Create, schemeapi.Write:
-		err := ex.comp.ReloadTab(t)
+		// Filesystem-watcher-triggered reloads run synchronously
+		// inside the host's IDE lock to preserve the pre-async
+		// invariant that buffer/tab-attr mutations are serialized
+		// with UI reads. The async path exists for user-initiated
+		// :write/:reloadfile where the UI must stay responsive on
+		// a stuck remote scheme.
+		ch, err := ex.comp.ReloadTab(context.Background(), t)
+		if err == nil {
+			err = <-ch
+		}
 		if err != nil {
 			_, _ = ex.comp.Notify(browserapi.LevelError,
 				"Failed to reload file %s: %v", uri.Name(), err)
-		} else {
-			_, _ = ex.comp.Notify(browserapi.LevelInfo,
-				"File '%s' changed on disk and does not have unflushed changes "+
-					"so it was reloaded", uri.Name())
+			break
 		}
+		_, _ = ex.comp.Notify(browserapi.LevelInfo,
+			"File '%s' changed on disk and does not have unflushed "+
+				"changes so it was reloaded", uri.Name())
 
 	case schemeapi.Rename:
 		_, err := ex.workspace.Stat(uri.Path())
 		if err == nil {
-			err := ex.comp.ReloadTab(t)
-			if err == nil {
-				_, _ = ex.comp.Notify(browserapi.LevelInfo,
-					"File '%s' was renamed on disk and does not have unflushed changes "+
-						"so it was reloaded", uri.Name())
+			ch, rerr := ex.comp.ReloadTab(context.Background(), t)
+			if rerr == nil {
+				rerr = <-ch
+			}
+			if rerr != nil {
+				_, _ = ex.comp.Notify(browserapi.LevelError,
+					"Failed to reload renamed file %s: %v", uri.Name(), rerr)
 				return
 			}
-			_, _ = ex.comp.Notify(browserapi.LevelError,
-				"Failed to reload renamed file %s: %v", uri.Name(), err)
+			_, _ = ex.comp.Notify(browserapi.LevelInfo,
+				"File '%s' was renamed on disk and does not have "+
+					"unflushed changes so it was reloaded",
+				uri.Name())
 			return
 		}
 		if os.IsNotExist(err) {

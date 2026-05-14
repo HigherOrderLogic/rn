@@ -86,6 +86,13 @@ var (
 	errInvalidTab          = errors.New("expected exactly one argument with the position")
 )
 
+// ErrFlushPendingQuit is returned by :q and :wq when one or more
+// buffers have an outstanding async save in flight. The user can
+// wait for the save to complete, cancel it with :writecancel, or
+// force the quit via :q! / :writeforcequit!.
+var ErrFlushPendingQuit = errors.New(
+	"save in progress; wait, run :writecancel, or use :q! / :wq")
+
 type pluginHandler interface {
 	browserapi.Floating
 	OnFocusChange(bool)
@@ -173,6 +180,19 @@ type ex struct {
 	// re-subscribe the vi editor's per-file fold/location/git
 	// commands and fail with "command already registered".
 	fileExplorerHandler *fileExplorerHandler
+
+	// sched serializes UI-thread work (callbacks from async flush
+	// goroutines, etc.). Set by the workspace handler after newEx.
+	// When nil, async completion callbacks run inline on the
+	// goroutine that delivered the result, which is unsafe for
+	// production UI but acceptable in tests that don't drive a
+	// real event loop.
+	sched func(func()) bool
+	// flusher owns the per-URI cancel/awaiter state for async
+	// Flush/ForceFlush/Reload/Overwrite operations. It serialises
+	// completion notifications through e.sched so all map mutations
+	// happen on the UI goroutine. Created in init().
+	flusher *flusher
 }
 
 // PreviewFunc is a function used to preview commands.
@@ -277,6 +297,14 @@ func (e *ex) init(
 	e.dispatchOnPreview = dispatchOnPreview
 	e.macro = macro
 	e.filepathCompleter = command.FilePathCompleter(e.workspace)
+	// sched is the event-loop scheduler; callers (production wires
+	// emulatorConfig.ScheduleNextTick; tests must install a
+	// serializing scheduler) must supply a non-nil value.
+	if emulatorConfig.ScheduleNextTick == nil {
+		panic("ide.ex: emulatorConfig.ScheduleNextTick must not be nil")
+	}
+	e.sched = emulatorConfig.ScheduleNextTick
+	e.flusher = newFlusher(&e.comp, e.notifications, e.sched)
 	e.tasks = idetask.NewManager(&e.comp, tm, m,
 		emulatorConfig.ScheduleNextTick, pluginOpts...)
 	e.tasks.SetFrameAttr(e.config.FrameAttr)
@@ -373,6 +401,12 @@ func (e *ex) doInit(
 	for _, o := range opts {
 		o(&e.config)
 	}
+	// Wire the event-loop scheduler into text.Config so async flush
+	// completion can run dispatchFlush / resetTabProperties on the
+	// UI goroutine instead of racing with Draw.
+	if e.config.ScheduleNextTick == nil {
+		e.config.ScheduleNextTick = emulatorConfig.ScheduleNextTick
+	}
 
 	seqInterests := make([]thandler.Sequence, 0,
 		len(e.config.CommandSequenceBindings))
@@ -453,6 +487,19 @@ func (e *ex) handlerInFocus() (workspaceapi.URI, text.Handler, bool) {
 		return workspaceapi.URI{}, nil, false
 	}
 	return t.URI(), ret, true
+}
+
+// focusTab returns the focused tab (and its URI) for use with the
+// async FlushTab/ReloadTab/OverwriteTab APIs. Unlike handlerInFocus,
+// it does not unwrap the tab's inner text.Handler — those APIs need
+// the *browser.Tab so they can locate its FlusherCloser.
+func (e *ex) focusTab() (workspaceapi.URI, browserapi.Handler, bool) {
+	content, _ := e.invokeWindow().Content()
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return workspaceapi.URI{}, nil, false
+	}
+	return t.URI(), t, true
 }
 
 func (e *ex) moveFocusCursor(line int) error {
@@ -644,18 +691,34 @@ func (e *ex) flushCloseIgnoreNonFlushed(_ context.Context, args ...string) error
 	if h, ok := e.fileExplorerHandlerInFocus(); ok {
 		return h.forceFlush()
 	}
+	// :writeforcequit! — exit immediately and let any in-flight or
+	// newly-started saves complete in the background.
 	e.forceExit = true
 	e.exit = true
-	return e.comp.Flush(e.invokeWindow())
+	uri, t, ok := e.focusTab()
+	if !ok {
+		return nil
+	}
+	_ = e.flusher.forceFlush(uri, t)
+	return nil
 }
 
 func (e *ex) flushClose(_ context.Context, args ...string) error {
 	if h, ok := e.fileExplorerHandlerInFocus(); ok {
 		return h.flush()
 	}
-	e.forceExit = false
-	e.exit = true
-	return e.comp.Flush(e.invokeWindow())
+	uri, t, ok := e.focusTab()
+	if !ok {
+		// nothing to flush; behave like :q
+		e.forceExit = false
+		e.exit = true
+		return nil
+	}
+	// :wq — start an async flush; on success, request exit.
+	return e.flusher.flushAndThen(uri, t, false /* force */, func() {
+		e.forceExit = false
+		e.exit = true
+	})
 }
 
 func (e *ex) flush(ctx context.Context, args ...string) error {
@@ -675,7 +738,11 @@ func (e *ex) flush(ctx context.Context, args ...string) error {
 		}
 		return e.saveTerminalSession(ctx, name, h)
 	}
-	return e.comp.Flush(e.invokeWindow())
+	uri, t, ok := e.focusTab()
+	if !ok {
+		return textapi.ErrInvalidSave
+	}
+	return e.flusher.flush(uri, t)
 }
 
 func (e *ex) forceFlush(ctx context.Context, args ...string) error {
@@ -695,12 +762,16 @@ func (e *ex) forceFlush(ctx context.Context, args ...string) error {
 		}
 		return e.saveTerminalSession(ctx, name, h)
 	}
-	return e.comp.ForceFlush(e.invokeWindow())
+	uri, t, ok := e.focusTab()
+	if !ok {
+		return textapi.ErrInvalidSave
+	}
+	return e.flusher.forceFlush(uri, t)
 }
 
 func (e *ex) flushAll(_ context.Context, args ...string) (ret error) {
 	for _, t := range e.comp.Tabs() {
-		if err := e.comp.FlushTab(t); err != nil {
+		if err := e.flusher.flush(t.URI(), t); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}
@@ -709,7 +780,7 @@ func (e *ex) flushAll(_ context.Context, args ...string) (ret error) {
 
 func (e *ex) forceFlushAll(_ context.Context, args ...string) (ret error) {
 	for _, t := range e.comp.Tabs() {
-		if err := e.comp.ForceFlushTab(t); err != nil {
+		if err := e.flusher.forceFlush(t.URI(), t); err != nil {
 			ret = multierror.Append(ret, err)
 		}
 	}
@@ -722,9 +793,33 @@ func (e *ex) forcequit(_ context.Context, args ...string) error {
 	return nil
 }
 func (e *ex) quit(_ context.Context, args ...string) error {
+	if e.flusher.inFlightCount() > 0 {
+		return ErrFlushPendingQuit
+	}
 	e.forceExit = false
 	e.exit = true
 	return nil
+}
+
+// writeCancel cancels the in-flight flush for the focused tab, if
+// any. The underlying scheme call (e.g. gRPC Rename) cannot be
+// aborted; its result will be discarded when it eventually returns.
+func (e *ex) writeCancel(_ context.Context, args ...string) error {
+	uri, _, ok := e.focusTab()
+	if !ok {
+		return workspace.ErrNoFlushInProgress
+	}
+	return e.flusher.cancel(uri)
+}
+
+// waitInflight blocks until all in-flight async Flush/ForceFlush/
+// Reload awaiter goroutines have completed and their completion
+// callbacks have been dispatched through sched. This is intended
+// for tests and for IDE shutdown — production UI code should
+// never need to wait on this directly because the UI keeps
+// responding while saves are in flight.
+func (e *ex) waitInflight() {
+	e.flusher.wait()
 }
 
 func (e *ex) dispatchCommand(cmd string, args ...string) (err error) {
@@ -889,7 +984,15 @@ func (e *ex) copyPath(uri workspaceapi.URI, absolute bool) string {
 
 func (e *ex) reloadfile(_ context.Context, args ...string) error {
 	focus := e.invokeWindow()
-	return e.comp.Reload(focus)
+	content, err := focus.Content()
+	if err != nil {
+		return fmt.Errorf("get window content: %w", err)
+	}
+	t, ok := content.(*browser.Tab)
+	if !ok {
+		return textapi.ErrInvalidReload
+	}
+	return e.flusher.reload(t.URI(), t)
 }
 
 func (e *ex) splitDirectionChange(_ context.Context, args ...string) error {

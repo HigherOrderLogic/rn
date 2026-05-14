@@ -296,7 +296,11 @@ func newFixture(t *testing.T, dir string, store storageapi.Service) *fixture {
 	require.NoError(t, err)
 	ws := workspace.NewSchemeWorkspace(workspaceURI, scheme)
 
-	c, err := text.NewComponent(vi.Editor(), ws, text.DefaultConfig())
+	cfgc := text.DefaultConfig()
+
+	cfgc.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+
+	c, err := text.NewComponent(vi.Editor(), ws, cfgc)
 	require.NoError(t, err)
 	c.Resize(100, 40)
 

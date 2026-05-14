@@ -165,9 +165,9 @@ func TestReadFile(t *testing.T) {
 
 			workspace := workspace.NewSchemeWorkspace(workspaceURI, scheme)
 
-			c, err := text.NewComponent(
-				NopEditor(), workspace, text.DefaultConfig(),
-			)
+			cfg := text.DefaultConfig()
+			cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+			c, err := text.NewComponent(NopEditor(), workspace, cfg)
 			require.NoError(t, err)
 
 			fileToReadPath := filepath.Join(dir, fmt.Sprintf("file_to_read_%d.txt", i))

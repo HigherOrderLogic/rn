@@ -1162,7 +1162,11 @@ func TestTreeHighlightsIntegration(t *testing.T) {
 	// after flush it should be the same
 	win, err := comp.Focus()
 	require.NoError(t, err)
-	require.NoError(t, comp.Flush(win))
+	{
+		ch, err := comp.Flush(context.Background(), win)
+		require.NoError(t, err)
+		require.NoError(t, <-ch)
+	}
 	sequenceCases = []handlertest.SequenceTestCase{
 		{
 			"", `┌######──────────────────────┐
@@ -1947,7 +1951,11 @@ func newEditFileName(t *testing.T, comp *text.Component, content string, filenam
 	ed := h.CellEditor()
 	_, _, _ = ed.Edit(context.Background(), start, start, content)
 
-	require.NoError(t, comp.FlushTab(tab))
+	{
+		ch, err := comp.FlushTab(context.Background(), tab)
+		require.NoError(t, err)
+		require.NoError(t, <-ch)
+	}
 
 	err = comp.Browser().Focus().SetContent(tab)
 	require.NoError(t, err)
@@ -1989,6 +1997,7 @@ func newTestCase(
 	}))
 	w := workspace.NewSchemeWorkspace(uri, scheme)
 	tcfg := text.DefaultConfig()
+	tcfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 	tcfg.Syntax = cfg
 	tcfg.PkgManager = pkgs
 	tcfg.EventPublisher = func(ev term.Event) bool {

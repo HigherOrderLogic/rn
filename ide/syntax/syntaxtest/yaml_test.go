@@ -82,6 +82,7 @@ func newYAMLTestCase(
 	)
 	w := workspace.NewSchemeWorkspace(uri, scheme)
 	tcfg := text.DefaultConfig()
+	tcfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 	tcfg.Syntax = scfg
 	tcfg.PkgManager = pkgs
 	tcfg.EventPublisher = func(ev term.Event) bool {

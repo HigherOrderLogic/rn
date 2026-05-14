@@ -1306,19 +1306,27 @@ func (t *testFlusherCloser) Close() error {
 	}
 	return nil
 }
-func (t *testFlusherCloser) Reload() error {
-	return nil
+func (t *testFlusherCloser) Reload(context.Context) (<-chan error, error) {
+	return testDoneChanErr(nil), nil
 }
-func (t *testFlusherCloser) Flush() error {
+func (t *testFlusherCloser) Flush(context.Context) (<-chan error, error) {
 	t.lastFlush = time.Now()
+	var err error
 	if t.flushFn != nil {
-		return t.flushFn()
+		err = t.flushFn()
 	}
-	return nil
+	return testDoneChanErr(err), nil
 }
 
-func (t *testFlusherCloser) ForceFlush() error {
+func (t *testFlusherCloser) ForceFlush(context.Context) (<-chan error, error) {
 	panic("unimplemented")
+}
+
+func testDoneChanErr(err error) <-chan error {
+	ch := make(chan error, 1)
+	ch <- err
+	close(ch)
+	return ch
 }
 
 func (t *testFlusherCloser) LastFlush() time.Time {
@@ -1373,6 +1381,7 @@ func (t *testLoader) ReadDir(name string) ([]os.DirEntry, error) {
 
 func newTestComponentErr(ed text.Editor) (*text.Component, error) {
 	cfg := text.DefaultConfig()
+	cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 	c, err := text.NewComponent(ed, &testLoader{}, cfg)
 	if err != nil {
 		return nil, err

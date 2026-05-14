@@ -35,7 +35,199 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
+	"unstable.build/go-tui/workspace"
 )
+
+// TestAutoSaver exercises the debounced flush behaviour of autoSaver.
+// The table is keyed by the inputs feed into Handle and the configured
+// flusher/notification behaviour, asserting on the URIs that ended up
+// being flushed and any notifications emitted.
+func TestAutoSaver(t *testing.T) {
+	uriA := mustURI(t, "memory:///tmp/a")
+	uriB := mustURI(t, "memory:///tmp/b")
+
+	cases := []autoSaverCase{
+		{
+			name:        "flushes after idle delay",
+			edits:       []autoSaverInput{{evt: textapi.EventTypeEdit, uri: uriA}},
+			drainOnce:   true,
+			wantCalls:   []workspaceapi.URI{uriA},
+			wantNotifLn: 0,
+		},
+		{
+			name: "debounces repeated edits to a single flush",
+			edits: []autoSaverInput{
+				{evt: textapi.EventTypeEdit, uri: uriA, sleep: 5 * time.Millisecond},
+				{evt: textapi.EventTypeEdit, uri: uriA, sleep: 5 * time.Millisecond},
+				{evt: textapi.EventTypeEdit, uri: uriA, sleep: 5 * time.Millisecond},
+				{evt: textapi.EventTypeEdit, uri: uriA, sleep: 5 * time.Millisecond},
+				{evt: textapi.EventTypeEdit, uri: uriA, sleep: 5 * time.Millisecond},
+			},
+			delay:       50 * time.Millisecond,
+			drainOnce:   true,
+			settle:      80 * time.Millisecond,
+			wantCalls:   []workspaceapi.URI{uriA},
+			wantNotifLn: 0,
+		},
+		{
+			name: "manual flush event cancels pending auto-save",
+			edits: []autoSaverInput{
+				{evt: textapi.EventTypeEdit, uri: uriA},
+				{evt: textapi.EventTypeFlush, uri: uriA},
+			},
+			delay:       50 * time.Millisecond,
+			settle:      80 * time.Millisecond,
+			wantCalls:   nil,
+			wantNotifLn: 0,
+		},
+		{
+			name: "close event cancels pending auto-save",
+			edits: []autoSaverInput{
+				{evt: textapi.EventTypeEdit, uri: uriA},
+				{evt: textapi.EventTypeClose, uri: uriA},
+			},
+			delay:       50 * time.Millisecond,
+			settle:      80 * time.Millisecond,
+			wantCalls:   nil,
+			wantNotifLn: 0,
+		},
+		{
+			name: "per-uri isolation: cancelling A leaves B's timer",
+			edits: []autoSaverInput{
+				{evt: textapi.EventTypeEdit, uri: uriA},
+				{evt: textapi.EventTypeEdit, uri: uriB},
+				{evt: textapi.EventTypeFlush, uri: uriA},
+			},
+			delay:       30 * time.Millisecond,
+			drainOnce:   true,
+			settle:      60 * time.Millisecond,
+			wantCalls:   []workspaceapi.URI{uriB},
+			wantNotifLn: 0,
+		},
+		{
+			name:        "skips closed tabs silently",
+			edits:       []autoSaverInput{{evt: textapi.EventTypeEdit, uri: uriA}},
+			missing:     []string{uriA.String()},
+			drainOnce:   true,
+			wantCalls:   nil,
+			wantNotifLn: 0,
+		},
+		{
+			name:           "stale data on disk surfaces a warning",
+			edits:          []autoSaverInput{{evt: textapi.EventTypeEdit, uri: uriA}},
+			preflightErr:   workspaceapi.ErrStaleData,
+			drainOnce:      true,
+			wantCalls:      []workspaceapi.URI{uriA},
+			wantNotifLn:    1,
+			wantNotifLevel: browserapi.LevelWarn,
+		},
+		{
+			name:           "read-only file surfaces a warning",
+			edits:          []autoSaverInput{{evt: textapi.EventTypeEdit, uri: uriA}},
+			preflightErr:   workspaceapi.ErrFileIsNotWritable,
+			drainOnce:      true,
+			wantCalls:      []workspaceapi.URI{uriA},
+			wantNotifLn:    1,
+			wantNotifLevel: browserapi.LevelWarn,
+		},
+		{
+			name:         "invalid-save tab kinds (e.g. terminal) are silently skipped",
+			edits:        []autoSaverInput{{evt: textapi.EventTypeEdit, uri: uriA}},
+			preflightErr: textapi.ErrInvalidSave,
+			drainOnce:    true,
+			wantCalls:    []workspaceapi.URI{uriA},
+			wantNotifLn:  0,
+		},
+		{
+			name:         "in-flight save is silently skipped (debounce will retry)",
+			edits:        []autoSaverInput{{evt: textapi.EventTypeEdit, uri: uriA}},
+			preflightErr: workspace.ErrFlushInProgress,
+			drainOnce:    true,
+			wantCalls:    []workspaceapi.URI{uriA},
+			wantNotifLn:  0,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runAutoSaverCase(t, tc)
+		})
+	}
+}
+
+// FIXTURES — kept below the test functions per project convention.
+
+// autoSaverInput is a single event sent into autoSaver.Handle, with an
+// optional inter-event sleep used by the debounce case.
+type autoSaverInput struct {
+	evt   textapi.EventType
+	uri   workspaceapi.URI
+	sleep time.Duration
+}
+
+// autoSaverCase is one row in the TestAutoSaver table.
+type autoSaverCase struct {
+	name string
+
+	// inputs
+	edits        []autoSaverInput
+	missing      []string
+	preflightErr error
+	delay        time.Duration // defaults to 10ms
+	drainOnce    bool          // pull a single scheduled callback
+	settle       time.Duration // additional time to let stray timers fire
+
+	// expectations
+	wantCalls      []workspaceapi.URI
+	wantNotifLn    int
+	wantNotifLevel browserapi.NotificationLevel
+}
+
+func runAutoSaverCase(t *testing.T, tc autoSaverCase) {
+	t.Helper()
+	missing := map[string]bool{}
+	for _, m := range tc.missing {
+		missing[m] = true
+	}
+	flusher := &recordingFlusher{err: tc.preflightErr, missing: missing}
+	notif := &fakeNotifications{}
+	sched := newQueueSched()
+	delay := tc.delay
+	if delay == 0 {
+		delay = 10 * time.Millisecond
+	}
+	saver := newAutoSaver(flusher, notif, sched.sched, delay)
+
+	for _, in := range tc.edits {
+		saver.Handle(context.Background(),
+			textapi.Event{Type: in.evt, URI: in.uri})
+		if in.sleep > 0 {
+			time.Sleep(in.sleep)
+		}
+	}
+
+	if tc.drainOnce {
+		sched.drain(t)
+	}
+	if tc.settle > 0 {
+		time.Sleep(tc.settle)
+		sched.drainAll()
+	}
+
+	if tc.wantCalls == nil {
+		assert.Empty(t, flusher.calls)
+	} else {
+		assert.Equal(t, tc.wantCalls, flusher.calls)
+	}
+	if tc.wantNotifLn == 0 {
+		assert.Empty(t, notif.notes)
+	} else {
+		require.Len(t, notif.notes, tc.wantNotifLn)
+		assert.Equal(t, tc.wantNotifLevel, notif.notes[0].level)
+	}
+}
 
 // recordingFlusher implements autoSaverFlusher and records every URI it is
 // asked to flush. All calls happen on the test goroutine because tests
@@ -54,10 +246,21 @@ func (r *recordingFlusher) Resource(uri workspaceapi.URI) (browserapi.Handler, b
 	return recordingHandler{uri: uri}, true
 }
 
-func (r *recordingFlusher) FlushTab(h browserapi.Handler) error {
+func (r *recordingFlusher) FlushTab(
+	_ context.Context, h browserapi.Handler,
+) (<-chan error, error) {
 	rh := h.(recordingHandler)
 	r.calls = append(r.calls, rh.uri)
-	return r.err
+	if r.err != nil {
+		// pre-flight error (e.g. ErrInvalidSave / ErrFlushInProgress).
+		// Return nil channel like the production interface.
+		return nil, r.err
+	}
+	// async completion: no error.
+	ch := make(chan error, 1)
+	ch <- nil
+	close(ch)
+	return ch, nil
 }
 
 // recordingHandler is a minimal browserapi.Handler used to round-trip a
@@ -142,160 +345,4 @@ func mustURI(t *testing.T, raw string) workspaceapi.URI {
 	u, err := workspaceapi.ParseURI(raw)
 	require.NoError(t, err)
 	return u
-}
-
-func TestAutoSaver_FlushesAfterIdleDelay(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{}
-	sched := newQueueSched()
-	notif := &fakeNotifications{}
-	saver := newAutoSaver(flusher, notif, sched.sched, 10*time.Millisecond)
-	uri := mustURI(t, "memory:///tmp/a")
-
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: uri})
-
-	sched.drain(t)
-	assert.Equal(t, []workspaceapi.URI{uri}, flusher.calls)
-	assert.Empty(t, notif.notes)
-}
-
-func TestAutoSaver_DebouncesEdits(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{}
-	sched := newQueueSched()
-	saver := newAutoSaver(flusher, &fakeNotifications{}, sched.sched, 50*time.Millisecond)
-	uri := mustURI(t, "memory:///tmp/a")
-
-	for range 5 {
-		saver.Handle(context.Background(),
-			textapi.Event{Type: textapi.EventTypeEdit, URI: uri})
-		time.Sleep(5 * time.Millisecond)
-	}
-
-	sched.drain(t)
-	// give the goroutine a chance to spuriously fire again.
-	time.Sleep(80 * time.Millisecond)
-	sched.drainAll()
-	assert.Len(t, flusher.calls, 1)
-}
-
-func TestAutoSaver_FlushEventCancelsPending(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{}
-	sched := newQueueSched()
-	saver := newAutoSaver(flusher, &fakeNotifications{}, sched.sched, 50*time.Millisecond)
-	uri := mustURI(t, "memory:///tmp/a")
-
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: uri})
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeFlush, URI: uri})
-
-	time.Sleep(80 * time.Millisecond)
-	sched.drainAll()
-	assert.Empty(t, flusher.calls, "manual flush must cancel auto-save")
-}
-
-func TestAutoSaver_CloseEventCancelsPending(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{}
-	sched := newQueueSched()
-	saver := newAutoSaver(flusher, &fakeNotifications{}, sched.sched, 50*time.Millisecond)
-	uri := mustURI(t, "memory:///tmp/a")
-
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: uri})
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeClose, URI: uri})
-
-	time.Sleep(80 * time.Millisecond)
-	sched.drainAll()
-	assert.Empty(t, flusher.calls)
-}
-
-func TestAutoSaver_PerURIIsolation(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{}
-	sched := newQueueSched()
-	saver := newAutoSaver(flusher, &fakeNotifications{}, sched.sched, 30*time.Millisecond)
-	a := mustURI(t, "memory:///tmp/a")
-	b := mustURI(t, "memory:///tmp/b")
-
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: a})
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: b})
-	// Cancel only A; B's timer should still fire.
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeFlush, URI: a})
-
-	sched.drain(t)
-	time.Sleep(60 * time.Millisecond)
-	sched.drainAll()
-	assert.Equal(t, []workspaceapi.URI{b}, flusher.calls)
-}
-
-func TestAutoSaver_SkipsClosedTab(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{
-		missing: map[string]bool{"memory:///tmp/a": true},
-	}
-	sched := newQueueSched()
-	saver := newAutoSaver(flusher, &fakeNotifications{}, sched.sched, 10*time.Millisecond)
-	uri := mustURI(t, "memory:///tmp/a")
-
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: uri})
-
-	sched.drain(t)
-	assert.Empty(t, flusher.calls)
-}
-
-func TestAutoSaver_StaleDataNotifies(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{err: workspaceapi.ErrStaleData}
-	notif := &fakeNotifications{}
-	sched := newQueueSched()
-	saver := newAutoSaver(flusher, notif, sched.sched, 10*time.Millisecond)
-	uri := mustURI(t, "memory:///tmp/a")
-
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: uri})
-
-	sched.drain(t)
-	require.Len(t, notif.notes, 1)
-	assert.Equal(t, browserapi.LevelWarn, notif.notes[0].level)
-}
-
-func TestAutoSaver_NotifiesOnReadOnly(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{err: workspaceapi.ErrFileIsNotWritable}
-	notif := &fakeNotifications{}
-	sched := newQueueSched()
-	saver := newAutoSaver(flusher, notif, sched.sched, 10*time.Millisecond)
-	uri := mustURI(t, "memory:///tmp/a")
-
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: uri})
-
-	sched.drain(t)
-	require.Len(t, notif.notes, 1)
-	assert.Equal(t, browserapi.LevelWarn, notif.notes[0].level)
-}
-
-func TestAutoSaver_SwallowsInvalidSaveSilently(t *testing.T) {
-	t.Parallel()
-	flusher := &recordingFlusher{err: textapi.ErrInvalidSave}
-	notif := &fakeNotifications{}
-	sched := newQueueSched()
-	saver := newAutoSaver(flusher, notif, sched.sched, 10*time.Millisecond)
-	uri := mustURI(t, "memory:///tmp/a")
-
-	saver.Handle(context.Background(),
-		textapi.Event{Type: textapi.EventTypeEdit, URI: uri})
-
-	sched.drain(t)
-	assert.Empty(t, notif.notes,
-		"non-file tabs (e.g. terminals) must not produce a notification")
 }

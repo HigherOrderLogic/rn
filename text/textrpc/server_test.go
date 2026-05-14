@@ -200,6 +200,7 @@ func TestServerSetLocationList(t *testing.T) {
 			Config: browser.Config{
 				Wallpaper: browser.NopWallpaper(),
 			},
+			ScheduleNextTick: func(fn func()) bool { fn(); return true },
 		})
 		require.NoError(t, err)
 		s := NewServer(nopNotifications{}, c, new(sync.Mutex))

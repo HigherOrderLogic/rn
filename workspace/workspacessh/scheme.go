@@ -34,6 +34,7 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -43,6 +44,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi/workspacerpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/keepalive"
 	"unstable.build/go-tui/debug"
 )
 
@@ -324,6 +326,14 @@ func (s *scheme) connectScheme(
 
 	conn, err := grpc.Dial("",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Detect dead SSH transports promptly: without keepalive
+		// pings, a remote save (Rename, Stat, ...) can block
+		// indefinitely when the transport is silently broken.
+		grpc.WithKeepaliveParams(keepalive.ClientParameters{
+			Time:                10 * time.Second,
+			Timeout:             5 * time.Second,
+			PermitWithoutStream: true,
+		}),
 		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
 			return newStdConn(
 				log.StandardLogger(), stdoutRead, stdinWrite, false, /* stdio */

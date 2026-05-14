@@ -27,6 +27,7 @@ import (
 type MockWorkspace struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkspaceMockRecorder
+	isgomock struct{}
 }
 
 // MockWorkspaceMockRecorder is the mock recorder for MockWorkspace.
@@ -438,6 +439,7 @@ func (mr *MockWorkspaceMockRecorder) Watch(path, c any, events ...any) *gomock.C
 type MockLoader struct {
 	ctrl     *gomock.Controller
 	recorder *MockLoaderMockRecorder
+	isgomock struct{}
 }
 
 // MockLoaderMockRecorder is the mock recorder for MockLoader.
@@ -505,6 +507,7 @@ func (mr *MockLoaderMockRecorder) Remove(file any) *gomock.Call {
 type MockSchemeManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockSchemeManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockSchemeManagerMockRecorder is the mock recorder for MockSchemeManager.
@@ -556,6 +559,7 @@ func (mr *MockSchemeManagerMockRecorder) UnregisterScheme(arg0 any) *gomock.Call
 type MockWorkspaceManager struct {
 	ctrl     *gomock.Controller
 	recorder *MockWorkspaceManagerMockRecorder
+	isgomock struct{}
 }
 
 // MockWorkspaceManagerMockRecorder is the mock recorder for MockWorkspaceManager.
@@ -638,6 +642,7 @@ func (mr *MockWorkspaceManagerMockRecorder) Workspace(arg0 any) *gomock.Call {
 type MockFlusherCloser struct {
 	ctrl     *gomock.Controller
 	recorder *MockFlusherCloserMockRecorder
+	isgomock struct{}
 }
 
 // MockFlusherCloserMockRecorder is the mock recorder for MockFlusherCloser.
@@ -672,31 +677,33 @@ func (mr *MockFlusherCloserMockRecorder) Close() *gomock.Call {
 }
 
 // Flush mocks base method.
-func (m *MockFlusherCloser) Flush() error {
+func (m *MockFlusherCloser) Flush(ctx context.Context) (<-chan error, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Flush")
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Flush", ctx)
+	ret0, _ := ret[0].(<-chan error)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Flush indicates an expected call of Flush.
-func (mr *MockFlusherCloserMockRecorder) Flush() *gomock.Call {
+func (mr *MockFlusherCloserMockRecorder) Flush(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MockFlusherCloser)(nil).Flush))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Flush", reflect.TypeOf((*MockFlusherCloser)(nil).Flush), ctx)
 }
 
 // ForceFlush mocks base method.
-func (m *MockFlusherCloser) ForceFlush() error {
+func (m *MockFlusherCloser) ForceFlush(ctx context.Context) (<-chan error, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForceFlush")
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "ForceFlush", ctx)
+	ret0, _ := ret[0].(<-chan error)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ForceFlush indicates an expected call of ForceFlush.
-func (mr *MockFlusherCloserMockRecorder) ForceFlush() *gomock.Call {
+func (mr *MockFlusherCloserMockRecorder) ForceFlush(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceFlush", reflect.TypeOf((*MockFlusherCloser)(nil).ForceFlush))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceFlush", reflect.TypeOf((*MockFlusherCloser)(nil).ForceFlush), ctx)
 }
 
 // LastFlush mocks base method.
@@ -714,15 +721,16 @@ func (mr *MockFlusherCloserMockRecorder) LastFlush() *gomock.Call {
 }
 
 // Reload mocks base method.
-func (m *MockFlusherCloser) Reload() error {
+func (m *MockFlusherCloser) Reload(ctx context.Context) (<-chan error, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Reload")
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret := m.ctrl.Call(m, "Reload", ctx)
+	ret0, _ := ret[0].(<-chan error)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // Reload indicates an expected call of Reload.
-func (mr *MockFlusherCloserMockRecorder) Reload() *gomock.Call {
+func (mr *MockFlusherCloserMockRecorder) Reload(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reload", reflect.TypeOf((*MockFlusherCloser)(nil).Reload))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reload", reflect.TypeOf((*MockFlusherCloser)(nil).Reload), ctx)
 }

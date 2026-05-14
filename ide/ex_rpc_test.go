@@ -100,6 +100,17 @@ func (h *safeHandler) Handle(ev term.Event) (exit, handled bool) {
 	if drainer, ok := h.Handler.(interface{ drainPendingWorkspaces() }); ok {
 		drainer.drainPendingWorkspaces()
 	}
+	// Drain any in-flight async save/reload completions started by
+	// the just-processed event. The IDE locker is released above so
+	// awaiter goroutines can complete their scheduled callbacks
+	// (cfg.scheduleNextTick spawns a goroutine that re-acquires
+	// h.mu before running cb).
+	if drainer, ok := h.Handler.(interface{ waitInflight() }); ok {
+		drainer.waitInflight()
+	}
+	if drainer, ok := h.Handler.(interface{ drainSched() }); ok {
+		drainer.drainSched()
+	}
 	return
 }
 func (h *safeHandler) Cursor() (term.Coordinates, term.CursorStyle, bool) {

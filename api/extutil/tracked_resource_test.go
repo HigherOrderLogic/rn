@@ -56,6 +56,8 @@ func TestResourceTrackerIntegration(t *testing.T) {
 			simpleEd := modeless.Editor()
 
 			cfg := text.DefaultConfig()
+
+			cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
 			cfg.Tabspaces = tabspaces
 
 			cwd := makeURI(t, "memory:///")
