@@ -295,19 +295,18 @@ type planLockdownPromptDeps struct {
 }
 
 func newPlanLockdownPrompt(deps planLockdownPromptDeps) tui.Handler {
-	const message = "**Your Rune Pro subscription has expired.**\n\n" +
-		"Upgrade to Pro to renew, or re-sign in if you've already\n" +
-		"upgraded or want to switch accounts."
+	const message = "**You are a Pro but your subscription is not.**\n\n" +
+		"Upgrade to Pro or sign in if you already have an account."
 	const (
 		optUpgrade = " Upgrade to Pro "
-		optReSign  = " Re-signin "
+		optReSign  = " Sign in "
 	)
 	// Frame omitted from PromptConfig on purpose: the SDK wraps
 	// each option in its own NewFrame when Frame is set, producing
 	// 3-line buttons. Mirror the workspace prompts by leaving Frame
 	// empty and wrapping the whole prompt in handler.NewFrame below.
 	cfg := handler.PromptConfig{
-		OptionBindings: []term.KeyComb{{Ch: 'u'}, {Ch: 'r'}},
+		OptionBindings: []term.KeyComb{{Ch: 'u'}, {Ch: 's'}},
 		PromptConfig: component.PromptConfig{
 			Message:              message,
 			Options:              []string{optUpgrade, optReSign},
