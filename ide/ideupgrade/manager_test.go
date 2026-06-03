@@ -50,6 +50,10 @@ func newTestManager(t *testing.T, srv *httptest.Server, current string, now func
 		Now:            now,
 		InitialDelay:   time.Millisecond,
 		CheckPeriod:    24 * time.Hour,
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
 	}
 	mgr, err := newWithPlatformOps(cfg, &fakePlatformOps{})
 	require.NoError(t, err)

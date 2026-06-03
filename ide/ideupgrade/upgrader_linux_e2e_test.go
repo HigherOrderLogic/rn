@@ -123,6 +123,11 @@ func TestLinuxE2E_HappyPath(t *testing.T) {
 		CLIBinaryRelPath: filepath.Join("bin", "rune"),
 		CacheDir:         cacheRoot,
 		BackupRetention:  1,
+		Notifications:    &recordingNotifications{},
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
 	}, linuxPlatformOps{httpClient: srv.Client()})
 	require.NoError(t, err)
 
@@ -186,6 +191,11 @@ func TestLinuxE2E_ChecksumMismatchRollsBack(t *testing.T) {
 		CLIBinaryRelPath: filepath.Join("bin", "rune"),
 		CacheDir:         t.TempDir(),
 		BackupRetention:  1,
+		Notifications:    &recordingNotifications{},
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
 	}, linuxPlatformOps{httpClient: srv.Client()})
 	require.NoError(t, err)
 

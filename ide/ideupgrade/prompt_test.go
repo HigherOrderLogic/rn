@@ -131,15 +131,22 @@ func TestPromptRemindLaterSetsRemindAfter(t *testing.T) {
 
 func TestPromptShowFallsBackToNotificationWithoutWM(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
+	notifs := &recordingNotifications{}
 	mgr, err := newWithPlatformOps(Config{
 		CurrentVersion: "v1",
 		ManifestURL:    "https://example.invalid",
 		Storage:        storage,
+		Notifications:  notifs,
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
 	}, &fakePlatformOps{})
 	require.NoError(t, err)
 
-	// No panic, nothing persisted.
 	mgr.showPrompt(context.Background(), Manifest{Version: "v9", URL: "u", SHA256: "s"})
+	notifyN, _ := notifs.snapshot()
+	require.Equal(t, 1, notifyN, "fallback should post one notification")
 	st := mgr.loadState(context.Background())
 	require.Empty(t, st.SkippedVersions)
 	require.True(t, st.RemindAfter.IsZero())

@@ -49,6 +49,9 @@ type upgradeOpts struct {
 	backupRetention  int
 	ops              platformOps
 	notify           func(format string, args ...any)
+	// progress, when non-nil, receives byte-transfer samples from the
+	// artifact download. It may be nil for tests and non-IDE callers.
+	progress func(downloaded, total int64)
 }
 
 // runUpgrade is the OS-agnostic orchestration of a manifest-driven
@@ -91,7 +94,7 @@ func runUpgrade(ctx context.Context, opts upgradeOpts) error {
 	artifactPath := filepath.Join(opts.cacheDir, artifactName)
 
 	notify("Downloading %s...", opts.manifest.Version)
-	if err := opts.ops.Download(ctx, opts.manifest.URL, artifactPath, nil); err != nil {
+	if err := opts.ops.Download(ctx, opts.manifest.URL, artifactPath, opts.progress); err != nil {
 		return fmt.Errorf("download artifact: %w", err)
 	}
 	defer func() { _ = opts.ops.RemoveAll(artifactPath) }()

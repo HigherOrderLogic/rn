@@ -94,12 +94,24 @@ func (f *fakePlatformOps) callSeq() []string {
 	return out
 }
 
-func (f *fakePlatformOps) Download(_ context.Context, url, dest string, _ func(int64, int64)) error {
+func (f *fakePlatformOps) Download(_ context.Context, url, dest string, progress func(int64, int64)) error {
 	f.record("Download:" + url)
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(dest, f.archiveContent, 0o644)
+	if err := os.WriteFile(dest, f.archiveContent, 0o644); err != nil {
+		return err
+	}
+	if progress != nil {
+		n := int64(len(f.archiveContent))
+		// Emit an intermediate sample then the boundary so tests can
+		// observe live progress as well as completion.
+		if n > 1 {
+			progress(n/2, n)
+		}
+		progress(n, n)
+	}
+	return nil
 }
 
 func (f *fakePlatformOps) VerifySHA256(path, want string) error {

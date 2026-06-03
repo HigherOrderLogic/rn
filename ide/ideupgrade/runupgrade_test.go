@@ -32,6 +32,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -435,4 +436,30 @@ func TestRunUpgrade_AcceptsWhenSizeUnknown(t *testing.T) {
 
 	err := runUpgrade(context.Background(), opts)
 	require.NoError(t, err)
+}
+
+func TestRunUpgrade_InvokesProgressCallback(t *testing.T) {
+	fake := &fakePlatformOps{}
+	opts, root := newDarwinFixture(t, fake)
+	writeExistingApp(t, root, "old")
+
+	var (
+		mu      sync.Mutex
+		samples [][2]int64
+	)
+	opts.progress = func(downloaded, total int64) {
+		mu.Lock()
+		samples = append(samples, [2]int64{downloaded, total})
+		mu.Unlock()
+	}
+
+	err := runUpgrade(context.Background(), opts)
+	require.NoError(t, err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, samples, "expected at least one progress sample")
+	last := samples[len(samples)-1]
+	require.Greater(t, last[1], int64(0), "total must be positive")
+	require.Equal(t, last[1], last[0], "final sample must reach total")
 }

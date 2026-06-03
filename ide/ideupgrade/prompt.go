@@ -38,21 +38,18 @@ import (
 )
 
 const (
-	upgradeNowOpt    = "   Upgrade Now   "
-	remindLaterOpt   = "   Remind Me Later   "
-	skipVersionOpt   = "   Skip This Version   "
+	upgradeNowOpt  = "   Upgrade Now   "
+	remindLaterOpt = "   Remind Me Later   "
+	skipVersionOpt = "   Skip This Version   "
 )
 
 // showPrompt renders the floating upgrade prompt for manifest. The
 // user's choice is persisted (remind / skip) and, when "Upgrade Now"
 // is chosen, runUpgrade is invoked on a background goroutine.
 func (m *Manager) showPrompt(ctx context.Context, manifest Manifest) {
-	if m.cfg.WindowManager == nil || m.cfg.ScheduleNextTick == nil {
-		// No UI to render the prompt — at least surface a notification.
-		if m.cfg.Notifications != nil {
-			_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo,
-				"Rune %s is available", manifest.Version)
-		}
+	if m.cfg.WindowManager == nil {
+		_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo,
+			"Rune %s is available", manifest.Version)
 		return
 	}
 

@@ -72,6 +72,11 @@ const (
 	storageKeyState  = "state"
 )
 
+// upgradeProgressInterval throttles intermediate download progress
+// samples so a fast download does not peg the IDE event loop. The
+// boundary sample (downloaded == total) always emits regardless.
+const upgradeProgressInterval = 50 * time.Millisecond
+
 // Config is the externally-provided configuration for a Manager.
 // All fields except CurrentVersion, ManifestURL and Storage have safe
 // defaults applied by New.
@@ -185,6 +190,10 @@ func New(cfg Config) (*Manager, error) {
 	if cfg.HTTPClient == nil {
 		cfg.HTTPClient = defaultHTTPClient()
 	}
+	// protects against nil notifications and auto-schedules
+	// to avoid data races on notifications
+	cfg.Notifications = newScheduledNotifications(
+		cfg.Notifications, cfg.ScheduleNextTick)
 	return newWithPlatformOps(cfg, newPlatformOps(cfg.HTTPClient))
 }
 
@@ -238,7 +247,7 @@ func newWithPlatformOps(cfg Config, ops platformOps) (*Manager, error) {
 		cfg.CacheDir = defaultCacheDir()
 	}
 	if cfg.ScheduleNextTick == nil {
-		cfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+		return nil, fmt.Errorf("ScheduleNextTick is nil")
 	}
 
 	storage, err := cfg.Storage.Partition(storagePartition)
@@ -287,10 +296,8 @@ func (m *Manager) CheckNow(ctx context.Context) error {
 		return err
 	}
 	if !has {
-		if m.cfg.Notifications != nil {
-			_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo,
-				"Rune is up to date (%s)", m.cfg.CurrentVersion)
-		}
+		_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo,
+			"Rune is up to date (%s)", m.cfg.CurrentVersion)
 		return nil
 	}
 	m.persistChecked(ctx)
@@ -535,24 +542,47 @@ func (m *Manager) saveState(ctx context.Context, st state) {
 // notification and return ErrUpgradeNotSupported instead of
 // touching anything.
 func (m *Manager) runUpgrade(ctx context.Context, manifest Manifest) error {
+	var (
+		notifID  string
+		lastEmit time.Time
+	)
+
 	notify := func(format string, args ...any) {
-		if m.cfg.Notifications == nil {
+		msg := fmt.Sprintf(format, args...)
+		if notifID == "" {
+			newID, err := m.cfg.Notifications.Notify(browserapi.LevelInfo, "%s", msg)
+			if err != nil {
+				log.WithError(err).Warn("ideupgrade: notify info: upgrade start")
+				return
+			}
+			notifID = newID
 			return
 		}
-		m.cfg.ScheduleNextTick(func() {
-			_, _ = m.cfg.Notifications.Notify(browserapi.LevelInfo, format, args...)
-		})
+		_ = m.cfg.Notifications.UpdateNotificationProgress(notifID, msg, 0, 1)
+	}
+
+	progress := func(downloaded, total int64) {
+		if total <= 0 || downloaded > total {
+			return
+		}
+		final := downloaded == total
+		if !final && time.Since(lastEmit) < upgradeProgressInterval {
+			return
+		}
+		lastEmit = time.Now()
+		if notifID == "" {
+			return
+		}
+		_ = m.cfg.Notifications.UpdateNotificationProgress(notifID, "", downloaded, total)
 	}
 
 	detected, err := detectRunningInstall(m.cfg)
 	if err != nil {
 		var notSupported *ErrUpgradeNotSupported
-		if errors.As(err, &notSupported) && m.cfg.Notifications != nil {
-			m.cfg.ScheduleNextTick(func() {
-				_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
-					"Rune cannot upgrade itself in place: %v",
-					notSupported.Reason)
-			})
+		if errors.As(err, &notSupported) {
+			_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
+				"Rune cannot upgrade itself in place: %v",
+				notSupported.Reason)
 		}
 		return err
 	}
@@ -568,23 +598,22 @@ func (m *Manager) runUpgrade(ctx context.Context, manifest Manifest) error {
 		backupRetention:  m.cfg.BackupRetention,
 		ops:              m.ops,
 		notify:           notify,
+		progress:         progress,
 	})
 	if err != nil {
-		if m.cfg.Notifications != nil {
-			m.cfg.ScheduleNextTick(func() {
-				_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
-					"Upgrade to %s failed: %v", manifest.Version, err)
-			})
+		if notifID != "" {
+			_ = m.cfg.Notifications.UpdateNotificationProgress(notifID, "", 1, 1)
 		}
+		_, _ = m.cfg.Notifications.Notify(browserapi.LevelError,
+			"Upgrade to %s failed: %v", manifest.Version, err)
 		return err
 	}
-	if m.cfg.Notifications != nil {
-		m.cfg.ScheduleNextTick(func() {
-			_, _ = m.cfg.Notifications.Notify(browserapi.LevelSuccess,
-				"Upgrade to %s complete — restart Rune to apply",
-				manifest.Version)
-		})
+	if notifID != "" {
+		_ = m.cfg.Notifications.UpdateNotificationProgress(notifID, "", 1, 1)
 	}
+	_, _ = m.cfg.Notifications.Notify(browserapi.LevelSuccess,
+		"Upgrade to %s complete — restart Rune to apply",
+		manifest.Version)
 	return nil
 }
 

@@ -147,6 +147,11 @@ func TestDarwinE2E_HappyPath(t *testing.T) {
 		CLIBinaryRelPath: filepath.Join("Contents", "MacOS", "rune"),
 		CacheDir:         cacheRoot,
 		BackupRetention:  1,
+		Notifications:    &recordingNotifications{},
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
 	}, ops)
 	require.NoError(t, err)
 
