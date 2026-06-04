@@ -1766,16 +1766,12 @@ func (h *workspaceManagerHandler) commandAddWorkspace(args ...string) error {
 	}
 	path := args[0]
 
-	uri, parseErr := workspaceapi.ParseURI(path)
-	if parseErr == nil {
-		log.Debugf("using path %q as a path of file:// scheme: "+
-			"could not parse as uri: %v", path, parseErr)
+	if uri, err := workspaceapi.ParseURI(path); err == nil {
 		return h.addOrCreateWorkspace(uri)
 	}
 
-	uri, pathErr := workspaceapi.CurrentUserHostURI(path)
-	if pathErr != nil {
-		err := multierror.Append(pathErr, parseErr)
+	uri, err := h.homeWorkspace.URI(path)
+	if err != nil {
 		return err
 	}
 	return h.addOrCreateWorkspace(uri)

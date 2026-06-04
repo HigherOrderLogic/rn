@@ -4800,7 +4800,7 @@ func TestWorkspaceManagerCreateWorkspace(t *testing.T) {
 ├────────────────────────────┤
 │1 1  2 2                    │
 └─────━━━────────────────────┘`},
-		{fmt.Sprintf(":workspacenew %s>", tempDir2), // not fully specified
+		{fmt.Sprintf(":workspacenew file\\://%s>", tempDir2),
 			`┌────────────────────────────┐
 │                            │
 ├────────────────────────────┤
@@ -4918,7 +4918,7 @@ func TestWorkspaceManagerCreateWorkspaceQuotedPath(t *testing.T) {
 			require.Equal(t, 2, m.workspaceCount,
 				"expected the new workspace to be registered alongside the default one")
 
-			uri, err := workspaceapi.CurrentUserHostURI(tc.path)
+			uri, err := m.homeWorkspace.URI(tc.path)
 			require.NoError(t, err)
 			var found bool
 			for _, w := range m.workspaces {
@@ -6102,4 +6102,41 @@ func TestExtensionReadyCommand(t *testing.T) {
 func inlineSchedule(fn func()) bool {
 	fn()
 	return true
+}
+
+// TestWorkspaceNewResolvesRelativeAgainstHome guards that `workspacenew`
+// resolves a bare relative path against the home workspace root rather
+// than the process working directory. On macOS the latter is the app
+// bundle (e.g. /Applications/Rune.app), so a relative path such as
+// "src/blue" must not be anchored there.
+func TestWorkspaceNewResolvesRelativeAgainstHome(t *testing.T) {
+	dir := t.TempDir()
+	m := newTestWorkspaceManagerHandlerWithDir(t,
+		defaultConfigWithWrap(false), dir, nopShutdownShaderConfig())
+	t.Cleanup(func() { _ = m.Close() })
+	m.drainPendingWorkspaces()
+
+	want, err := m.homeWorkspace.URI("src/blue")
+	require.NoError(t, err)
+
+	m.mu.Lock()
+	require.NoError(t, m.commandAddWorkspace("src/blue"))
+	require.NotNil(t, m.lastReservedPending,
+		"workspacenew must reserve a pending entry for the resolved URI")
+	got := m.lastReservedPending.uri.String()
+	pending := m.lastReservedPending
+	m.mu.Unlock()
+
+	require.Equal(t, want.String(), got,
+		"relative path must resolve against the home workspace root, "+
+			"not the process working directory")
+
+	m.mu.Lock()
+	pending.canceled.Store(true)
+	pending.cancelCtx()
+	delete(m.pending, got)
+	m.lastReservedPending = nil
+	m.mu.Unlock()
+
+	m.drainPendingWorkspaces()
 }
