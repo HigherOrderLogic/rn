@@ -34,6 +34,18 @@ import (
 type partitionService struct {
 	root  *Service
 	chain []string
+
+	// mu guards the cached partition-chain resolution below. The cache
+	// lets a long-lived partitioned view reuse one resolved handle
+	// chain across operations instead of re-opening it per op (each
+	// open fsyncs on a bbolt backend). It is invalidated when the
+	// underlying active backend changes (leadership transition) or on
+	// Close.
+	mu           sync.Mutex
+	cachedActive storageapi.Service
+	cachedLeader bool
+	cachedTarget storageapi.Service
+	cachedWalked []storageapi.Service
 }
 
 func (p *partitionService) resolve(active storageapi.Service) (
@@ -53,6 +65,54 @@ func (p *partitionService) resolve(active storageapi.Service) (
 		cur = next
 	}
 	return cur, walked, nil
+}
+
+// resolveCached returns a partition target for the current active
+// backend, reusing a previously resolved handle chain when active has
+// not changed. The cache owns the walked handles and releases them on
+// invalidation (when active changes) or on Close, so callers must not
+// close the returned target. This avoids re-opening (and fsyncing) the
+// partition chain on every operation.
+//
+// active and isLeader must be sampled together via pickActive so the
+// leader/follower close contract is honored when an older cached chain
+// is released.
+func (p *partitionService) resolveCached(active storageapi.Service, isLeader bool) (
+	storageapi.Service, error,
+) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// cachedActive is only ever set to a non-nil active (a successful
+	// resolve), so it doubles as the cache-valid signal.
+	if p.cachedActive == active && active != nil {
+		return p.cachedTarget, nil
+	}
+
+	p.invalidateCacheLocked()
+
+	target, walked, err := p.resolve(active)
+	if err != nil {
+		return nil, err
+	}
+	p.cachedActive = active
+	p.cachedLeader = isLeader
+	p.cachedTarget = target
+	p.cachedWalked = walked
+	return target, nil
+}
+
+// invalidateCacheLocked releases any cached walked handles (closing
+// leader-side handles exactly once, never follower-side) and clears the
+// cache. Callers must hold p.mu.
+func (p *partitionService) invalidateCacheLocked() {
+	if p.cachedActive == nil {
+		return
+	}
+	releaseWalked(p.cachedWalked, p.cachedLeader)
+	p.cachedTarget = nil
+	p.cachedWalked = nil
+	p.cachedActive = nil
 }
 
 // pickActive samples root.active and reports whether it is the
@@ -93,11 +153,10 @@ func (p *partitionService) withActive(
 	}
 	return p.root.retryHandleDocErrs(ctx, func(ctx context.Context) (bool, error) {
 		active, isLeader := p.pickActive()
-		target, walked, err := p.resolve(active)
+		target, err := p.resolveCached(active, isLeader)
 		if err != nil {
 			return p.root.isRetriableError(ctx, err), err
 		}
-		defer releaseWalked(walked, isLeader)
 		err = fn(ctx, target)
 		return p.root.isRetriableError(ctx, err), err
 	})
@@ -139,27 +198,12 @@ func (p *partitionService) Delete(ctx context.Context, ID string) error {
 func (p *partitionService) List(ctx context.Context, filters []storageapi.Filter) (
 	it storageapi.Iterator, err error,
 ) {
-	if err = p.root.waitReady(ctx); err != nil {
-		return nil, err
-	}
-	err = p.root.retryHandleDocErrs(ctx, func(_ context.Context) (bool, error) {
-		active, isLeader := p.pickActive()
-		target, walked, rerr := p.resolve(active)
-		if rerr != nil {
-			return p.root.isRetriableError(ctx, rerr), rerr
-		}
-		inner, lerr := target.List(ctx, filters)
-		if lerr != nil {
-			releaseWalked(walked, isLeader)
-			err = lerr
-			return p.root.isRetriableError(ctx, lerr), lerr
-		}
-		it = &partitionIterator{
-			Iterator: inner,
-			release:  func() { releaseWalked(walked, isLeader) },
-		}
-		err = nil
-		return false, nil
+	// The iterator's lifetime, not this call's, governs the inner
+	// context, so List closes over its own ctx rather than the per-
+	// attempt ctx withActive threads in.
+	err = p.withActive(ctx, func(_ context.Context, target storageapi.Service) error {
+		it, err = target.List(ctx, filters)
+		return err
 	})
 	return
 }
@@ -191,20 +235,9 @@ func (p *partitionService) Receive(ctx context.Context, topic string) ([]byte, e
 
 func (p *partitionService) IsLeader() bool { return p.root.IsLeader() }
 
-func (p *partitionService) Close() error { return nil }
-
-// partitionIterator releases the walked partition handles when the
-// caller closes the iterator. Blue's bolt store refcounts the
-// underlying *bolt.DB per Store.Close call, so each walked partition
-// must be closed exactly once to avoid pinning the db open.
-type partitionIterator struct {
-	storageapi.Iterator
-	release func()
-	once    sync.Once
-}
-
-func (it *partitionIterator) Close() error {
-	err := it.Iterator.Close()
-	it.once.Do(it.release)
-	return err
+func (p *partitionService) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.invalidateCacheLocked()
+	return nil
 }

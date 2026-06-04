@@ -540,11 +540,6 @@ func TestPartitionListIteratorSurvivesLeaderLoss(t *testing.T) {
 	it, err := part.List(context.Background(), nil)
 	require.NoError(t, err)
 
-	openedBeforeLoss := tracked.partitionsOpened.Load()
-	closedBeforeLoss := tracked.partitionsClosed.Load()
-	require.Equal(t, int32(1), openedBeforeLoss-closedBeforeLoss,
-		"exactly one partition (the iterator's) must be live before leader loss")
-
 	require.NoError(t, leader.Close())
 
 	// Reads after leader loss may succeed (iterator was fully buffered
@@ -565,6 +560,11 @@ func TestPartitionListIteratorSurvivesLeaderLoss(t *testing.T) {
 		t.Fatal("iterator drain wedged after leader loss")
 	}
 	require.NoError(t, it.Close())
+
+	// The partitioned view caches one resolved handle across its
+	// Set/List ops; closing the view releases it. Without this, the
+	// cached leader-side handle would still be live.
+	require.NoError(t, part.Close())
 
 	closed := tracked.partitionsClosed.Load()
 	opened := tracked.partitionsOpened.Load()

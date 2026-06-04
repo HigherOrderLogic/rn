@@ -633,6 +633,13 @@ func (s *Service) lead(ctx context.Context, listener net.Listener) (reconnect bo
 	)
 	s.pubsub.init(s.lockFileListen, s.pid)
 	s.mu.Unlock()
+	// Release the partition handles the server opened lazily per
+	// follower-requested path; otherwise each path a follower touched
+	// pins a leader-side backend handle (a bbolt refcount) past
+	// teardown, leaking on every leadership cycle. Registered before
+	// gsrv.Stop's defer so that, under LIFO, the gRPC server stops
+	// first and cannot repopulate the cache concurrently.
+	defer func() { _ = server.Close() }()
 	defer gsrv.Stop()
 
 	docpb.RegisterDocumentStoreServer(gsrv, server)
