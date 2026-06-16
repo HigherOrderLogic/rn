@@ -177,8 +177,12 @@ func (g *GUI) Run(title string) error {
 	// On the first launch there is no stored size, so size the window to
 	// the screen instead of the small built-in default.
 	if !g.explicitSize {
-		if w, h := ebiten.Monitor().Size(); w > 0 && h > 0 {
-			width, height = w, h
+		// ebiten.Monitor can be nil before the window is associated with a
+		// monitor; only query its size when one is available.
+		if m := ebiten.Monitor(); m != nil {
+			if w, h := m.Size(); w > 0 && h > 0 {
+				width, height = w, h
+			}
 		}
 	}
 	ebiten.SetWindowSize(width, height)

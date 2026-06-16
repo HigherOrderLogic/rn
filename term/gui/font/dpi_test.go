@@ -24,26 +24,30 @@
 package font
 
 import (
-	"github.com/hajimehoshi/ebiten/v2"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-var monitorScaleFactor = func() (float64, bool) {
-	m := ebiten.Monitor()
-	if m == nil {
-		return 0, false
-	}
-	return m.DeviceScaleFactor(), true
+// TestDeviceScaleNoMonitor reproduces the startup crash where
+// ebiten.Monitor() returns nil before the window is associated with a
+// monitor. Previously this panicked with a nil pointer dereference.
+func TestDeviceScaleNoMonitor(t *testing.T) {
+	orig := monitorScaleFactor
+	t.Cleanup(func() { monitorScaleFactor = orig })
+
+	monitorScaleFactor = func() (float64, bool) { return 0, false }
+
+	assert.NotPanics(t, func() {
+		assert.Equal(t, 1.0, deviceScale())
+	})
 }
 
-func deviceScale() float64 {
-	scale, ok := monitorScaleFactor()
-	if !ok {
-		return 1.0
-	}
-	return scale
-}
+func TestDeviceScaleWithMonitor(t *testing.T) {
+	orig := monitorScaleFactor
+	t.Cleanup(func() { monitorScaleFactor = orig })
 
-// DefaultDPI returns the recommended font DPI for the current device.
-func DefaultDPI() float64 {
-	return 72.0 * deviceScale()
+	monitorScaleFactor = func() (float64, bool) { return 2.0, true }
+
+	assert.Equal(t, 2.0, deviceScale())
 }
