@@ -1,0 +1,4 @@
+# Real dependencies installed via uv pip install -r.
+numpy>=1.26
+requests>=2.31
+urllib3>=2.0

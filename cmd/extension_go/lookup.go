@@ -35,17 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 )
 
-// goplsResolutionTimeout caps the total time spent probing the workspace
-// host for a gopls binary so a hung remote shell cannot stall
-// workspace bring-up. Only the shell probe consumes meaningful time;
-// the DataDir and well-known checks are local Stat calls.
 const goplsResolutionTimeout = 5 * time.Second
 
-// wellKnownGoplsPaths lists the paths the resolver Stats after the
-// per-workspace `<DataDir>/bin/gopls` check fails. Tilde-prefixed
-// paths are passed verbatim to fs.Stat, which routes them through
-// workspaceapi.ExpandPath so "~/" expands against the workspace
-// host's $HOME without any extra shell round-trip.
 var wellKnownGoplsPaths = []string{
 	"~/go/bin/gopls",
 	"/usr/local/go/bin/gopls",
@@ -53,10 +44,6 @@ var wellKnownGoplsPaths = []string{
 	"/usr/local/bin/gopls",
 }
 
-// hasGoProjectFiles reports whether the workspace top-level directory
-// contains a go.mod, go.sum, or go.work file. The check uses relative
-// paths so the workspace's FileSystem resolves them against the
-// workspace root.
 func hasGoProjectFiles(_ context.Context, fs workspaceapi.FileSystem) bool {
 	for _, name := range []string{"go.mod", "go.sum", "go.work"} {
 		if _, err := fs.Stat(name); err == nil {
@@ -66,24 +53,6 @@ func hasGoProjectFiles(_ context.Context, fs workspaceapi.FileSystem) bool {
 	return false
 }
 
-// resolveGoplsBinary attempts to locate the gopls binary on the
-// workspace host. The result is either an absolute path to the binary
-// or an error if every strategy failed; the caller is responsible for
-// surfacing the failure to the user.
-//
-// Resolution order (cheapest, most deterministic first):
-//  1. <dataDir>/bin/gopls — the standard package-install location.
-//     Rune installs gopls there, so this is the answer for the vast
-//     majority of workspaces.
-//  2. fs.Stat against wellKnownGoplsPaths in order. Tilde paths are
-//     expanded by fs.Stat via workspaceapi.ExpandPath against the
-//     workspace host's $HOME.
-//  3. `sh -lc 'command -v gopls'` through the workspace executor, as
-//     a last resort for users who installed gopls outside the
-//     well-known set.
-//
-// The `lsp_path` config override is handled by the caller in
-// resolveGoplsForWorkspace and bypasses this function entirely.
 func resolveGoplsBinary(
 	ctx context.Context,
 	fs workspaceapi.FileSystem,
@@ -108,11 +77,6 @@ func resolveGoplsBinary(
 	return "", errors.New("gopls binary not found on workspace host")
 }
 
-// probeShellLookup runs `sh -lc 'command -v gopls'` through the
-// workspace executor and returns the absolute path printed by the
-// shell, or an error if the probe failed or returned a non-absolute
-// path. The login flag is preserved so users whose gopls lives only
-// on the interactive PATH still get resolved.
 func probeShellLookup(
 	ctx context.Context, exec workspaceapi.Executor,
 ) (string, error) {
@@ -151,12 +115,6 @@ func probeShellLookup(
 	return "", fmt.Errorf("shell probe produced no absolute path: %q", out)
 }
 
-// probeWellKnown Stats each well-known location in order and returns
-// the first path that exists and is not a directory. Tilde-prefixed
-// candidates are expanded via fs.URI (which calls
-// workspaceapi.ExpandPath against the workspace host's $HOME) before
-// being returned, so the resolver always hands a fully-resolved
-// absolute path to gopls.
 func probeWellKnown(fs workspaceapi.FileSystem) (string, bool) {
 	for _, candidate := range wellKnownGoplsPaths {
 		uri, err := fs.URI(candidate)

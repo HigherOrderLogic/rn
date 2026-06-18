@@ -112,27 +112,6 @@ func (e *goExtension) ExtendWorkspace(
 	return nil
 }
 
-// readGoplsDebugOptions extracts the optional `debug` sub-config of the
-// Go extension. Missing keys leave the corresponding field at its zero
-// value (debugging disabled). Unknown values for `trace` fall back to
-// "off" so a typo cannot crash the workspace bring-up.
-//
-// Example rune.star:
-//
-//	"extensions": {
-//	    "go": {
-//	        "path": "extension_go",
-//	        "config": {
-//	            "lsp_path": "/usr/local/bin/gopls",
-//	            "debug": {
-//	                "rpc_trace": True,
-//	                "logfile":   "~/.rune/logs/lsp/gopls.log",
-//	                "addr":      "localhost:6060",
-//	                "trace":     "verbose",
-//	            },
-//	        },
-//	    },
-//	}
 func readGoplsDebugOptions(cfg config.Config) goplsDebugOptions {
 	var opts goplsDebugOptions
 	if cfg == nil {
@@ -168,12 +147,6 @@ func readGoplsDebugOptions(cfg config.Config) goplsDebugOptions {
 	return opts
 }
 
-// resolveLogFile expands a leading "~" / "~/" against $HOME and ensures
-// the parent directory exists. gopls exits with status 2 when it cannot
-// create the file passed to `-logfile`, so doing this here keeps a
-// missing directory from bricking workspace bring-up. The literal
-// "auto" is passed through unchanged; gopls itself maps it to a
-// per-pid file under $TMPDIR.
 func resolveLogFile(path string) (string, error) {
 	if path == "" || path == "auto" {
 		return path, nil
@@ -191,11 +164,6 @@ func resolveLogFile(path string) (string, error) {
 	return path, nil
 }
 
-// readGoplsLspPath reads the optional top-level `lsp_path` config key.
-// Validation: must be a non-empty string with no spaces (the LSP
-// command is split on space, so spaces would corrupt argv). Failures
-// surface as a warn notification so the user gets a clear error
-// instead of an obscure runtime failure later on.
 func readGoplsLspPath(cfg config.Config, notify browserapi.Notifications) (string, bool) {
 	v, err := cfg.GetString("lsp_path")
 	if err != nil {
@@ -211,12 +179,6 @@ func readGoplsLspPath(cfg config.Config, notify browserapi.Notifications) (strin
 	return v, v != ""
 }
 
-// resolveGoplsForWorkspace orchestrates gopls binary resolution on the
-// workspace host. It returns an absolute path on success or the empty
-// string when the workspace has no Go project files (in which case
-// gopls is never started) or every resolution strategy failed (in
-// which case a warn notification has been emitted and the caller
-// falls back to the bare "gopls" command).
 func resolveGoplsForWorkspace(
 	ctx context.Context,
 	w *extensionapi.Workspace,
