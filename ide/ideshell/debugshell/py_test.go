@@ -1,0 +1,818 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package debugshell
+
+import (
+	"context"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/api/textapi"
+	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/ide/idedebug"
+	"unstable.build/go-tui/ide/syntax"
+	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/text/texttest"
+	"unstable.build/go-tui/text/vi"
+	"unstable.build/go-tui/workspace"
+
+	"github.com/unstablebuild/rune-go-sdk/iterator"
+	"github.com/unstablebuild/rune-go-sdk/term"
+)
+
+// pythonAdapterConfig builds the DAP adapter registry for debugpy,
+// declaring the launch/attach argument templates in configuration
+// (the M1 contract) rather than hardcoding them. The {addr}
+// placeholder is substituted with the host:port the manager binds.
+func pythonAdapterConfig(pythonBin string) idedebug.Config {
+	return idedebug.Config{
+		MaxRetries:        1,
+		InitializeTimeout: 15 * time.Second,
+		Adapters: map[string]idedebug.AdapterConfig{
+			"python": {
+				Command: []string{pythonBin, "-m", "debugpy.adapter",
+					"--host", "{host}", "--port", "{port}"},
+				AdapterID: "debugpy",
+				LaunchArgs: map[string]string{
+					"request": "launch",
+					"type":    "python",
+					"console": "internalConsole",
+				},
+				AttachArgs: map[string]string{
+					"request": "attach",
+					"type":    "python",
+				},
+			},
+		},
+	}
+}
+
+// pyPkgManager satisfies idedebug.PkgManager and syntax.PkgManager
+// for the Python e2e harness: it returns the debugpy-capable python
+// interpreter plus, for the "python" language id, the tree-sitter
+// grammar files so the parser-driven breakpoint/variables features
+// run exactly as they do for Go.
+type pyPkgManager struct {
+	bin     string
+	grammar string
+}
+
+func (p *pyPkgManager) LibDir(
+	_ context.Context, langID string,
+) (iterator.Iterator[string], error) {
+	files := []string{p.bin}
+	if p.grammar != "" && langID == "python" {
+		entries, err := os.ReadDir(p.grammar)
+		if err == nil {
+			for _, e := range entries {
+				files = append(files, filepath.Join(p.grammar, e.Name()))
+			}
+		}
+	}
+	return iterator.FromSlice(files), nil
+}
+
+// pyGrammarDir locates the installed Python tree-sitter grammar
+// directory (the lib dir holding tree-sitter.so + *.scm) shipped by
+// the python language package under ~/.rune/pkg/python/<ver>/lib. It
+// skips the test when no such grammar is installed so CI without the
+// Python toolchain stays green.
+func pyGrammarDir(t *testing.T) string {
+	t.Helper()
+	base := filepath.Join(os.Getenv("HOME"), ".rune", "pkg", "python")
+	versions, err := os.ReadDir(base)
+	if err != nil {
+		t.Skipf("python grammar package not found at %s: %v", base, err)
+	}
+	for _, v := range versions {
+		if !v.IsDir() {
+			continue
+		}
+		lib := filepath.Join(base, v.Name(), "lib")
+		if _, err := os.Stat(filepath.Join(lib, "tree-sitter.so")); err == nil {
+			return lib
+		}
+	}
+	t.Skipf("no python tree-sitter.so under %s", base)
+	return ""
+}
+
+// newPyE2EHarness mirrors newE2EHarness but targets the Python
+// debugpy adapter, wiring the real Python tree-sitter grammar so the
+// parser-driven breakpoint and variables-location features behave as
+// they do for Go.
+func newPyE2EHarness(t *testing.T, pythonBin, dir string) *e2eHarness {
+	t.Helper()
+	scheme := newLocalScheme()
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	pkg := &pyPkgManager{bin: pythonBin, grammar: pyGrammarDir(t)}
+	dapCfg := pythonAdapterConfig(pythonBin)
+	mgr := idedebug.New(uri, scheme, pkg, dapCfg)
+
+	br := newFakeBrowser()
+	tile := &fakeWindow{id: 1, content: &texttest.TestEditorHandler{}}
+	shellW := &fakeWindow{id: 2, content: newFakeShellHandler()}
+	br.windows = []*fakeWindow{tile, shellW}
+	ed := newFakeTextapiEditor()
+	mainBytes, err := os.ReadFile(filepath.Join(dir, "main.py"))
+	require.NoError(t, err)
+	ed.cellView = &fakeCellView{cells: cellsFromString(string(mainBytes))}
+
+	fs, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), uri,
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = fs.Close() })
+	parser := syntax.NewParser(fs, pkg, uri)
+	h := New(mgr, br, ed, parser, fs, Config{
+		WorkspaceURI: uri,
+		Debugger:     dapCfg,
+		ScheduleNextTick: func(fn func()) bool {
+			fn()
+			return true
+		},
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+
+	hh := &e2eHarness{
+		t:      t,
+		ctx:    ctx,
+		cancel: cancel,
+		scheme: scheme,
+		mgr:    mgr,
+		h:      h,
+		br:     br,
+		ed:     ed,
+	}
+	hh.cond = sync.NewCond(&hh.mu)
+	h.WithNotify(hh.notify)
+	return hh
+}
+
+// findDebugpy returns the path to a Python interpreter that can
+// import debugpy, or skips the test when none is available. It
+// probes the interpreters on PATH and, since debugpy is commonly
+// installed in an isolated pipx venv whose interpreter is not on
+// PATH, the venv interpreter resolved from the debugpy console
+// script.
+func findDebugpy(t *testing.T) string {
+	t.Helper()
+	candidates := []string{"python3", "python"}
+	for _, name := range []string{"debugpy", "debugpy-adapter"} {
+		script, err := exec.LookPath(name)
+		if err != nil {
+			continue
+		}
+		if resolved, err := filepath.EvalSymlinks(script); err == nil {
+			script = resolved
+		}
+		// pipx/venv layout: <venv>/bin/<script> alongside python.
+		candidates = append(candidates,
+			filepath.Join(filepath.Dir(script), "python"),
+			filepath.Join(filepath.Dir(script), "python3"))
+	}
+	for _, bin := range candidates {
+		if !filepath.IsAbs(bin) {
+			resolved, err := exec.LookPath(bin)
+			if err != nil {
+				continue
+			}
+			bin = resolved
+		}
+		if err := exec.Command(bin, "-c", "import debugpy").Run(); err == nil {
+			return bin
+		}
+	}
+	t.Skip("debugpy not found, skipping python debugger e2e test")
+	return ""
+}
+
+// setupBuggyPy copies testdata/buggy_py to a fresh temp directory
+// and returns its real path. As with setupBuggy, symlinks are
+// resolved so the debug adapter matches breakpoints against the
+// path it reports for the source file.
+func setupBuggyPy(t *testing.T) string {
+	t.Helper()
+	tmp, err := os.MkdirTemp("", "debugshell-py-e2e-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
+	if real, err := filepath.EvalSymlinks(tmp); err == nil {
+		tmp = real
+	}
+	src := "testdata/buggy_py"
+	entries, err := os.ReadDir(src)
+	require.NoError(t, err)
+	for _, e := range entries {
+		data, err := os.ReadFile(filepath.Join(src, e.Name()))
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(
+			filepath.Join(tmp, e.Name()), data, 0o644))
+	}
+	return tmp
+}
+
+// pyFirstStmtLine is the 1-based line of `total = 0` inside
+// sum_to in testdata/buggy_py/main.py; it is computed at runtime so
+// edits to the surrounding file do not break the breakpoint target.
+func pyFirstStmtLine(t *testing.T, path string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	for i, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == "total = 0" {
+			return i + 1
+		}
+	}
+	t.Fatalf("could not find 'total = 0' in %s", path)
+	return 0
+}
+
+// TestE2E_Python_Launch drives a real debugpy DAP adapter through
+// the debugshell command surface end to end. It mirrors
+// TestE2E_Launch (the Go counterpart): the full session lifecycle
+// (initialize → launch → set-breakpoint → configured → stopped →
+// continue → terminate), the stopped and variables location lists,
+// expression evaluation, the prompt jump-backward, and the captured
+// program output. The M1 payoff is that the debugpy launch template
+// declared in configuration is what reaches the adapter on the wire.
+// It self-skips when debugpy or the Python grammar is not installed.
+func TestE2E_Python_Launch(t *testing.T) {
+	t.Parallel()
+	pythonBin := findDebugpy(t)
+	tmpDir := setupBuggyPy(t)
+	mainPath := filepath.Join(tmpDir, "main.py")
+
+	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	defer h.close()
+	ctx := h.ctx
+
+	// 1. initialize the session.
+	it, err := h.run(ctx, subInitialize, "python")
+	require.NoError(t, err)
+	go h.drainIterator(it)
+
+	// 2. launch the buggy program (fire-and-forget until configured).
+	_, err = h.run(ctx, subLaunch, mainPath)
+	require.NoError(t, err)
+
+	// 3. wait for the "initialized" milestone before configurationDone.
+	h.waitMilestone(t, "initialized", 15*time.Second)
+
+	// 4. set a breakpoint at the first statement of sum_to.
+	bpLine := pyFirstStmtLine(t, mainPath)
+	h.setBreakpoint(t, mainPath, bpLine)
+
+	// 5. mark configuration done, then wait for the hit.
+	_, err = h.run(ctx, subConfigured)
+	require.NoError(t, err)
+	h.waitMilestone(t, "stopped", 15*time.Second)
+
+	// 6. the top frame must be exactly sum_to at the breakpoint line
+	// in the program source we launched.
+	threadID := h.firstThreadID(t)
+	stack := h.stackTrace(t, threadID)
+	require.NotEmpty(t, stack)
+	assert.Equal(t, "sum_to", stack[0].Name)
+	assert.Equal(t, bpLine, stack[0].Line)
+	require.NotNil(t, stack[0].Source)
+	assert.Equal(t, mainPath, stack[0].Source.Path)
+
+	// 6a. the stopped location list must span the line, use black on
+	// yellow, and carry the stack-trace text as its Message.
+	h.waitLocation(t, stoppedLocationID, 5*time.Second)
+	stopLoc := h.findLocation(t, stoppedLocationID)
+	require.True(t, stopLoc.To.X > 1,
+		"expected stopped location to span the line, got To.X=%d", stopLoc.To.X)
+	assert.Equal(t, term.ColorBlack, stopLoc.Attr.Fg)
+	assert.Equal(t, term.ColorYellow, stopLoc.Attr.Bg)
+	assert.Equal(t, bpLine-1, stopLoc.From.Y,
+		"stopped highlight must sit on the breakpoint line")
+	assert.Contains(t, stopLoc.Message, "sum_to",
+		"expected stack-trace message, got %q", stopLoc.Message)
+
+	// 6b. the variables location list must be installed at critical
+	// priority with a gray background, a range covering the variable
+	// name, and a non-empty value Message — and must never highlight
+	// the identically-named locals inside the sibling `other`.
+	h.waitLocation(t, variablesLocationID, 5*time.Second)
+	varLoc := h.findLocation(t, variablesLocationID)
+	assert.Equal(t, term.ColorGray, varLoc.Attr.Bg)
+	assert.True(t, varLoc.To.X > varLoc.From.X,
+		"expected variable name range, got %v..%v", varLoc.From, varLoc.To)
+	assert.NotEmpty(t, varLoc.Message, "expected variable value as Message")
+	assert.Equal(t, textapi.LocationPriorityCritical,
+		h.locationPrio(t, variablesLocationID),
+		"variables list must be critical priority to sit on top of stopped")
+	otherStart, otherEnd := pyFunctionLineRange(t, mainPath, "other")
+	require.Greater(t, otherEnd, otherStart, "other range")
+	for _, loc := range h.allLocations(t, variablesLocationID) {
+		assert.False(t, loc.From.Y >= otherStart && loc.From.Y <= otherEnd,
+			"variable highlight must not fall in other (line %d)",
+			loc.From.Y+1)
+	}
+
+	// 6c. evaluate an expression in the stopped (sum_to) frame. `n`
+	// is the function parameter and must resolve to a value.
+	evIt, err := h.run(ctx, subEvaluate, "n + 1")
+	require.NoError(t, err)
+	require.NotNil(t, evIt)
+	defer evIt.Close()
+
+	// 6d. `debugger jump backward` must move the cursor up into the
+	// caller frame without stepping.
+	require.GreaterOrEqual(t, len(stack), 2,
+		"need at least two stack frames for jump test")
+	beforeJump := h.cursor(t)
+	require.NoError(t, h.runPrompt(ctx, mainPath, beforeJump,
+		subJump, jumpBackward))
+	afterJump := h.cursor(t)
+	assert.NotEqual(t, beforeJump, afterJump,
+		"expected cursor to move on jump backward")
+
+	// 7. capture the output path before the session ends, then run
+	// the program to completion.
+	outPath := h.outputPath(t)
+	require.NotEmpty(t, outPath, "output capture file path")
+	h.continueUntilExit(t, threadID, 20*time.Second)
+	_, _ = h.run(ctx, subTerminate)
+
+	// 8. the sink writes one "[<category>] <output>" record per DAP
+	// OutputEvent. debugpy emits the debuggee's single
+	// `print("Sum:", result)` as two stdout events ("Sum:" then
+	// " 21\n"); reassembling just the stdout records must yield
+	// exactly the program's output.
+	data, err := os.ReadFile(outPath)
+	require.NoError(t, err)
+	assert.Equal(t, "Sum: 21\n", stdoutFromCapture(string(data)))
+}
+
+// stdoutFromCapture extracts and concatenates the payloads of the
+// "[stdout] " records the debug output sink writes. Records have the
+// form "[<category>] <payload>" with no separator between them, so a
+// record's payload runs until the next "[<category>] " marker.
+func stdoutFromCapture(capture string) string {
+	const prefix = "[stdout] "
+	var b strings.Builder
+	for {
+		i := strings.Index(capture, prefix)
+		if i < 0 {
+			break
+		}
+		rest := capture[i+len(prefix):]
+		// A payload runs until the next "[<category>] " record marker.
+		next := nextRecordStart(rest)
+		if next < 0 {
+			b.WriteString(rest)
+			break
+		}
+		b.WriteString(rest[:next])
+		capture = rest[next:]
+	}
+	return b.String()
+}
+
+// nextRecordStart returns the index of the next "[<category>] "
+// record marker in s, or -1 if none.
+func nextRecordStart(s string) int {
+	for i := 0; i < len(s); i++ {
+		if s[i] != '[' {
+			continue
+		}
+		close := strings.IndexByte(s[i:], ']')
+		if close < 0 {
+			continue
+		}
+		// A marker is "[word] " — the char after ']' must be a space.
+		if i+close+1 < len(s) && s[i+close+1] == ' ' {
+			return i
+		}
+	}
+	return -1
+}
+
+// pyLineContaining returns the 1-based line number of the first line
+// in path whose trimmed content equals literal. Fails the test when
+// none match.
+func pyLineContaining(t *testing.T, path, literal string) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	for i, l := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(l) == literal {
+			return i + 1
+		}
+	}
+	require.Failf(t, "literal not found", "path=%s literal=%q", path, literal)
+	return 0
+}
+
+// pyBlankLineNear returns a 1-based blank-line number at or after
+// start (1-based) in path. Fails the test if none.
+func pyBlankLineNear(t *testing.T, path string, start int) int {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	lines := strings.Split(string(data), "\n")
+	for i := start - 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "" {
+			return i + 1
+		}
+	}
+	require.Fail(t, "no blank line after start",
+		"path=%s start=%d", path, start)
+	return 0
+}
+
+// pyFunctionLineRange returns the 0-based [start, end] line range of
+// the named top-level `def` in path, where end is the last line of
+// its (indentation-delimited) body. Used to assert that locations in
+// a sibling function are filtered out of the variables list.
+func pyFunctionLineRange(t *testing.T, path, name string) (int, int) {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	lines := strings.Split(string(data), "\n")
+	start := -1
+	for i, line := range lines {
+		if start < 0 {
+			if strings.HasPrefix(line, "def "+name+"(") {
+				start = i
+			}
+			continue
+		}
+		// The body ends at the next top-level (column-0, non-blank)
+		// line — the start of the following def or statement.
+		if strings.TrimSpace(line) != "" &&
+			!strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			return start, i - 1
+		}
+	}
+	if start >= 0 {
+		return start, len(lines) - 1
+	}
+	require.Fail(t, "function not found",
+		"could not locate def %q in %s", name, path)
+	return 0, 0
+}
+
+// TestE2E_Python_BreakpointOnEmptyLine mirrors the Go test: setting a
+// breakpoint on a blank, non-executable line must normalize to the
+// next executable line client-side so the breakpoint actually binds
+// and the debuggee stops, rather than running to completion.
+func TestE2E_Python_BreakpointOnEmptyLine(t *testing.T) {
+	t.Parallel()
+	pythonBin := findDebugpy(t)
+	tmpDir := setupBuggyPy(t)
+	mainPath := filepath.Join(tmpDir, "main.py")
+
+	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	defer h.close()
+	ctx := h.ctx
+
+	it, err := h.run(ctx, subInitialize, "python")
+	require.NoError(t, err)
+	go h.drainIterator(it)
+
+	_, err = h.run(ctx, subLaunch, mainPath)
+	require.NoError(t, err)
+	h.waitMilestone(t, "initialized", 15*time.Second)
+
+	// The blank line between the sum_to docstring boundary and the
+	// for loop is non-executable. Use the blank line that sits right
+	// after `total = 0` so the next executable line is inside sum_to.
+	firstStmt := pyFirstStmtLine(t, mainPath)
+	emptyLine := pyBlankLineNear(t, mainPath, firstStmt+1)
+	hndl, err := h.runPromptOnHandler(ctx, mainPath,
+		term.Coordinates{Y: emptyLine - 1}, subSetBreakpoint)
+	require.NoError(t, err)
+	require.NotNil(t, hndl.LocationList)
+	loc, ok := hndl.LocationList.Current()
+	require.True(t, ok, "no breakpoint location installed")
+	assert.NotEqual(t, emptyLine-1, loc.From.Y,
+		"breakpoint marker should be moved off the empty line")
+	assert.Equal(t, emptyLine, loc.From.Y,
+		"breakpoint marker should sit on the next executable line")
+
+	_, err = h.run(ctx, subConfigured)
+	require.NoError(t, err)
+
+	// The breakpoint must hit; without the client-side adjustment the
+	// program would run to completion and only "terminated" would
+	// arrive.
+	h.waitMilestone(t, "stopped", 15*time.Second)
+	threadID := h.firstThreadID(t)
+	stack := h.stackTrace(t, threadID)
+	require.NotEmpty(t, stack)
+	assert.Equal(t, "sum_to", stack[0].Name)
+
+	h.continueUntilExit(t, threadID, 20*time.Second)
+	_, _ = h.run(ctx, subTerminate)
+}
+
+// TestE2E_Python_BreakpointOnTrailingComment mirrors the Go
+// closing-brace test: asking for a breakpoint on the trailing
+// comment-only line at end-of-file has no statement at or after it,
+// so the prompt setBreakpointAt path must surface a "no statement"
+// error rather than silently failing to bind.
+func TestE2E_Python_BreakpointOnTrailingComment(t *testing.T) {
+	t.Parallel()
+	pythonBin := findDebugpy(t)
+	tmpDir := setupBuggyPy(t)
+	mainPath := filepath.Join(tmpDir, "main.py")
+
+	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	defer h.close()
+	ctx := h.ctx
+
+	it, err := h.run(ctx, subInitialize, "python")
+	require.NoError(t, err)
+	go h.drainIterator(it)
+
+	// The trailing comment-only line sits after the last statement
+	// (`main()`), so there is no statement at or after it. Comment
+	// nodes are skipped by the parser-driven adjustment.
+	line := pyLineContaining(t, mainPath,
+		"# trailing comment: a breakpoint target past the last statement")
+	cursor := term.Coordinates{Y: line - 1}
+	err = h.runPrompt(ctx, mainPath, cursor, subSetBreakpoint)
+	require.Error(t, err, "set-breakpoint past last statement must fail")
+	assert.Contains(t, err.Error(), "no statement",
+		"expected parser-driven failure, got %v", err)
+}
+
+// TestE2E_Python_BreakpointOnLiteralOnlyReturn mirrors the Go
+// RUNE-177 regression: a `return False`-style line must be a valid
+// breakpoint target even though tree-sitter emits no identifier
+// captures for it, and the breakpoint must bind on the line itself.
+func TestE2E_Python_BreakpointOnLiteralOnlyReturn(t *testing.T) {
+	t.Parallel()
+	pythonBin := findDebugpy(t)
+	tmpDir := setupBuggyPy(t)
+	mainPath := filepath.Join(tmpDir, "main.py")
+
+	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	defer h.close()
+	ctx := h.ctx
+
+	it, err := h.run(ctx, subInitialize, "python")
+	require.NoError(t, err)
+	go h.drainIterator(it)
+
+	line := pyLineContaining(t, mainPath, "return False")
+	cursor := term.Coordinates{Y: line - 1}
+	hndl, err := h.runPromptOnHandler(ctx, mainPath, cursor, subSetBreakpoint)
+	require.NoError(t, err,
+		"set-breakpoint on a literal-only return must succeed")
+	require.NotNil(t, hndl.LocationList)
+	loc, ok := hndl.LocationList.Current()
+	require.True(t, ok, "no breakpoint location installed")
+	assert.Equal(t, line-1, loc.From.Y,
+		"breakpoint should sit on the literal-only return line")
+}
+
+// Note on attach: there is no Python attach E2E counterpart to the Go
+// TestE2E_Attach. debugpy attaches by connecting to a process already
+// running under `debugpy --listen` (a nested connect:{host,port} DAP
+// argument, which the M1 template now supports via dotted keys and is
+// unit-tested in idedebug). Driving that handshake end to end is
+// timing-sensitive and debugpy-version-specific, so it is intentionally
+// left to the idedebug unit tests rather than a flaky E2E here.
+
+// TestE2E_Python_CtrlCDoesNotStopEventStream mirrors the Go test:
+// cancelling the per-command context that drains `debugger
+// initialize` (what the REPL does on Ctrl-C) must not stop the
+// session iterator from delivering later DAP events. After the
+// cancel, a breakpoint hit must still push new items into the
+// iterator's drain loop.
+func TestE2E_Python_CtrlCDoesNotStopEventStream(t *testing.T) {
+	t.Parallel()
+	pythonBin := findDebugpy(t)
+	tmpDir := setupBuggyPy(t)
+	mainPath := filepath.Join(tmpDir, "main.py")
+
+	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	defer h.close()
+
+	initCtx, initCancel := context.WithCancel(h.ctx)
+	defer initCancel()
+
+	it, err := h.run(initCtx, subInitialize, "python")
+	require.NoError(t, err)
+
+	var (
+		drainMu  sync.Mutex
+		received int
+	)
+	doneDrain := make(chan struct{})
+	go func() {
+		defer close(doneDrain)
+		defer it.Close()
+		for {
+			_, ok := it.Next(initCtx)
+			if !ok {
+				return
+			}
+			drainMu.Lock()
+			received++
+			drainMu.Unlock()
+		}
+	}()
+
+	_, err = h.run(h.ctx, subLaunch, mainPath)
+	require.NoError(t, err)
+
+	h.waitMilestone(t, "initialized", 15*time.Second)
+	h.setBreakpoint(t, mainPath, pyFirstStmtLine(t, mainPath))
+
+	// >>> Ctrl-C <<<
+	initCancel()
+	time.Sleep(100 * time.Millisecond)
+	drainMu.Lock()
+	beforeConfigured := received
+	drainMu.Unlock()
+
+	_, err = h.run(h.ctx, subConfigured)
+	require.NoError(t, err)
+	h.waitMilestone(t, "stopped", 15*time.Second)
+
+	// A StoppedEvent pushes the auto stack-trace plus the event
+	// itself; the drain loop must observe new items despite the
+	// cancelled per-command context.
+	require.Eventually(t, func() bool {
+		drainMu.Lock()
+		defer drainMu.Unlock()
+		return received > beforeConfigured+1
+	}, 15*time.Second, 50*time.Millisecond,
+		"session iterator delivered no new items after Ctrl-C and "+
+			"StoppedEvent — the cancelled per-command context killed "+
+			"event flow")
+
+	threadID := h.firstThreadID(t)
+	h.continueUntilExit(t, threadID, 20*time.Second)
+	_, _ = h.run(h.ctx, subTerminate)
+
+	// The drain goroutine is torn down by the deferred h.close()
+	// (manager Close), which closes the session and ends the
+	// iterator. Unlike dlv, debugpy does not close its adapter
+	// connection on terminate after the debuggee has already exited,
+	// so the iterator does not end on terminate alone — asserting
+	// that here would be debugpy-version-specific.
+	_ = doneDrain
+}
+
+// TestE2E_Python_OutputAppearsInIDEEditorBuffer mirrors the Go test:
+// it drives a real debug session through the full IDE wiring (real
+// text.Component + file-scheme reload) and asserts that the per-session
+// output capture file — and the IDE editor buffer the user opens on it
+// — both reflect the debuggee's stdout.
+func TestE2E_Python_OutputAppearsInIDEEditorBuffer(t *testing.T) {
+	t.Parallel()
+	pythonBin := findDebugpy(t)
+	tmpDir := setupBuggyPy(t)
+	mainPath := filepath.Join(tmpDir, "main.py")
+
+	h := newPyIDEHarness(t, pythonBin, tmpDir)
+	defer h.close()
+	ctx := h.ctx
+
+	it, err := h.run(ctx, subInitialize, "python")
+	require.NoError(t, err)
+	go h.drainIterator(it)
+
+	_, err = h.run(ctx, subLaunch, mainPath)
+	require.NoError(t, err)
+	h.waitMilestone(t, "initialized", 15*time.Second)
+
+	_, err = h.run(ctx, subConfigured)
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return h.outputPath(t) != ""
+	}, 5*time.Second, 20*time.Millisecond, "sink path never set")
+	outPath := h.outputPath(t)
+
+	outURI, err := workspaceapi.ParseURI("file://" + outPath)
+	require.NoError(t, err)
+	h.uiMu.Lock()
+	_, err = h.comp.Open(outURI)
+	h.uiMu.Unlock()
+	require.NoError(t, err)
+
+	h.waitMilestone(t, "terminated", 20*time.Second)
+
+	require.NotEmpty(t, outPath, "output capture path")
+	require.True(t, strings.HasPrefix(outPath, tmpDir),
+		"sink must live in workspace dir for FS watcher; got %s", outPath)
+
+	// The on-disk sink must carry the debuggee's stdout. debugpy
+	// splits the print across stdout records, so match on the
+	// reassembled stdout payload.
+	require.Eventually(t, func() bool {
+		data, err := os.ReadFile(outPath)
+		return err == nil &&
+			strings.Contains(stdoutFromCapture(string(data)), "Sum: 21")
+	}, 15*time.Second, 50*time.Millisecond,
+		"on-disk sink never received Sum: 21")
+
+	// And the IDE editor buffer for the same file must reflect it,
+	// proving the watcher → ReloadTab pipeline fired.
+	require.Eventually(t, func() bool {
+		return strings.Contains(h.bufferContent(outPath), "Sum:")
+	}, 15*time.Second, 100*time.Millisecond,
+		"editor buffer never reflected output; got %q",
+		h.bufferContent(outPath))
+
+	_, _ = h.run(ctx, subTerminate)
+}
+
+// newPyIDEHarness mirrors newIDEHarness but targets the Python
+// debugpy adapter, so the full FS-watch → ReloadTab path is exercised
+// for a Python debug session.
+func newPyIDEHarness(t *testing.T, pythonBin, dir string) *ideHarness {
+	t.Helper()
+	uri, err := workspaceapi.ParseURI("file://" + dir)
+	require.NoError(t, err)
+
+	scheme, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), uri,
+	)
+	require.NoError(t, err)
+	ws := workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule)
+
+	ed := vi.Editor(vi.WithStatusBarConfig(false, text.StatusBarConfig{
+		Publisher:        texttest.NopEditor(),
+		ScheduleNextTick: func(fn func()) bool { fn(); return true },
+	}))
+	tcfg := text.DefaultConfig()
+	tcfg.ScheduleNextTick = func(fn func()) bool { fn(); return true }
+	comp, err := text.NewComponent(ed, ws, tcfg)
+	require.NoError(t, err)
+	comp.Browser().Resize(120, 40)
+
+	procExec := newLocalScheme()
+	pkg := &pyPkgManager{bin: pythonBin}
+	dapCfg := pythonAdapterConfig(pythonBin)
+	mgr := idedebug.New(uri, procExec, pkg, dapCfg)
+
+	hh := &ideHarness{
+		t:        t,
+		scheme:   scheme,
+		ws:       ws,
+		comp:     comp,
+		mgr:      mgr,
+		procExec: procExec,
+	}
+	hh.cond = sync.NewCond(&hh.mu)
+
+	apiEd := newCompEditorAdapter(comp)
+	h := New(mgr, comp, apiEd, passThroughParser{}, passThroughFS{}, Config{
+		WorkspaceURI: uri,
+		Debugger:     dapCfg,
+		ScheduleNextTick: func(fn func()) bool {
+			hh.uiMu.Lock()
+			defer hh.uiMu.Unlock()
+			fn()
+			return true
+		},
+	}).WithNotify(hh.notify)
+	hh.h = h
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	hh.ctx = ctx
+	hh.cancel = cancel
+
+	go hh.pollAndReload(ctx, dir)
+	return hh
+}

@@ -45,6 +45,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
+	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/idelsp"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/ide/syntax"
@@ -549,6 +550,85 @@ func TestTerminalModalDefaultFromEditorMode(t *testing.T) {
 		"terminal": map[string]any{"modal": false},
 	}, errors: map[string]error{}}
 	assert.False(t, cfg.terminalModal())
+}
+
+// TestDebuggerConfigsTemplates asserts that debuggerConfigs reads the
+// optional launch/attach argument templates under debugger.<lang>,
+// leaves them nil when absent (so the adapter falls back to its
+// built-in defaults), and records a parse error for a non-string
+// template value.
+func TestDebuggerConfigsTemplates(t *testing.T) {
+	t.Parallel()
+
+	t.Run("templates parsed", func(t *testing.T) {
+		t.Parallel()
+		c := ideConfig{cfg: map[string]any{
+			"debugger": map[string]any{
+				"python": map[string]any{
+					"command":    "python -m debugpy.adapter --host {host} --port {port}",
+					"adapter_id": "debugpy",
+					"launch": map[string]any{
+						"request": "launch",
+						"type":    "python",
+					},
+					"attach": map[string]any{
+						"request": "attach",
+					},
+				},
+			},
+		}, errors: map[string]error{}}
+
+		got := c.debuggerConfigs()
+		require.Contains(t, got, "python")
+		assert.Equal(t, idedebug.AdapterConfig{
+			Command: []string{
+				"python", "-m", "debugpy.adapter",
+				"--host", "{host}", "--port", "{port}",
+			},
+			AdapterID: "debugpy",
+			LaunchArgs: map[string]string{
+				"request": "launch",
+				"type":    "python",
+			},
+			AttachArgs: map[string]string{"request": "attach"},
+		}, got["python"])
+		assert.Empty(t, c.errors)
+	})
+
+	t.Run("absent templates are nil", func(t *testing.T) {
+		t.Parallel()
+		c := ideConfig{cfg: map[string]any{
+			"debugger": map[string]any{
+				"go": map[string]any{
+					"command":    "dlv dap --listen={addr}",
+					"adapter_id": "dlv-dap",
+				},
+			},
+		}, errors: map[string]error{}}
+
+		got := c.debuggerConfigs()
+		require.Contains(t, got, "go")
+		assert.Nil(t, got["go"].LaunchArgs)
+		assert.Nil(t, got["go"].AttachArgs)
+		assert.Empty(t, c.errors)
+	})
+
+	t.Run("non-string template value records error", func(t *testing.T) {
+		t.Parallel()
+		c := ideConfig{cfg: map[string]any{
+			"debugger": map[string]any{
+				"python": map[string]any{
+					"command": "debugpy",
+					"launch": map[string]any{
+						"stopOnEntry": true,
+					},
+				},
+			},
+		}, errors: map[string]error{}}
+
+		_ = c.debuggerConfigs()
+		assert.Contains(t, c.errors, "debugger.python.launch.stopOnEntry")
+	})
 }
 
 // TestHighlightTabCharEmptyDisables asserts that an explicitly empty

@@ -46,6 +46,15 @@ const (
 	// initializing an LSP server for the given language. This can be an absolute path
 	// or a name which will be searched in the user's PATH.
 	InitializeOptionsLanguageCommand = "command"
+	// InitializeOptionsAlternateCommands is an optional property mapping
+	// individual LSP methods (e.g. "textDocument/formatting") to an
+	// alternate command string that should serve those methods. When
+	// present, the manager spawns one extra server per distinct
+	// alternate command and routes the listed methods to it, while the
+	// default command from InitializeOptionsLanguageCommand serves the
+	// rest. This enables composing several single-purpose servers (such
+	// as ty + ruff for Python) behind one language id.
+	InitializeOptionsAlternateCommands = "alternate_commands"
 )
 
 // Initialize initializes an LSP server. The incoming InitializeParams.InitializeOptions
@@ -103,6 +112,11 @@ func (m *Manager) Initialize(ctx context.Context, params semanticapi.InitializeP
 			InitializeOptionsLanguageCommand)
 		return
 	}
+	alternates, err := parseAlternateCommands(initialOptions)
+	if err != nil {
+		err = fmt.Errorf("decode initialize options: %w", err)
+		return
+	}
 	m.mu.Lock()
 	_, ok = m.servers[id]
 	m.mu.Unlock()
@@ -112,24 +126,59 @@ func (m *Manager) Initialize(ctx context.Context, params semanticapi.InitializeP
 		return
 	}
 
-	// delete this options so lsp server doesn't choke on them
+	// delete these options so the lsp server doesn't choke on them
 	delete(initialOptions, InitializeOptionsLanguageID)
 	delete(initialOptions, InitializeOptionsLanguageCommand)
+	delete(initialOptions, InitializeOptionsAlternateCommands)
 
 	params.InitializeOptions, err = json.Marshal(initialOptions)
 	if err != nil {
-		err = errors.New("language server for " +
-			"this language already initialized")
+		err = fmt.Errorf("re-marshal initialize options: %w", err)
 		return
 	}
 	cfg := langConfig{id: id, command: argv[0], args: argv[1:]}
-	var srv *langServer
-	srv, err = m.initializeServer(ctx, cfg, params)
+	if len(alternates) == 0 {
+		var srv *langServer
+		srv, err = m.initializeServer(ctx, cfg, params)
+		if err != nil {
+			err = fmt.Errorf("initialize server: %w", err)
+			return
+		}
+		return srv.initResult(), nil
+	}
+	var srv server
+	srv, err = m.initializeMultiServer(ctx, cfg, alternates, params)
 	if err != nil {
-		err = fmt.Errorf("initialize server: %w", err)
+		err = fmt.Errorf("initialize multi server: %w", err)
 		return
 	}
-	return srv.init, nil
+	return srv.initResult(), nil
+}
+
+// parseAlternateCommands extracts the optional alternate_commands map
+// from raw initialize options. It returns nil when the key is absent,
+// and an error when present with the wrong type. Each value maps an
+// LSP method to the command string that should serve it.
+func parseAlternateCommands(opts map[string]any) (map[string]string, error) {
+	raw, ok := opts[InitializeOptionsAlternateCommands]
+	if !ok {
+		return nil, nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("'%s' should be a map of LSP method to command",
+			InitializeOptionsAlternateCommands)
+	}
+	ret := make(map[string]string, len(m))
+	for method, v := range m {
+		cmd, ok := v.(string)
+		if !ok {
+			return nil, fmt.Errorf("'%s.%s' should be a command string",
+				InitializeOptionsAlternateCommands, method)
+		}
+		ret[method] = cmd
+	}
+	return ret, nil
 }
 
 // Initialized is a no-op; servers are initialized lazily.
@@ -1075,7 +1124,7 @@ func (m *Manager) WorkspaceDiagnostic(
 	wg.Add(len(servers))
 	for i, srv := range servers {
 		go debug.CapturePanicReport(func() {
-			func(i int, srv *langServer) {
+			func(i int, srv server) {
 				defer wg.Done()
 				p := params
 				token := semanticapi.NewWorkDoneToken()
@@ -1130,7 +1179,7 @@ func (m *Manager) WorkspaceSymbol(
 	wg.Add(len(servers))
 	for i, srv := range servers {
 		go debug.CapturePanicReport(func() {
-			func(i int, srv *langServer) {
+			func(i int, srv server) {
 				defer wg.Done()
 				p := params
 				p.WorkDoneToken = m.tokenFor(p.WorkDoneToken)

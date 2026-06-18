@@ -21,17 +21,58 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package idedebug
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/google/go-dap"
 	"github.com/unstablebuild/rune-go-sdk/api/debugapi"
 )
+
+// substituteArgs expands a static argument template into a DAP
+// argument map. Each template value has its {placeholder} tokens
+// replaced using the provided substitutions. A dotted key such as
+// "connect.host" nests the value under intermediate maps
+// ({"connect":{"host":...}}) so adapters like debugpy that require
+// structured attach arguments can be configured from a flat template.
+// It returns nil when the template is empty so callers can fall back
+// to built-in defaults.
+func substituteArgs(
+	template map[string]string, subs map[string]string,
+) map[string]any {
+	if len(template) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(template))
+	for key, val := range template {
+		for name, replacement := range subs {
+			val = strings.ReplaceAll(val, "{"+name+"}", replacement)
+		}
+		setNestedArg(out, strings.Split(key, "."), val)
+	}
+	return out
+}
+
+// setNestedArg assigns val at the path described by keys, creating
+// intermediate map[string]any nodes as needed. A non-map value found
+// along the path is overwritten with a fresh map so the deeper key
+// can be set.
+func setNestedArg(m map[string]any, keys []string, val string) {
+	for i := 0; i < len(keys)-1; i++ {
+		next, ok := m[keys[i]].(map[string]any)
+		if !ok {
+			next = map[string]any{}
+			m[keys[i]] = next
+		}
+		m = next
+	}
+	m[keys[len(keys)-1]] = val
+}
 
 // CreateSession starts a new debug session for the given
 // language. It looks up the adapter config under
@@ -53,10 +94,12 @@ func (m *Manager) CreateSession(
 			"debug adapter for %s has empty command", langID)
 	}
 	cfg := debugConfig{
-		langID:    langID,
-		adapterID: adapter.AdapterID,
-		command:   adapter.Command[0],
-		args:      append([]string(nil), adapter.Command[1:]...),
+		langID:     langID,
+		adapterID:  adapter.AdapterID,
+		command:    adapter.Command[0],
+		args:       append([]string(nil), adapter.Command[1:]...),
+		launchArgs: adapter.LaunchArgs,
+		attachArgs: adapter.AttachArgs,
 	}
 	if cfg.adapterID == "" {
 		cfg.adapterID = langID
@@ -82,18 +125,18 @@ func (m *Manager) Launch(
 	if err != nil {
 		return err
 	}
-	launchArgs := map[string]any{
-		"mode":        "debug",
+	launchArgs := substituteArgs(srv.cfg.launchArgs, map[string]string{
 		"program":     args.Program,
-		"stopOnEntry": args.StopOnEntry,
-		"noDebug":     args.NoDebug,
-		// Pipe the debuggee's stdout/stderr back over the
-		// DAP wire as OutputEvents instead of inheriting the
-		// IDE's std streams. Delve's "remote" outputMode is
-		// the documented way to do this; the debugshell
-		// captures these events to a per-session file.
-		"outputMode": "remote",
+		"cwd":         args.Cwd,
+		"stopOnEntry": strconv.FormatBool(args.StopOnEntry),
+		"noDebug":     strconv.FormatBool(args.NoDebug),
+	})
+	if launchArgs == nil {
+		launchArgs = map[string]any{}
 	}
+	launchArgs["program"] = args.Program
+	launchArgs["stopOnEntry"] = args.StopOnEntry
+	launchArgs["noDebug"] = args.NoDebug
 	if len(args.Args) > 0 {
 		launchArgs["args"] = args.Args
 	}
@@ -124,10 +167,12 @@ func (m *Manager) Attach(
 	if err != nil {
 		return err
 	}
-	// delve's dap server expects "mode" and "processId" keys,
-	// not the SDK's default "pid". Build the args explicitly.
-	attachArgs := map[string]any{
-		"mode": "local",
+	attachArgs := substituteArgs(srv.cfg.attachArgs, map[string]string{
+		"program": args.Program,
+		"pid":     strconv.Itoa(args.PID),
+	})
+	if attachArgs == nil {
+		attachArgs = map[string]any{}
 	}
 	if args.PID != 0 {
 		attachArgs["processId"] = args.PID

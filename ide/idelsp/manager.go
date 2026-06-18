@@ -32,6 +32,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -109,7 +110,7 @@ type Manager struct {
 	pkgManager    PkgManager
 	callback      Callback
 	maxRetries    uint
-	servers       map[string]*langServer
+	servers       map[string]server
 	files         map[string]*file
 	pendingOpens  map[string]textapi.Event
 	ctx           context.Context
@@ -169,7 +170,7 @@ func New(
 		notifications: notifications,
 		callback:      cfg.Callback,
 		maxRetries:    cfg.MaxRetries,
-		servers:       make(map[string]*langServer),
+		servers:       make(map[string]server),
 		files:         make(map[string]*file),
 		pendingOpens:  make(map[string]textapi.Event),
 		ctx:           ctx,
@@ -186,7 +187,7 @@ func New(
 func (m *Manager) Close() error {
 	defer m.cancel()
 	m.mu.Lock()
-	servers := make([]*langServer, 0, len(m.servers))
+	servers := make([]server, 0, len(m.servers))
 	for _, s := range m.servers {
 		servers = append(servers, s)
 	}
@@ -265,7 +266,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 		openCtx, openCancel := context.WithTimeout(
 			context.Background(), m.cfg.EventHandleTimeout)
 		defer openCancel()
-		f, err := m.ensureFile(ev.URI, ev.Content, srv.cfg.id)
+		f, err := m.ensureFile(ev.URI, ev.Content, srv.config().id)
 		if err != nil {
 			return err
 		}
@@ -352,7 +353,7 @@ func (m *Manager) handle(ev textapi.Event) error {
 		if err != nil {
 			return err
 		}
-		f, err := m.ensureFile(ev.URI, ev.Content, srv.cfg.id)
+		f, err := m.ensureFile(ev.URI, ev.Content, srv.config().id)
 		if err != nil {
 			return err
 		}
@@ -481,7 +482,7 @@ func (m *Manager) ensureFile(
 
 func (m *Manager) ensureServer(
 	_ context.Context, filename workspaceapi.URI,
-) (*langServer, error) {
+) (server, error) {
 	lang, err := languageForFile(filename)
 	if err != nil {
 		return nil, err
@@ -509,27 +510,7 @@ func (m *Manager) initializeServer(
 	if lang.command == "" {
 		return nil, errors.New("language configuration with empty command")
 	}
-	var binPath string
-	if filepath.IsAbs(lang.command) {
-		binPath = lang.command
-	} else {
-		var err error
-		binPath, err = m.findBinary(ctx, &lang)
-		if err != nil {
-			m.log.Debug(
-				"find lsp executable, falling back to using PATH",
-				"executable", lang.command, "error", err,
-			)
-			binPath = lang.command
-		}
-	}
-
-	srv := newLangServer(
-		m.ctx, lang, binPath, m.executor, m.rootURI,
-		newCallbackAdapter(m.callback, lang.id, m.rootURI),
-		params,
-	)
-
+	srv := m.buildChild(ctx, lang, lang.id, params)
 	if err := srv.start(ctx); err != nil {
 		return nil, err
 	}
@@ -544,6 +525,127 @@ func (m *Manager) initializeServer(
 		m.watchServer(&lang, srv)
 	})
 	return srv, nil
+}
+
+// buildChild resolves the binary for lang and constructs an
+// un-started langServer. serverName is the identity reported to the
+// callback handler (and used to key diagnostics by source); for a
+// single-server language it is the language id, for a multi-server
+// child it is the child's command so each backend's diagnostics
+// accumulate independently.
+func (m *Manager) buildChild(
+	ctx context.Context, lang langConfig, serverName string,
+	params semanticapi.InitializeParams,
+) *langServer {
+	var binPath string
+	if filepath.IsAbs(lang.command) {
+		binPath = lang.command
+	} else {
+		var err error
+		binPath, err = m.findBinary(ctx, &lang)
+		if err != nil {
+			m.log.Debug(
+				"find lsp executable, falling back to using PATH",
+				"executable", lang.command, "error", err,
+			)
+			binPath = lang.command
+		}
+	}
+	srv := newLangServer(
+		m.ctx, lang, binPath, m.executor, m.rootURI,
+		newCallbackAdapter(m.callback, serverName, m.rootURI),
+		params,
+	)
+	srv.serverName = serverName
+	return srv
+}
+
+// childName derives the server-name identity for a child backend
+// from its command string: the base name of the executable
+// (e.g. "ty server" -> "ty", "/usr/bin/ruff" -> "ruff").
+func childName(command string) string {
+	argv := strings.Fields(command)
+	if len(argv) == 0 {
+		return command
+	}
+	return filepath.Base(argv[0])
+}
+
+// initializeMultiServer builds and starts a multiLangServer for lang.
+// The default child serves any method without an explicit route;
+// alternates maps an LSP method to a command string, and one extra
+// child is spawned per distinct alternate command. Each child is
+// supervised independently so a single crash does not tear down the
+// others.
+func (m *Manager) initializeMultiServer(
+	ctx context.Context, lang langConfig,
+	alternates map[string]string, params semanticapi.InitializeParams,
+) (*multiLangServer, error) {
+	if lang.command == "" {
+		return nil, errors.New("language configuration with empty command")
+	}
+
+	defaultChild := m.buildChild(ctx, lang, childName(lang.command), params)
+	children := []*langServer{defaultChild}
+	routes := make(map[string]int)
+
+	// Dedup alternate commands so two methods sharing one command
+	// map to a single child.
+	cmdIndex := make(map[string]int)
+	for method, cmd := range alternates {
+		if cmd == "" || cmd == lang.command {
+			continue
+		}
+		idx, ok := cmdIndex[cmd]
+		if !ok {
+			argv := strings.Split(cmd, " ")
+			childCfg := langConfig{id: lang.id, command: argv[0], args: argv[1:]}
+			child := m.buildChild(ctx, childCfg, childName(cmd), params)
+			children = append(children, child)
+			idx = len(children) - 1
+			cmdIndex[cmd] = idx
+		}
+		routes[method] = idx
+	}
+
+	mls := &multiLangServer{cfg: lang, routes: routes}
+	mls.children = make([]server, len(children))
+	for i, c := range children {
+		mls.children[i] = c
+	}
+
+	if err := mls.start(ctx); err != nil {
+		_ = mls.Close()
+		return nil, err
+	}
+
+	m.mu.Lock()
+	m.servers[lang.id] = mls
+	m.mu.Unlock()
+
+	for _, child := range children {
+		m.sendPendingOpens(lang.id, child)
+		watched := child
+		go debug.CapturePanicReport(func() {
+			m.watchServer(&lang, watched)
+		})
+	}
+	return mls, nil
+}
+
+// installRestarted swaps a freshly restarted child into the
+// manager's routing for lang. When the language is backed by a
+// multiLangServer, only the crashed child is replaced (by pointer
+// identity) so the other children keep running; otherwise the
+// single registered server is replaced wholesale.
+func (m *Manager) installRestarted(lang langConfig, old, restarted *langServer) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if mls, ok := m.servers[lang.id].(*multiLangServer); ok {
+		mls.replaceChild(old, restarted)
+		return
+	}
+	m.servers[lang.id] = restarted
 }
 
 // sendPendingOpens sends didOpen for files that were opened before this
@@ -607,7 +709,7 @@ func (m *Manager) findBinary(
 		if candidate != lang.command {
 			continue
 		}
-		if _, err := os.Stat(candidate); err == nil {
+		if _, err := os.Stat(file); err == nil {
 			return file, nil
 		}
 	}
@@ -679,22 +781,21 @@ func (m *Manager) watchServer(
 			defer cancel()
 
 			m.log.Debug("restarting lsp server", "language", lang.id)
-			srv := newLangServer(
+			newSrv := newLangServer(
 				m.ctx, srv.cfg, srv.binPath, m.executor, m.rootURI,
-				newCallbackAdapter(m.callback, lang.id, m.rootURI),
+				newCallbackAdapter(m.callback, srv.serverName, m.rootURI),
 				srv.params,
 			)
+			newSrv.serverName = srv.serverName
 
-			if err := srv.start(ctx); err != nil {
+			if err := newSrv.start(ctx); err != nil {
 				return true, err
 			}
-			m.mu.Lock()
-			m.servers[lang.id] = srv
-			m.mu.Unlock()
+			m.installRestarted(*lang, srv, newSrv)
 
-			m.reopenFiles(ctx, lang.id, srv)
+			m.reopenFiles(ctx, lang.id, newSrv)
 			go debug.CapturePanicReport(func() {
-				m.watchServer(lang, srv)
+				m.watchServer(lang, newSrv)
 			})
 			return false, nil
 		})
@@ -736,7 +837,7 @@ func (m *Manager) reopenFiles(
 	}
 }
 
-func (m *Manager) serverForURI(uri string) (*langServer, error) {
+func (m *Manager) serverForURI(uri string) (server, error) {
 	m.mu.Lock()
 	cfg, err := languageForFilename(uri)
 	if err != nil {
@@ -751,11 +852,11 @@ func (m *Manager) serverForURI(uri string) (*langServer, error) {
 	return srv, nil
 }
 
-func (m *Manager) allServers() []*langServer {
+func (m *Manager) allServers() []server {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	servers := make(
-		[]*langServer, 0, len(m.servers),
+		[]server, 0, len(m.servers),
 	)
 	for _, s := range m.servers {
 		servers = append(servers, s)
@@ -784,7 +885,7 @@ func (m *Manager) broadcastNotify(
 	cfg, err := languageForFile(uri)
 	if err == nil {
 		for _, srv := range m.allServers() {
-			if srv.cfg.id != cfg.id {
+			if srv.config().id != cfg.id {
 				continue
 			}
 			if err := srv.notify(ctx, method, params); err != nil {

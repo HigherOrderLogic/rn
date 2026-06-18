@@ -27,6 +27,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -41,6 +42,26 @@ import (
 	"unstable.build/go-tui/workspace/processctx"
 )
 
+// server is the routing-facing contract the Manager uses to talk
+// to a language backend. A backend is either a single langServer
+// or a multiLangServer that fans calls out to several langServers
+// sharing one language id (e.g. ty + ruff for python). call and
+// notify pick the appropriate child by LSP method; the remaining
+// methods drive lifecycle and report state.
+type server interface {
+	io.Closer
+	call(ctx context.Context, method string, params, result any) error
+	notify(ctx context.Context, method string, params any) error
+	initialize(ctx context.Context) (semanticapi.InitializeResult, error)
+	stop(ctx context.Context) error
+	start(ctx context.Context) error
+	config() langConfig
+	initResult() semanticapi.InitializeResult
+	isAlive() bool
+}
+
+var _ server = (*langServer)(nil)
+
 type langServer struct {
 	mu         sync.Mutex
 	ctx        context.Context
@@ -48,6 +69,7 @@ type langServer struct {
 	stopCalled bool
 	params     semanticapi.InitializeParams
 	cfg        langConfig
+	serverName string
 	binPath    string
 	pid        workspaceapi.Pid
 	watcher    chan error
@@ -108,14 +130,15 @@ func newLangServer(
 ) *langServer {
 	ctx, cancel := context.WithCancel(ctx)
 	return &langServer{
-		params:   params,
-		ctx:      ctx,
-		cancel:   cancel,
-		cfg:      cfg,
-		binPath:  binPath,
-		executor: executor,
-		rootURI:  rootURI,
-		handler:  handler,
+		params:     params,
+		ctx:        ctx,
+		cancel:     cancel,
+		cfg:        cfg,
+		serverName: cfg.id,
+		binPath:    binPath,
+		executor:   executor,
+		rootURI:    rootURI,
+		handler:    handler,
 		log: slog.With("struct", "idelsp.langServer",
 			"language", cfg.id, "workspace", rootURI),
 	}
@@ -293,4 +316,18 @@ func (s *langServer) notify(
 		s.log.Debug("rpc notify", "method", method, "step", "success")
 	}
 	return err
+}
+
+func (s *langServer) config() langConfig {
+	return s.cfg
+}
+
+func (s *langServer) initResult() semanticapi.InitializeResult {
+	return s.init
+}
+
+func (s *langServer) isAlive() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.alive
 }

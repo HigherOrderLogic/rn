@@ -126,12 +126,7 @@ func (s *debugServer) start(ctx context.Context) error {
 		return fmt.Errorf("find free addr: %w", err)
 	}
 
-	// Replace the {addr} placeholder in the config args
-	// with the concrete address.
-	args := make([]string, len(s.cfg.args))
-	for i, a := range s.cfg.args {
-		args[i] = strings.ReplaceAll(a, "{addr}", addr)
-	}
+	args := substituteAddr(s.cfg.args, addr)
 
 	watchCh := make(chan error, 1)
 	watcher := workspaceapi.ChanProcessWatcher(watchCh)
@@ -350,6 +345,15 @@ func (s *debugServer) readLoop() {
 	for {
 		msg, err := dap.ReadProtocolMessage(s.reader)
 		if err != nil {
+			// Adapters may emit custom messages the SDK does not
+			// model (e.g. debugpy's "debugpySockets" event). The
+			// full frame has already been consumed, so skip the
+			// undecodable message and keep reading rather than
+			// tearing down the session.
+			if _, ok := errors.AsType[*dap.DecodeProtocolMessageFieldError](err); ok {
+				s.log.Debug("skipping undecodable dap message", "error", err)
+				continue
+			}
 			s.mu.Lock()
 			alive := s.alive
 			stopCalled := s.stopCalled
@@ -441,6 +445,26 @@ func (s *debugServer) newRequest(command string) dap.Request {
 		},
 		Command: command,
 	}
+}
+
+// substituteAddr expands the address placeholders in the adapter
+// argv. {addr} expands to host:port (used by adapters like delve's
+// `--listen={addr}`); {host} and {port} expand to the components for
+// adapters that take them separately (e.g. debugpy's
+// `--host {host} --port {port}`). When addr is not a valid host:port,
+// only {addr} is substituted.
+func substituteAddr(args []string, addr string) []string {
+	host, port, splitErr := net.SplitHostPort(addr)
+	out := make([]string, len(args))
+	for i, a := range args {
+		a = strings.ReplaceAll(a, "{addr}", addr)
+		if splitErr == nil {
+			a = strings.ReplaceAll(a, "{host}", host)
+			a = strings.ReplaceAll(a, "{port}", port)
+		}
+		out[i] = a
+	}
+	return out
 }
 
 // formatResponseError returns an error describing a failed DAP

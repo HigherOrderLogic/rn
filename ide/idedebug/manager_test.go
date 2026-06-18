@@ -15,7 +15,9 @@
 package idedebug
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"sync"
@@ -171,4 +173,278 @@ func TestManagerConcurrentSessionAccess(t *testing.T) {
 
 func newTestSessionID(i int) string {
 	return "session-" + string(rune('a'+i))
+}
+
+// TestSubstituteAddr asserts that adapter argv placeholders expand
+// to the bound endpoint: {addr} to host:port and {host}/{port} to
+// the split components.
+func TestSubstituteAddr(t *testing.T) {
+	t.Parallel()
+	t.Run("addr placeholder", func(t *testing.T) {
+		t.Parallel()
+		got := substituteAddr([]string{"dap", "--listen={addr}"}, "127.0.0.1:5555")
+		assert.Equal(t, []string{"dap", "--listen=127.0.0.1:5555"}, got)
+	})
+	t.Run("host and port placeholders", func(t *testing.T) {
+		t.Parallel()
+		got := substituteAddr(
+			[]string{"-m", "debugpy.adapter", "--host", "{host}", "--port", "{port}"},
+			"127.0.0.1:5555")
+		assert.Equal(t,
+			[]string{"-m", "debugpy.adapter", "--host", "127.0.0.1", "--port", "5555"},
+			got)
+	})
+}
+
+// captureRequestArgs injects a session whose cfg carries the given
+// launch/attach templates, invokes fn (Launch or Attach), reads the
+// single DAP request it writes over the wire, and returns its parsed
+// Arguments object together with the request command.
+func captureRequestArgs(
+	t *testing.T, cfg debugConfig,
+	fn func(m *Manager, sessionID string) error,
+) (command string, args map[string]any) {
+	t.Helper()
+	m := newTestManager(t)
+	t.Cleanup(func() { _ = m.Close() })
+
+	ideEnd, adapterEnd := net.Pipe()
+	t.Cleanup(func() { _ = ideEnd.Close(); _ = adapterEnd.Close() })
+
+	srv := newDebugServer(m.ctx, cfg, "/bin/test", nil, m.rootURI,
+		debugapi.ClientCapabilities{}, fakeSubscriber{})
+	srv.conn = ideEnd
+	srv.alive = true
+
+	const sessionID = "capture-session"
+	m.mu.Lock()
+	m.sessions[sessionID] = srv
+	m.mu.Unlock()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- fn(m, sessionID) }()
+
+	reader := bufio.NewReader(adapterEnd)
+	msg, err := dap.ReadProtocolMessage(reader)
+	require.NoError(t, err)
+	require.NoError(t, <-errCh)
+
+	switch req := msg.(type) {
+	case *dap.LaunchRequest:
+		require.NoError(t, json.Unmarshal(req.Arguments, &args))
+		return req.Command, args
+	case *dap.AttachRequest:
+		require.NoError(t, json.Unmarshal(req.Arguments, &args))
+		return req.Command, args
+	default:
+		t.Fatalf("unexpected request type: %T", msg)
+		return "", nil
+	}
+}
+
+// TestLaunchArgs asserts that Launch builds the DAP launch payload
+// from the configured template (with placeholder substitution and
+// typed overlays). With no template, only the SDK-typed overlays are
+// sent; adapter-specific keys (e.g. Delve's mode/outputMode) come
+// from the language package's debugger config.
+func TestLaunchArgs(t *testing.T) {
+	t.Parallel()
+	launchReq := func(args debugapi.LaunchRequestArguments) func(*Manager, string) error {
+		return func(m *Manager, sessionID string) error {
+			return m.Launch(context.Background(), sessionID, args)
+		}
+	}
+
+	t.Run("delve template from config", func(t *testing.T) {
+		t.Parallel()
+		cfg := debugConfig{
+			langID:  "go",
+			command: "dlv",
+			launchArgs: map[string]string{
+				"mode":       "debug",
+				"outputMode": "remote",
+			},
+		}
+		cmd, args := captureRequestArgs(t, cfg,
+			launchReq(debugapi.LaunchRequestArguments{
+				Program:     "/tmp/app",
+				Args:        []string{"-v"},
+				Cwd:         "/tmp",
+				Env:         map[string]string{"K": "V"},
+				StopOnEntry: true,
+			}))
+		assert.Equal(t, "launch", cmd)
+		assert.Equal(t, map[string]any{
+			"mode":        "debug",
+			"outputMode":  "remote",
+			"program":     "/tmp/app",
+			"cwd":         "/tmp",
+			"stopOnEntry": true,
+			"noDebug":     false,
+			"args":        []any{"-v"},
+			"env":         map[string]any{"K": "V"},
+		}, args)
+	})
+
+	t.Run("no template sends only typed overlays", func(t *testing.T) {
+		t.Parallel()
+		cmd, args := captureRequestArgs(t, debugConfig{langID: "go", command: "dlv"},
+			launchReq(debugapi.LaunchRequestArguments{
+				Program:     "/tmp/app",
+				StopOnEntry: true,
+			}))
+		assert.Equal(t, "launch", cmd)
+		// With no template only the SDK-typed overlays are present;
+		// no host-side adapter defaults (mode/outputMode) are injected.
+		assert.Equal(t, map[string]any{
+			"program":     "/tmp/app",
+			"stopOnEntry": true,
+			"noDebug":     false,
+		}, args)
+	})
+
+	t.Run("debugpy template with overlays", func(t *testing.T) {
+		t.Parallel()
+		cfg := debugConfig{
+			langID:  "python",
+			command: "python",
+			launchArgs: map[string]string{
+				"request": "launch",
+				"console": "internalConsole",
+				"type":    "python",
+			},
+		}
+		cmd, args := captureRequestArgs(t, cfg,
+			launchReq(debugapi.LaunchRequestArguments{
+				Program:     "/tmp/main.py",
+				Args:        []string{"--flag"},
+				Cwd:         "/work",
+				Env:         map[string]string{"PYTHONPATH": "/x"},
+				StopOnEntry: false,
+			}))
+		assert.Equal(t, "launch", cmd)
+		// Template keys plus typed overlays; no Delve-only defaults
+		// (mode/outputMode) leak into the debugpy payload.
+		assert.Equal(t, map[string]any{
+			"request":     "launch",
+			"console":     "internalConsole",
+			"type":        "python",
+			"program":     "/tmp/main.py",
+			"cwd":         "/work",
+			"stopOnEntry": false,
+			"noDebug":     false,
+			"args":        []any{"--flag"},
+			"env":         map[string]any{"PYTHONPATH": "/x"},
+		}, args)
+	})
+
+	t.Run("placeholder substitution", func(t *testing.T) {
+		t.Parallel()
+		cfg := debugConfig{
+			langID:     "python",
+			command:    "python",
+			launchArgs: map[string]string{"program": "{program}"},
+		}
+		cmd, args := captureRequestArgs(t, cfg,
+			launchReq(debugapi.LaunchRequestArguments{Program: "/tmp/main.py"}))
+		assert.Equal(t, "launch", cmd)
+		// {program} in the template is substituted, then the typed
+		// overlay sets the same key to the identical value.
+		assert.Equal(t, map[string]any{
+			"program":     "/tmp/main.py",
+			"stopOnEntry": false,
+			"noDebug":     false,
+		}, args)
+	})
+}
+
+// TestAttachArgs asserts that Attach builds the DAP attach payload
+// from the configured template. With no template, only the
+// SDK-typed overlays (processId/program) are sent; adapter-specific
+// keys (e.g. Delve's mode) come from the language package config.
+func TestAttachArgs(t *testing.T) {
+	t.Parallel()
+	attachReq := func(args debugapi.AttachRequestArguments) func(*Manager, string) error {
+		return func(m *Manager, sessionID string) error {
+			return m.Attach(context.Background(), sessionID, args)
+		}
+	}
+
+	t.Run("delve template from config", func(t *testing.T) {
+		t.Parallel()
+		cfg := debugConfig{
+			langID:     "go",
+			command:    "dlv",
+			attachArgs: map[string]string{"mode": "local"},
+		}
+		cmd, args := captureRequestArgs(t, cfg,
+			attachReq(debugapi.AttachRequestArguments{PID: 4321, Program: "/tmp/app"}))
+		assert.Equal(t, "attach", cmd)
+		assert.Equal(t, map[string]any{
+			"mode":      "local",
+			"processId": float64(4321),
+			"program":   "/tmp/app",
+		}, args)
+	})
+
+	t.Run("no template sends only typed overlays", func(t *testing.T) {
+		t.Parallel()
+		cmd, args := captureRequestArgs(t, debugConfig{langID: "go", command: "dlv"},
+			attachReq(debugapi.AttachRequestArguments{PID: 4321, Program: "/tmp/app"}))
+		assert.Equal(t, "attach", cmd)
+		// No template: only the SDK-typed overlays, with no host-side
+		// adapter defaults (mode) injected.
+		assert.Equal(t, map[string]any{
+			"processId": float64(4321),
+			"program":   "/tmp/app",
+		}, args)
+	})
+
+	t.Run("debugpy template with overlays", func(t *testing.T) {
+		t.Parallel()
+		cfg := debugConfig{
+			langID:  "python",
+			command: "python",
+			attachArgs: map[string]string{
+				"request": "attach",
+				"type":    "python",
+			},
+		}
+		cmd, args := captureRequestArgs(t, cfg,
+			attachReq(debugapi.AttachRequestArguments{PID: 99}))
+		assert.Equal(t, "attach", cmd)
+		// Program is empty so no program overlay is added.
+		assert.Equal(t, map[string]any{
+			"request":   "attach",
+			"type":      "python",
+			"processId": float64(99),
+		}, args)
+	})
+
+	t.Run("dotted keys nest into objects", func(t *testing.T) {
+		t.Parallel()
+		// debugpy attach requires a nested connect object; the flat
+		// template expresses it via dotted keys.
+		cfg := debugConfig{
+			langID:  "python",
+			command: "python",
+			attachArgs: map[string]string{
+				"request":      "attach",
+				"type":         "python",
+				"connect.host": "127.0.0.1",
+				"connect.port": "5688",
+			},
+		}
+		cmd, args := captureRequestArgs(t, cfg,
+			attachReq(debugapi.AttachRequestArguments{}))
+		assert.Equal(t, "attach", cmd)
+		assert.Equal(t, map[string]any{
+			"request": "attach",
+			"type":    "python",
+			"connect": map[string]any{
+				"host": "127.0.0.1",
+				"port": "5688",
+			},
+		}, args)
+	})
 }

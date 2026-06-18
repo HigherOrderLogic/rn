@@ -406,11 +406,45 @@ func (c ideConfig) debuggerConfigs() map[string]idedebug.AdapterConfig {
 			c.errors["debugger."+langID+".adapter_id"] = err
 			return
 		}
+		launchArgs := c.debuggerArgsTemplate(entry, langID, "launch")
+		attachArgs := c.debuggerArgsTemplate(entry, langID, "attach")
 		ret[langID] = idedebug.AdapterConfig{
-			Command:   argv,
-			AdapterID: adapterID,
+			Command:    argv,
+			AdapterID:  adapterID,
+			LaunchArgs: launchArgs,
+			AttachArgs: attachArgs,
 		}
 	})
+	return ret
+}
+
+// debuggerArgsTemplate reads an optional string->string argument
+// template under debugger.<langID>.<key> (e.g. "launch" or
+// "attach"). A missing key yields nil so the adapter falls back to
+// built-in defaults; malformed entries are recorded in c.errors.
+func (c ideConfig) debuggerArgsTemplate(
+	entry config.Config, langID, key string,
+) map[string]string {
+	m, err := entry.GetMap(key)
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["debugger."+langID+"."+key] = err
+		}
+		return nil
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	ret := make(map[string]string, len(m))
+	for k, v := range m {
+		s, ok := v.(string)
+		if !ok {
+			c.errors["debugger."+langID+"."+key+"."+k] = errors.New(
+				"value must be a string")
+			continue
+		}
+		ret[k] = s
+	}
 	return ret
 }
 

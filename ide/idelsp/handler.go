@@ -136,7 +136,11 @@ type CallbackHandler struct {
 	progress     map[string]string
 	fileVersions map[string]*fileVersionState
 	versionCond  *sync.Cond
-	diagnostics  map[string][]semanticapi.Diagnostic
+	// diagnostics caches the latest diagnostics per URI, keyed by the
+	// publishing server's name so that several backends sharing one
+	// language id (e.g. ty + ruff) accumulate independently instead
+	// of overwriting each other.
+	diagnostics map[string]map[string][]semanticapi.Diagnostic
 }
 
 // fileVersionState tracks the latest sent and processed
@@ -212,7 +216,7 @@ func NewCallbackHandler(
 		log:              slog.With("struct", "idelsp.CallbackHandler", "workspace", rootURI),
 		progress:         make(map[string]string),
 		fileVersions:     make(map[string]*fileVersionState),
-		diagnostics:      make(map[string][]semanticapi.Diagnostic),
+		diagnostics:      make(map[string]map[string][]semanticapi.Diagnostic),
 	}
 	h.versionCond = sync.NewCond(&h.mu)
 	return h
@@ -249,7 +253,7 @@ func (h *CallbackHandler) LogMessage(
 
 // PublishDiagnostics publishes diagnostics for a document.
 func (h *CallbackHandler) PublishDiagnostics(
-	_ context.Context,
+	ctx context.Context,
 	params semanticapi.PublishDiagnosticsParams,
 ) error {
 	// Signal that the server has processed this document version.
@@ -260,22 +264,49 @@ func (h *CallbackHandler) PublishDiagnostics(
 		return fmt.Errorf("parse URI: %w", err)
 	}
 
+	serverName := ""
+	if md, ok := metadataFromContext(ctx); ok {
+		serverName = md.ServerName
+	}
+
 	// Centrally cache the latest diagnostics for this URI so the
 	// `lsp diagnostics` command can list them across all files,
 	// regardless of whether the file is currently open in an editor.
+	// The cache is keyed by publishing server so multiple backends
+	// for one language id accumulate instead of overwriting.
 	h.mu.Lock()
 	if len(params.Diagnostics) == 0 {
-		delete(h.diagnostics, params.URI)
+		if byServer, ok := h.diagnostics[params.URI]; ok {
+			delete(byServer, serverName)
+			if len(byServer) == 0 {
+				delete(h.diagnostics, params.URI)
+			}
+		}
 	} else {
 		stored := make([]semanticapi.Diagnostic, len(params.Diagnostics))
 		copy(stored, params.Diagnostics)
-		h.diagnostics[params.URI] = stored
+		byServer, ok := h.diagnostics[params.URI]
+		if !ok {
+			byServer = make(map[string][]semanticapi.Diagnostic)
+			h.diagnostics[params.URI] = byServer
+		}
+		byServer[serverName] = stored
+	}
+	// Merge every server's diagnostics for this URI into a single
+	// location list. Keying the cache by server keeps each server's
+	// set independently overridable, while the merged emission means
+	// diagnostics from several backends (e.g. ty + ruff) coexist
+	// under one "lsp-diagnostics" source so navigation aliases treat
+	// them as a single list.
+	merged := make([]semanticapi.Diagnostic, 0)
+	for _, diags := range h.diagnostics[params.URI] {
+		merged = append(merged, diags...)
 	}
 	h.mu.Unlock()
 
-	locs := make([]textapi.Location, 0, len(params.Diagnostics))
+	locs := make([]textapi.Location, 0, len(merged))
 	highest := textapi.LocationPriorityInfo
-	for _, diag := range params.Diagnostics {
+	for _, diag := range merged {
 		p := diagnosticSeverityToLocationPriority(diag.Severity)
 		if p > highest {
 			highest = p
@@ -330,10 +361,12 @@ func (h *CallbackHandler) Diagnostics() map[string][]semanticapi.Diagnostic {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	out := make(map[string][]semanticapi.Diagnostic, len(h.diagnostics))
-	for uri, diags := range h.diagnostics {
-		dup := make([]semanticapi.Diagnostic, len(diags))
-		copy(dup, diags)
-		out[uri] = dup
+	for uri, byServer := range h.diagnostics {
+		var merged []semanticapi.Diagnostic
+		for _, diags := range byServer {
+			merged = append(merged, diags...)
+		}
+		out[uri] = merged
 	}
 	return out
 }

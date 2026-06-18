@@ -549,12 +549,7 @@ func newE2EHarness(t *testing.T, dlvBin, dir string) *e2eHarness {
 	dapCfg := idedebug.Config{
 		MaxRetries:        1,
 		InitializeTimeout: 10 * time.Second,
-		Adapters: map[string]idedebug.AdapterConfig{
-			"go": {
-				Command:   []string{dlvBin, "dap", "--listen={addr}"},
-				AdapterID: "dlv-dap",
-			},
-		},
+		Adapters:          map[string]idedebug.AdapterConfig{"go": goAdapterConfig(dlvBin)},
 	}
 	mgr := idedebug.New(uri, scheme, pkg, dapCfg)
 
@@ -923,6 +918,19 @@ func sprintf(format string, args ...any) string {
 	return fmt.Sprintf(format, args...)
 }
 
+// goAdapterConfig mirrors the Delve adapter entry shipped in the Go
+// language package's config.yaml so the e2e harness drives the same
+// launch/attach templates as production rather than relying on
+// host-side defaults.
+func goAdapterConfig(dlvBin string) idedebug.AdapterConfig {
+	return idedebug.AdapterConfig{
+		Command:    []string{dlvBin, "dap", "--listen={addr}"},
+		AdapterID:  "dlv-dap",
+		LaunchArgs: map[string]string{"mode": "debug", "outputMode": "remote"},
+		AttachArgs: map[string]string{"mode": "local"},
+	}
+}
+
 func containsString(haystack, needle string) bool {
 	return strings.Contains(haystack, needle)
 }
@@ -1280,12 +1288,7 @@ func newIDEHarness(t *testing.T, dlvBin, dir string) *ideHarness {
 	dapCfg := idedebug.Config{
 		MaxRetries:        1,
 		InitializeTimeout: 10 * time.Second,
-		Adapters: map[string]idedebug.AdapterConfig{
-			"go": {
-				Command:   []string{dlvBin, "dap", "--listen={addr}"},
-				AdapterID: "dlv-dap",
-			},
-		},
+		Adapters:          map[string]idedebug.AdapterConfig{"go": goAdapterConfig(dlvBin)},
 	}
 	mgr := idedebug.New(uri, procExec, pkg, dapCfg)
 

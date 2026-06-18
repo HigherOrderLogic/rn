@@ -21,7 +21,6 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-
 package idedebug
 
 import (
@@ -53,14 +52,22 @@ type PkgManager interface {
 }
 
 // debugConfig holds the parameters used to spawn a single debug
-// adapter. The placeholder {addr} in args is replaced at runtime
-// with the TCP address the adapter should listen on
-// (e.g. "127.0.0.1:56789").
+// adapter. The placeholders {addr}, {host}, and {port} in args are
+// replaced at runtime with the TCP endpoint the adapter should
+// listen on (e.g. {addr}="127.0.0.1:56789", {host}="127.0.0.1",
+// {port}="56789").
 type debugConfig struct {
 	langID    string
 	adapterID string
 	command   string
 	args      []string
+	// launchArgs and attachArgs are static argument templates merged
+	// into the DAP launch/attach request payloads. Placeholder tokens
+	// (e.g. {program}, {pid}) are substituted at call time; an empty
+	// template sends only the SDK-typed overlays, so adapter-specific
+	// keys must come from the language package's debugger config.
+	launchArgs map[string]string
+	attachArgs map[string]string
 }
 
 // AdapterConfig describes how to launch the debug adapter for a
@@ -71,11 +78,30 @@ type AdapterConfig struct {
 	// The first element is the executable; the remaining
 	// elements are its arguments. Any {addr} placeholder is
 	// replaced at runtime with a bound host:port the adapter
-	// should listen on.
+	// should listen on; {host} and {port} expand to the
+	// components for adapters that take them separately.
 	Command []string
 	// AdapterID is the DAP adapter identifier advertised during
 	// the Initialize handshake. Defaults to the language ID.
 	AdapterID string
+	// LaunchArgs is a static launch-argument template merged into
+	// the DAP launch request. Keys are DAP argument names; values
+	// may contain placeholders ({program}, {args}, {cwd}, {env},
+	// {stopOnEntry}, {noDebug}) substituted at launch time. A dotted
+	// key (e.g. "connect.host") nests the value under intermediate
+	// objects. When nil, only the SDK-typed overlays are sent and
+	// adapter-specific keys (e.g. Delve's mode/outputMode) must be
+	// supplied here via the language package's debugger config.
+	LaunchArgs map[string]string
+	// AttachArgs is a static attach-argument template merged into
+	// the DAP attach request. Keys are DAP argument names; values
+	// may contain placeholders ({program}, {pid}) substituted at
+	// attach time. A dotted key (e.g. "connect.host") nests the value
+	// under intermediate objects, as debugpy's attach requires. When
+	// nil, only the SDK-typed overlays are sent and adapter-specific
+	// keys (e.g. Delve's mode) must be supplied here
+	// via the language package's debugger config.
+	AttachArgs map[string]string
 }
 
 // Config provides configuration for a Manager.

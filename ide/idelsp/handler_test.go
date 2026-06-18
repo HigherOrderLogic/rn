@@ -387,6 +387,103 @@ func TestCallbackHandler_PublishDiagnostics(t *testing.T) {
 	}
 }
 
+// TestCallbackHandler_PublishDiagnostics_BySource asserts that
+// diagnostics published by distinct servers for the same URI
+// accumulate (rather than overwrite) in the central cache and are
+// merged into a single "lsp-diagnostics" location list. This is the
+// multi-server (e.g. ty + ruff) payoff: each backend's set stays
+// independently overridable, but they coexist in one list so
+// next/prev-diagnostic navigation treats them uniformly.
+func TestCallbackHandler_PublishDiagnostics_BySource(t *testing.T) {
+	t.Parallel()
+	uri, err := workspaceapi.ParseURI("file:///tmp/main.py")
+	require.NoError(t, err)
+	ed := &mockEditor{handler: &mockEditorHandler{uri: uri}}
+	h := NewCallbackHandler(nil, nil, nil, ed, nil, "", CallbackHandlerConfig{})
+
+	tyDiag := semanticapi.Diagnostic{
+		Range: semanticapi.Range{
+			Start: semanticapi.Position{Line: 1, Character: 0},
+			End:   semanticapi.Position{Line: 1, Character: 4},
+		},
+		Severity: semanticapi.DiagnosticSeverityError,
+		Source:   "ty",
+		Message:  "type error",
+	}
+	ruffDiag := semanticapi.Diagnostic{
+		Range: semanticapi.Range{
+			Start: semanticapi.Position{Line: 2, Character: 0},
+			End:   semanticapi.Position{Line: 2, Character: 6},
+		},
+		Severity: semanticapi.DiagnosticSeverityWarning,
+		Source:   "ruff",
+		Message:  "unused import",
+	}
+
+	tyCtx := ContextWithMetadata(t.Context(), Metadata{ServerName: "ty"})
+	ruffCtx := ContextWithMetadata(t.Context(), Metadata{ServerName: "ruff"})
+
+	require.NoError(t, h.PublishDiagnostics(tyCtx, semanticapi.PublishDiagnosticsParams{
+		URI:         "file:///tmp/main.py",
+		Diagnostics: []semanticapi.Diagnostic{tyDiag},
+	}))
+	require.NoError(t, h.PublishDiagnostics(ruffCtx, semanticapi.PublishDiagnosticsParams{
+		URI:         "file:///tmp/main.py",
+		Diagnostics: []semanticapi.Diagnostic{ruffDiag},
+	}))
+
+	// The merged snapshot must contain both servers' diagnostics.
+	got := h.Diagnostics()
+	require.Len(t, got["file:///tmp/main.py"], 2)
+	assert.ElementsMatch(t,
+		[]semanticapi.Diagnostic{tyDiag, ruffDiag},
+		got["file:///tmp/main.py"])
+
+	// Both servers' diagnostics land in one merged "lsp-diagnostics"
+	// location list, never under per-server source ids.
+	ed.mu.Lock()
+	merged := ed.locationsByID["lsp-diagnostics"]
+	_, hasTyID := ed.locationsByID["lsp-diagnostics:ty"]
+	_, hasRuffID := ed.locationsByID["lsp-diagnostics:ruff"]
+	ed.mu.Unlock()
+	assert.False(t, hasTyID, "must not use a per-server source id")
+	assert.False(t, hasRuffID, "must not use a per-server source id")
+	// The merged list carries both fully-rendered locations: ty's
+	// error (red/✖) and ruff's warning (yellow/▲). Map iteration order
+	// across servers is unspecified, so match the set, not a sequence.
+	wantTyLoc := textapi.Location{
+		From:    term.Coordinates{X: 0, Y: 1},
+		To:      term.Coordinates{X: 4, Y: 1},
+		Message: "type error",
+		Attr:    term.Attributes{Bg: term.ColorRed},
+		Icon:    "✖",
+	}
+	wantRuffLoc := textapi.Location{
+		From:    term.Coordinates{X: 0, Y: 2},
+		To:      term.Coordinates{X: 6, Y: 2},
+		Message: "unused import",
+		Attr:    term.Attributes{Bg: term.ColorYellow},
+		Icon:    "▲",
+	}
+	assert.ElementsMatch(t,
+		[]textapi.Location{wantTyLoc, wantRuffLoc}, merged)
+
+	// Clearing one server's diagnostics must leave the other intact.
+	require.NoError(t, h.PublishDiagnostics(tyCtx, semanticapi.PublishDiagnosticsParams{
+		URI:         "file:///tmp/main.py",
+		Diagnostics: nil,
+	}))
+	got = h.Diagnostics()
+	require.Len(t, got["file:///tmp/main.py"], 1)
+	assert.Equal(t, ruffDiag, got["file:///tmp/main.py"][0])
+
+	// The merged location list must now contain only ruff's entry.
+	ed.mu.Lock()
+	mergedAfterClear := ed.locationsByID["lsp-diagnostics"]
+	ed.mu.Unlock()
+	assert.Equal(t, []textapi.Location{wantRuffLoc}, mergedAfterClear)
+}
+
 func TestCallbackHandler_PublishDiagnostics_IconConfig(t *testing.T) {
 	t.Parallel()
 	uri, err := workspaceapi.ParseURI("file:///tmp/test.go")
@@ -2127,6 +2224,10 @@ type mockEditor struct {
 	cellEdits   []mockCellEdit
 	editorErr   error
 	locationErr error
+	// locationsByID records the latest location list per source id so
+	// tests can assert that diagnostics from distinct servers
+	// accumulate under distinct source ids.
+	locationsByID map[string][]textapi.Location
 }
 
 func (m *mockEditor) Editor(
@@ -2157,6 +2258,10 @@ func (m *mockEditor) SetLocationList(
 			m.locations = append(m.locations, loc)
 		}
 	}
+	if m.locationsByID == nil {
+		m.locationsByID = make(map[string][]textapi.Location)
+	}
+	m.locationsByID[id] = append([]textapi.Location(nil), m.locations...)
 	return nil
 }
 

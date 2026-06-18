@@ -295,7 +295,7 @@ func TestWatchServerRestartsOnConnLoss(t *testing.T) {
 	wg.Wait()
 
 	mgr.mu.Lock()
-	origSrv := mgr.servers["go"]
+	origSrv := mgr.servers["go"].(*langServer)
 	mgr.mu.Unlock()
 	require.NotNil(t, origSrv)
 	origPid := origSrv.pid
@@ -321,7 +321,7 @@ func TestWatchServerRestartsOnConnLoss(t *testing.T) {
 	var newSrv *langServer
 	require.Eventually(t, func() bool {
 		mgr.mu.Lock()
-		s := mgr.servers["go"]
+		s, _ := mgr.servers["go"].(*langServer)
 		mgr.mu.Unlock()
 		if s != nil && s != origSrv {
 			newSrv = s
@@ -385,7 +385,7 @@ func TestManagerCloseTerminatesGopls(t *testing.T) {
 	wg.Wait()
 
 	mgr.mu.Lock()
-	srv := mgr.servers["go"]
+	srv := mgr.servers["go"].(*langServer)
 	mgr.mu.Unlock()
 	require.NotNil(t, srv)
 	require.NotNil(t, srv.watcher,

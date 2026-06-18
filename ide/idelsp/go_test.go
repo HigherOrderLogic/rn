@@ -2624,7 +2624,7 @@ func TestE2EReinitializePreservesParams(t *testing.T) {
 
 	// Snapshot the original server and its InitializeParams.
 	mgr.mu.Lock()
-	origSrv := mgr.servers["go"]
+	origSrv := mgr.servers["go"].(*langServer)
 	mgr.mu.Unlock()
 	require.NotNil(t, origSrv)
 	originalParams := origSrv.params
@@ -2636,7 +2636,7 @@ func TestE2EReinitializePreservesParams(t *testing.T) {
 	var newSrv *langServer
 	require.Eventually(t, func() bool {
 		mgr.mu.Lock()
-		s := mgr.servers["go"]
+		s, _ := mgr.servers["go"].(*langServer)
 		mgr.mu.Unlock()
 		if s != nil && s != origSrv {
 			newSrv = s
