@@ -96,15 +96,16 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 	traverse := func(
 		ctx context.Context, w walkdir.Reader, root string,
 	) (iterator.Iterator[string], error) {
+		// Skipping ~/Library (macOS) avoids the system "access data from
+		// other apps" prompt. In dirOnly mode dot directories are pruned
+		// at the source too: the post-iter filter would drop them anyway,
+		// but descending into e.g. .git first floods the system with
+		// ReadDir/Open syscalls during completion.
+		filter := vctrl.ProtectedDirMatcher(w)
 		if dirOnly {
-			// Skip recursion into dot directories at the source.
-			// The post-iter filter below would discard them anyway,
-			// but descending into e.g. .git on a real workspace
-			// triggers thousands of ReadDir/Open syscalls that
-			// starve the rest of the system while the user is just
-			// completing a directory path.
-			ctx = walkdir.WithContextFilter(ctx, vctrl.HiddenBaseMatcher())
+			filter = vctrl.AnyMatcher(filter, vctrl.HiddenBaseMatcher())
 		}
+		ctx = walkdir.WithContextFilter(ctx, filter)
 		fn := walkdir.ListFiles
 		if dirOnly {
 			fn = walkdir.ListDirs

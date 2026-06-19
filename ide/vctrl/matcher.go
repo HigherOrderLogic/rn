@@ -51,10 +51,20 @@ func MatcherFromPatterns(
 	if err != nil {
 		return nil, fmt.Errorf("get workspace uri: %w", err)
 	}
-	return uriMatcher{
-		cwduri:  cwduri,
-		matcher: gitignore.NewMatcher(patterns),
-	}, nil
+	return matcherFromPatternsURI(cwduri, patterns...), nil
+}
+
+// matcherFromPatternsURI composes the gitignore matcher with the
+// protected-dir exclusion so every gitignore-derived traversal also skips
+// OS-protected app-data directories (e.g. ~/Library on macOS) that would
+// otherwise trip the system "access data from other apps" prompt.
+func matcherFromPatternsURI(
+	cwduri workspaceapi.URI, patterns ...gitignore.Pattern,
+) Matcher {
+	return AnyMatcher(
+		uriMatcher{cwduri: cwduri, matcher: gitignore.NewMatcher(patterns)},
+		protectedDirMatcherForBase(filepath.Clean(cwduri.Path())),
+	)
 }
 
 // NopMatcher returns a Matcher that either always or never matches.

@@ -26,8 +26,10 @@ package ide
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -57,9 +59,11 @@ import (
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idepkg/idepkgtest"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/localstorage"
 	"unstable.build/go-tui/term/vte/vtereservoir"
 	"unstable.build/go-tui/text"
+	"unstable.build/go-tui/workspace"
 )
 
 func TestIDEInitializationIntegration(t *testing.T) {
@@ -1597,3 +1601,195 @@ func TestSharedStorageSurvivesPreIDEClose(t *testing.T) {
 	require.NoError(t, perr,
 		"shared storage must stay partitionable after pre-config IDE.Close")
 }
+
+// TestIDEOpenDoesNotReadProtectedDirs asserts that opening the IDE on the
+// user's home never reads into the macOS TCC-protected directories
+// (~/Library, ~/Documents, ~/Desktop, ~/Downloads); any such read would
+// trigger a system permission prompt.
+func TestIDEOpenDoesNotReadProtectedDirs(t *testing.T) {
+	usr, err := user.Current()
+	require.NoError(t, err)
+	if usr.HomeDir == "" {
+		t.Skip("no home directory for current user")
+	}
+	home := filepath.Clean(usr.HomeDir)
+
+	forbidden := []string{
+		filepath.Join(home, "Library"),
+		filepath.Join(home, "Documents"),
+		filepath.Join(home, "Desktop"),
+		filepath.Join(home, "Downloads"),
+	}
+
+	tracker := &readTracker{home: home, forbidden: forbidden}
+	const scheme = "trackhome"
+	homeURI := scheme + "://" + home
+
+	configFile, _ := makeTestFiles(t)
+	dataDir := t.TempDir()
+
+	var mu sync.Mutex
+	i, err := New(homeURI, configFile.Name(), dataDir, newTestStorage(t, dataDir),
+		WithLocker(&mu),
+		WithScheduleNextTick(func(fn func()) bool {
+			go func() {
+				mu.Lock()
+				defer mu.Unlock()
+				fn()
+			}()
+			return true
+		}),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithScheme(scheme, tracker.newScheme),
+	)
+	require.NoError(t, err)
+
+	_ = i.Ready()
+	i.WaitWorkspaces()
+
+	i.workspaceHandler.mu.Lock()
+	var cwd workspace.Workspace
+	for _, wh := range i.workspaceHandler.workspaces {
+		if wh != nil && wh.cwd != nil {
+			cwd = wh.cwd
+			break
+		}
+	}
+	i.workspaceHandler.mu.Unlock()
+	require.NotNil(t, cwd, "cwd workspace must be installed")
+
+	// LoadGitignore is the workspace-open tree walk run by the FS
+	// monitor and task manager; drive it directly so the assertion is
+	// deterministic rather than racing those detached goroutines.
+	tracker.reset()
+	_, err = vctrl.LoadGitignore(cwd)
+	require.NoError(t, err)
+
+	require.NoError(t, i.closeResources())
+
+	reads := tracker.snapshot()
+	require.NotEmpty(t, reads, "LoadGitignore must walk the workspace root")
+	for _, p := range reads {
+		for _, root := range forbidden {
+			assert.Falsef(t, p == root || strings.HasPrefix(p, root+string(filepath.Separator)),
+				"opening the IDE must not read protected dir: %q", p)
+		}
+	}
+}
+
+type readTracker struct {
+	home      string
+	forbidden []string
+
+	mu    sync.Mutex
+	reads []string
+}
+
+func (rt *readTracker) newScheme(
+	ctx context.Context, cfg config.Config, _ workspaceapi.URI,
+) (schemeapi.Scheme, error) {
+	uri, err := workspaceapi.ParseURI("file://" + rt.home)
+	if err != nil {
+		return nil, err
+	}
+	inner, err := workspace.NewFileScheme(ctx, cfg, uri)
+	if err != nil {
+		return nil, err
+	}
+	return &trackingScheme{Scheme: inner, rt: rt}, nil
+}
+
+func (rt *readTracker) record(abs string) {
+	rt.mu.Lock()
+	rt.reads = append(rt.reads, abs)
+	rt.mu.Unlock()
+}
+
+func (rt *readTracker) snapshot() []string {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	out := make([]string, len(rt.reads))
+	copy(out, rt.reads)
+	return out
+}
+
+func (rt *readTracker) reset() {
+	rt.mu.Lock()
+	rt.reads = nil
+	rt.mu.Unlock()
+}
+
+type trackingScheme struct {
+	schemeapi.Scheme
+	rt *readTracker
+}
+
+func (s *trackingScheme) abs(p string) string {
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p)
+	}
+	return filepath.Join(s.rt.home, p)
+}
+
+func (s *trackingScheme) ReadDir(path string) ([]fs.DirEntry, error) {
+	abs := s.abs(path)
+	s.rt.record(abs)
+	if abs == s.rt.home {
+		// Synthesize a home listing of only the protected dirs so the
+		// walk stays bounded: a correct matcher prunes all four and
+		// recurses nowhere, while any descent records a violation.
+		entries := make([]fs.DirEntry, len(s.rt.forbidden))
+		for i, root := range s.rt.forbidden {
+			entries[i] = protectedDirEntry(filepath.Base(root))
+		}
+		return entries, nil
+	}
+	return s.Scheme.ReadDir(path)
+}
+
+func (s *trackingScheme) Open(filename string) (workspaceapi.File, error) {
+	s.rt.record(s.abs(filename))
+	return s.Scheme.Open(filename)
+}
+
+func (s *trackingScheme) OpenFile(
+	filename string, flag int, perm fs.FileMode,
+) (workspaceapi.File, error) {
+	s.rt.record(s.abs(filename))
+	return s.Scheme.OpenFile(filename, flag, perm)
+}
+
+func (s *trackingScheme) Stat(filename string) (fs.FileInfo, error) {
+	s.rt.record(s.abs(filename))
+	return s.Scheme.Stat(filename)
+}
+
+func (s *trackingScheme) Lstat(filename string) (fs.FileInfo, error) {
+	s.rt.record(s.abs(filename))
+	return s.Scheme.Lstat(filename)
+}
+
+func (s *trackingScheme) Watch(
+	string, chan<- schemeapi.EventInfo, ...schemeapi.Event,
+) (int, error) {
+	return 0, nil
+}
+
+func (s *trackingScheme) StopWatch(int) error { return nil }
+
+type protectedDirEntry string
+
+func (e protectedDirEntry) Name() string               { return string(e) }
+func (e protectedDirEntry) IsDir() bool                { return true }
+func (e protectedDirEntry) Type() fs.FileMode          { return fs.ModeDir }
+func (e protectedDirEntry) Info() (fs.FileInfo, error) { return protectedDirInfo(e), nil }
+
+type protectedDirInfo string
+
+func (i protectedDirInfo) Name() string       { return string(i) }
+func (i protectedDirInfo) Size() int64        { return 0 }
+func (i protectedDirInfo) Mode() fs.FileMode  { return fs.ModeDir | 0o755 }
+func (i protectedDirInfo) ModTime() time.Time { return time.Time{} }
+func (i protectedDirInfo) IsDir() bool        { return true }
+func (i protectedDirInfo) Sys() any           { return nil }

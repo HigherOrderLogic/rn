@@ -72,14 +72,22 @@ type FileReader interface {
 // and returns a Matcher that matches against all loaded patterns,
 // plus adds some common excludes like .swp files or .git/** directory.
 func LoadGitignore(cwd FileReader) (Matcher, error) {
-	excludes, err := loadGitignoreRecursively(cwd, nil)
+	cwduri, err := cwd.URI(".")
+	if err != nil {
+		return nil, fmt.Errorf("get workspace uri: %w", err)
+	}
+	// The walk itself must skip protected dirs, not only the returned
+	// matcher: reading them to look for .gitignore files is what trips the
+	// macOS "access data from other apps" prompt.
+	protected := protectedDirMatcherForBase(filepath.Clean(cwduri.Path()))
+	excludes, err := loadGitignoreRecursively(cwd, protected, nil)
 	if err != nil {
 		return nil, err
 	}
-	return MatcherFromPatterns(cwd, append(excludes, commonExcludes...)...)
+	return matcherFromPatternsURI(cwduri, append(excludes, commonExcludes...)...), nil
 }
 
-func loadGitignoreRecursively(cwd FileReader, path []string) (
+func loadGitignoreRecursively(cwd FileReader, protected Matcher, path []string) (
 	ps []gitignore.Pattern, err error,
 ) {
 	ps, _ = readIgnoreFile(cwd, path, infoExcludeFile)
@@ -95,12 +103,17 @@ func loadGitignoreRecursively(cwd FileReader, path []string) (
 
 	for _, fi := range fis {
 		if fi.IsDir() && fi.Name() != gitDir {
-			if gitignore.NewMatcher(ps).Match(append(path, fi.Name()), true) {
+			child := append(path, fi.Name())
+			if protected != nil &&
+				protected.MatchRelPath(filepath.Join(child...), true) {
+				continue
+			}
+			if gitignore.NewMatcher(ps).Match(child, true) {
 				continue
 			}
 
 			var subps []gitignore.Pattern
-			subps, err = loadGitignoreRecursively(cwd, append(path, fi.Name()))
+			subps, err = loadGitignoreRecursively(cwd, protected, child)
 			if err != nil {
 				return
 			}

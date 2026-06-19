@@ -49,6 +49,50 @@ import (
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
+// TestFilePathCompleterSkipsProtectedTraversal asserts that completing a
+// path under the user's home never ReadDirs into the macOS TCC-protected
+// dirs (~/Library, ~/Documents, ~/Desktop, ~/Downloads), the reads that
+// trigger a system permission prompt. The reader is rooted at the real
+// home so it lines up with the paths vctrl.ProtectedDirMatcher derives
+// from user.Current().
+func TestFilePathCompleterSkipsProtectedTraversal(t *testing.T) {
+	usr, err := user.Current()
+	require.NoError(t, err)
+	if usr.HomeDir == "" {
+		t.Skip("no home directory for current user")
+	}
+
+	var prefixes []string
+	for _, dir := range []string{"Library", "Documents", "Desktop", "Downloads"} {
+		p := filepath.Join(usr.HomeDir, dir)
+		if _, err := os.Stat(p); err == nil {
+			prefixes = append(prefixes, p)
+		}
+	}
+	if len(prefixes) == 0 {
+		t.Skip("no protected home dirs to guard against")
+	}
+
+	tracking := &trackingReader{inner: newFSReader(usr.HomeDir)}
+	c := FilePathCompleter(tracking)
+
+	it, _, err := c.Complete(context.Background(), []string{"edit"})
+	require.NoError(t, err)
+	_ = collectAll(t, it)
+
+	for _, p := range tracking.snapshot() {
+		abs := p
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(usr.HomeDir, p)
+		}
+		abs = filepath.Clean(abs)
+		for _, prefix := range prefixes {
+			assert.Falsef(t,
+				abs == prefix || strings.HasPrefix(abs, prefix+string(filepath.Separator)),
+				"completer must not ReadDir into protected dir: %q", p)
+		}
+	}
+}
 func TestCommandOutputLinesCompleterCloseSignals(t *testing.T) {
 	var pid workspaceapi.Pid
 	var sig syscall.Signal
