@@ -71,6 +71,25 @@ func (r *recordingExecutor) snapshotCmd() workspaceapi.Cmd {
 	return r.cmd
 }
 
+// waitCmd blocks until StartCommand has recorded a command with a usable
+// Stdout, then returns it. Tests that drive the protocol from a goroutine
+// must not assume the goroutine has reached StartCommand by some fixed
+// deadline; under load the spawned startExtension may not be scheduled in
+// time, leaving r.cmd zero-valued and r.cmd.Stdout nil.
+func (r *recordingExecutor) waitCmd(t *testing.T) workspaceapi.Cmd {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if cmd := r.snapshotCmd(); cmd.Stdout != nil {
+			return cmd
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("StartCommand was not called before deadline")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 // protocolDrivingExecutor is a recordingExecutor that, upon StartCommand,
 // writes a valid extension metadata document to the command's stdout so the
 // workspace runner protocol handshake completes immediately. Tests that
@@ -518,7 +537,7 @@ func TestWorkspaceRunnerStartExtensionWaitsForProtocolReady(t *testing.T) {
 	}
 	encoded, err := json.Marshal(meta)
 	require.NoError(t, err)
-	_, err = exec.snapshotCmd().Stdout.Write(encoded)
+	_, err = exec.waitCmd(t).Stdout.Write(encoded)
 	require.NoError(t, err)
 
 	select {
@@ -533,6 +552,7 @@ func TestWorkspaceRunnerStartExtensionWaitsForProtocolReady(t *testing.T) {
 	assert.True(t, states[0].Running)
 	assert.Nil(t, states[0].LastErr)
 }
+
 
 func TestWorkspaceRunnerWaitReady(t *testing.T) {
 	t.Parallel()
@@ -759,7 +779,7 @@ func TestWorkspaceRunnerStartExtensionReturnsProtocolError(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 
-	_, err = exec.snapshotCmd().Stdout.Write([]byte(`{"developer_id":"missing-fields"}`))
+	_, err = exec.waitCmd(t).Stdout.Write([]byte(`{"developer_id":"missing-fields"}`))
 	require.Error(t, err)
 
 	select {

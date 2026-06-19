@@ -53,12 +53,30 @@ func (p *pyPkgManager) LibDir(
 	return iterator.FromSlice(p.bins), nil
 }
 
-func findOnPath(t *testing.T, name string) string {
+// Pinned Astral toolchain versions, kept in sync with
+// rune-language-python/Makefile (RUFF_VERSION/TY_VERSION). The e2e
+// expectations below are exact for these versions; a host toolchain
+// that diverges from what the package distributes must fail loudly
+// rather than silently validate against unshipped behavior.
+const (
+	pinnedRuffVersion = "0.15.18"
+	pinnedTyVersion   = "0.0.51"
+)
+
+// findOnPath resolves name on PATH, skipping when it is absent (so CI
+// without the Python toolchain stays green) but failing when the
+// resolved binary's version diverges from the distributed pin.
+func findOnPath(t *testing.T, name, wantVersion string) string {
 	t.Helper()
 	bin, err := exec.LookPath(name)
 	if err != nil {
 		t.Skipf("%s not found, skipping python e2e test", name)
 	}
+	out, err := exec.Command(bin, "--version").CombinedOutput()
+	require.NoErrorf(t, err, "%s --version failed", name)
+	require.Containsf(t, string(out), wantVersion,
+		"%s version diverges from the distributed pin %s; update the pin "+
+			"and e2e expectations together", name, wantVersion)
 	return bin
 }
 
@@ -66,7 +84,8 @@ func findOnPath(t *testing.T, name string) string {
 // the Manager: ty is the default child (hover/definition/symbols/etc.)
 // and ruff serves formatting via alternate_commands. It self-skips when
 // ty or ruff is not installed so CI without the Python toolchain stays
-// green. It returns the manager and the opened main.py URI.
+// green, and fails when an installed tool diverges from the distributed
+// pin. It returns the manager and the opened main.py URI.
 func setupPythonManager(
 	t *testing.T, ctx context.Context, callback Callback,
 ) (*Manager, string) {
@@ -74,8 +93,8 @@ func setupPythonManager(
 	if callback == nil {
 		callback = &testCallback{}
 	}
-	tyBin := findOnPath(t, "ty")
-	ruffBin := findOnPath(t, "ruff")
+	tyBin := findOnPath(t, "ty", pinnedTyVersion)
+	ruffBin := findOnPath(t, "ruff", pinnedRuffVersion)
 
 	tmpDir := setupTestWorkspace(t, filepath.Join("testdata", "py"))
 	mainPath := filepath.Join(tmpDir, "main.py")
@@ -163,12 +182,9 @@ func TestE2EPython(t *testing.T) {
 				require.Equal(t, []semanticapi.TextEdit{{
 					Range: semanticapi.Range{
 						Start: semanticapi.Position{Line: 33, Character: 0},
-						End:   semanticapi.Position{Line: 44, Character: 10},
+						End:   semanticapi.Position{Line: 34, Character: 0},
 					},
-					NewText: "    return a + b\n\n\ndef main() -> None:\n" +
-						"    g = Greeter(\"World\")\n    print(g.greet())\n" +
-						"    result = add(1, 2)\n    print(result)\n\n\n" +
-						"if __name__ == \"__main__\":\n    main()\n",
+					NewText: "    return a + b\n",
 				}}, edits)
 			},
 		},
@@ -493,7 +509,7 @@ func TestE2EPython(t *testing.T) {
 				require.Len(t, ranges, 1)
 				assert.Equal(t, semanticapi.Range{
 					Start: semanticapi.Position{Line: 0, Character: 0},
-					End:   semanticapi.Position{Line: 44, Character: 10},
+					End:   semanticapi.Position{Line: 45, Character: 0},
 				}, ranges[0].Range)
 			},
 		},
@@ -595,7 +611,9 @@ func TestE2EPythonMergedDiagnostics(t *testing.T) {
 	assert.Equal(t, "F401", got.Code)
 	assert.Equal(t, "Ruff", got.Source)
 	assert.Equal(t, semanticapi.DiagnosticSeverityWarning, got.Severity)
-	assert.Equal(t, "`os` imported but unused", got.Message)
+	assert.Equal(t,
+		"`os` imported but unused\n\nhelp: Remove unused import: `os`",
+		got.Message)
 	assert.Equal(t, semanticapi.Range{
 		Start: semanticapi.Position{Line: 17, Character: 7},
 		End:   semanticapi.Position{Line: 17, Character: 9},
