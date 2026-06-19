@@ -121,6 +121,12 @@ func ensureEnvironment(
 // ensureInterpreter resolves a Python interpreter, installing one when
 // `uv python find` fails so a fresh machine bootstraps on first run. It
 // reports the find/install step and returns whether an install ran.
+//
+// The install passes `--default` so uv links the bare `python` and
+// `python3` executables (not just the versioned `python3.X`) into
+// UV_PYTHON_BIN_DIR. That dir is first on the Rune PATH (config.yaml
+// gui.env), so a terminal `python`/`python3` resolves to the confined
+// uv-managed interpreter instead of falling through to a system Python.
 func ensureInterpreter(
 	ctx context.Context,
 	uvBin string,
@@ -133,7 +139,7 @@ func ensureInterpreter(
 		return false, nil
 	}
 	_ = notify.UpdateNotificationProgress(notifID, "Installing Python interpreter", 2, 4)
-	if err := runUV(ctx, uvBin, exec, "python", "install"); err != nil {
+	if err := runUV(ctx, uvBin, exec, "python", "install", "--default"); err != nil {
 		return true, err
 	}
 	return true, nil
