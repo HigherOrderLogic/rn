@@ -705,6 +705,8 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 
 		"<f12>":   "lsp definition",
 		"<s-f12>": "lsp references",
+
+		"<m-\\\\>": "searchtext",
 	}
 
 	for _, file := range []string{

@@ -88,7 +88,7 @@ command:
     "<a-j>": gitnextchange
     "<a-k>": gitprevchange
     "<m-p>": searchfile
-    "<m-\\>": searchtext
+    "<m-\\\\>": searchtext
     "<m-enter>": terminalneworsplit
     "<s-m-enter>": "!"
     "gf": editfileoncursor
