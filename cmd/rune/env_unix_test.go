@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2023-2024 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,29 +21,24 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package idepkg
+//go:build !windows
 
-import (
-	"os"
-	"strings"
-	"testing"
-)
+package main
 
-// SetPathEnv must prepend the managed bin dir so Rune-managed toolchains
-// (e.g. the bundled go) win over same-named system executables such as a
-// distro /usr/bin/go. Appending would let the system binary shadow ours.
-func TestSetPathEnvPrependsBinDir(t *testing.T) {
-	dataDir := t.TempDir()
-	t.Setenv("PATH", "/usr/bin:/usr/local/bin")
+import "testing"
 
-	if err := SetPathEnv(dataDir); err != nil {
-		t.Fatalf("SetPathEnv: %v", err)
+// TestLoginShellPATHCmdDetachesFromTerminal is a regression for the Ctrl-C
+// quitting breakage: the interactive login shell spawned to resolve PATH must
+// not inherit Rune's terminal and must run in its own process group, so the
+// SIGINT raised by Ctrl-C is delivered only to Rune and the child cannot
+// mutate the controlling terminal's modes.
+func TestLoginShellPATHCmdDetachesFromTerminal(t *testing.T) {
+	cmd := loginShellPATHCmd("/bin/sh")
+
+	if cmd.Stdin != nil {
+		t.Fatalf("login shell stdin must not be inherited from the terminal")
 	}
-
-	binDir := makeBinDirname(dataDir)
-	path := os.Getenv("PATH")
-	entries := strings.Split(path, ":")
-	if len(entries) == 0 || entries[0] != binDir {
-		t.Fatalf("managed bin dir %q must be first in PATH, got %q", binDir, path)
+	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
+		t.Fatalf("login shell must run in its own process group (Setpgid)")
 	}
 }

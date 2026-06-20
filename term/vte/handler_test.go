@@ -26,6 +26,7 @@ package vte
 import (
 	"context"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -666,4 +667,63 @@ func drain(ch chan struct{}) {
 			return
 		}
 	}
+}
+
+// TestHandlerCtrlCInterruptsForegroundProgram pins the regression where
+// pressing ctrl-c on a foreground program running in the primary buffer
+// (e.g. a blocking `sleep`) failed to interrupt it. The handler must
+// write the raw ETX byte (0x03) to the pty so the kernel line
+// discipline delivers SIGINT to the foreground process group, returning
+// control to the shell prompt.
+func TestHandlerCtrlCInterruptsForegroundProgram(t *testing.T) {
+	t.Parallel()
+	cases := []vtetest.Case{
+		{"",
+			`$ ▐                 
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+		// start a foreground program that blocks; the shell prompt
+		// must not return until the program is interrupted.
+		{"sleep 30>",
+			`$ sleep 30          
+▐                   
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    `},
+	}
+	cfg := DefaultConfig()
+	handler, ch := testSequence(t, cfg, defaultWaitForIdleVte, cases)
+
+	drain(ch)
+
+	// ctrl-c with the raw ETX byte the gui input layer produces.
+	exit, handled := handler.Handle(term.Event{
+		Type: term.EventKey, Mod: term.ModCtrl, Ch: 'c', Raw: []byte{0x03},
+	})
+	assert.False(t, exit)
+	assert.True(t, handled)
+
+	w := term.NewStringWriter(20, 10)
+	require.Eventually(t, func() bool {
+		require.NoError(t, w.Clear(term.Attributes{}))
+		handler.Draw(w)
+		require.NoError(t, w.Flush())
+		// after the interrupt the shell must print a fresh prompt
+		// below the interrupted command line.
+		return strings.Count(w.String(), "$ ") >= 2
+	}, 5*time.Second, 20*time.Millisecond,
+		"ctrl-c must interrupt the foreground sleep and return the "+
+			"shell prompt; screen was:\n%s", w.String())
 }

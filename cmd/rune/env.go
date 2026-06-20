@@ -29,6 +29,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
@@ -36,37 +37,86 @@ import (
 	"github.com/Xuanwo/go-locale"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/text/language"
+	"unstable.build/go-tui/debug"
 )
 
 const fallbackLocale = "UTF-8"
 
 var darwinRe = regexp.MustCompile("UserShell: (/[^ ]+)\n")
 
-func initPATH(dataDir string) {
+func setupRuneBinPATH(dataDir string) error {
+	if err := makePkgDirs(dataDir); err != nil {
+		return err
+	}
+	return setRuneBinPATH(dataDir, os.Getenv("PATH"))
+}
+
+func startLoginShellPATHResolve(dataDir string) <-chan error {
+	done := make(chan error, 1)
+	go debug.CapturePanicReport(func() {
+		login, err := resolveLoginPath()
+		if err != nil {
+			done <- err
+			return
+		}
+		done <- setRuneBinPATH(dataDir, login)
+	})
+	return done
+}
+
+func setRuneBinPATH(dataDir, base string) error {
+	binDir := filepath.Join(dataDir, "bin")
+	if err := os.Setenv("PATH", binDir+":"+base); err != nil {
+		return fmt.Errorf("set env PATH: %w", err)
+	}
+	return nil
+}
+
+func resolveLoginPath() (string, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
 		shell = "/bin/sh"
 	}
 
-	out, err := exec.Command(shell, "-i", "-l", "-c", "echo $PATH").Output()
+	out, err := loginShellPATHCmd(shell).Output()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "shell echo PATH: %v", err)
-		return
+		return "", fmt.Errorf("shell echo PATH: %w", err)
 	}
 
 	// Interactive rc files may print banners to stdout before our echo
 	// runs. Take the last non-empty line so prior chatter is ignored.
 	p := lastNonEmptyLine(string(out))
 	if p == "" {
-		fmt.Fprintf(os.Stderr, "set env PATH: shell return empty PATH")
+		return "", fmt.Errorf("shell returned empty PATH")
 	}
-	// Prepend the managed bin dir so Rune-managed toolchains (e.g. the
-	// bundled go) take precedence over same-named system executables such
-	// as a distro /usr/bin/go; appending lets the system binary shadow ours.
-	p = fmt.Sprintf("%s/bin:%s", dataDir, p)
-	if err := os.Setenv("PATH", p); err != nil {
-		fmt.Fprintf(os.Stderr, "set env PATH: %v", err)
+	return p, nil
+}
+
+// loginShellPATHCmd builds the command that prints the login shell PATH.
+//
+// The shell is invoked interactively (-i) so rc files that mutate PATH are
+// sourced, but interactive shells touch the controlling terminal on startup
+// (zsh ZLE, job control) and sit in the foreground process group. If the
+// shell inherited Rune's terminal it could change its modes or absorb the
+// SIGINT raised by Ctrl-C, which previously broke Ctrl-C quitting `rune`
+// from the command line. Detach it from the terminal: read from /dev/null
+// and run in its own process group so terminal-generated signals never reach
+// it.
+func loginShellPATHCmd(shell string) *exec.Cmd {
+	cmd := exec.Command(shell, "-i", "-l", "-c", "echo $PATH")
+	cmd.Stdin = nil
+	detachFromTerminal(cmd)
+	return cmd
+}
+
+func makePkgDirs(dataDir string) error {
+	for _, sub := range []string{"bin", "lib"} {
+		dir := filepath.Join(dataDir, sub)
+		if err := os.MkdirAll(dir, 0o777); err != nil {
+			return fmt.Errorf("mkdir %s: %w", dir, err)
+		}
 	}
+	return nil
 }
 
 func lastNonEmptyLine(s string) string {

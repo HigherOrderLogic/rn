@@ -177,8 +177,8 @@ func NewManager(
 	return ret
 }
 
-// Manager implements ManagerInterface and adds SetPathEnv, which can be used
-// to make available downloaded executables via PATH setting.
+// Manager implements ManagerInterface and creates the managed package dirs
+// used to make downloaded executables available via PATH.
 //
 // Note that OS/system is managed by having a separate Manager that points
 // to a different underlying release.Manager.

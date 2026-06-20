@@ -61,7 +61,6 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/ide"
-	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/llm/llmrpc"
 	"unstable.build/go-tui/rpc"
@@ -472,22 +471,29 @@ func run() int {
 		return 0
 	}
 
-	// Resolve the user's interactive-login PATH for every startup mode
-	// except TUI, which inherits PATH from the parent shell the user
-	// already exported themselves.
-	if !*flagTUI {
-		go debug.CapturePanicReport(func() {
-			initPATH(*flagDataPath)
-		})
+	filenames = append(filenames, flag.Args()...)
+
+	if err := setupRuneBinPATH(*flagDataPath); err != nil {
+		log.Errorf("installed executables will not be available: "+
+			"set the PATH env variable: %v", err)
 	}
 
-	filenames = append(filenames, flag.Args()...)
+	// TUI inherits the parent-shell PATH the user already exported, so it
+	// skips the login SHELL PATH resolve.
+	var pathDone <-chan error
+	if !*flagTUI {
+		pathDone = startLoginShellPATHResolve(*flagDataPath)
+	}
 
 	rpc.DisableGRPCLogging()
 
 	debug.StartPProfOnSignal()
 
 	if *flagWorkspaceServer != "" {
+		if err := <-pathDone; err != nil {
+			log.Errorf("could not resolve login shell PATH; tools on "+
+				"it (e.g. homebrew, mise) may be unavailable: %v", err)
+		}
 		code := startWorkspaceServer()
 		return code
 	}
@@ -509,13 +515,8 @@ func run() int {
 		}
 	}
 
-	if err := idepkg.SetPathEnv(*flagDataPath); err != nil {
-		log.Errorf("installed executables will not be available: "+
-			"set the PATH env variable: %v", err)
-	}
-
 	if *flagGUI {
-		return runGUI(filenames, runner, &mu)
+		return runGUI(filenames, runner, &mu, pathDone)
 	} else if *flagTUI {
 		return runTUI(filenames, runner, &mu)
 	} else {
@@ -624,7 +625,7 @@ func runTUI(
 
 func runGUI(
 	filenames []string, runner ide.ExtensionsRunner,
-	mu *sync.Mutex,
+	mu *sync.Mutex, pathDone <-chan error,
 ) int {
 	setEnvForGUI(*flagDataPath)
 
@@ -682,8 +683,15 @@ func runGUI(
 	}
 
 	env := getGUIEnvVars(browser, cfg)
-	env.Iterate(func(k string, value any) {
-		os.Setenv(k, evalVar(value))
+	go debug.CapturePanicReport(func() {
+		if err := <-pathDone; err != nil {
+			_, _ = browser.Notify(browserapi.LevelError,
+				"could not resolve your login shell PATH; tools on it "+
+					"(e.g. homebrew, mise) may be unavailable: %v", err)
+		}
+		env.Iterate(func(k string, value any) {
+			os.Setenv(k, evalVar(value))
+		})
 	})
 
 	defaultColorTheme := getGUIDefaultColorTheme(browser, cfg)

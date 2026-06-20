@@ -1,6 +1,6 @@
 // Unstable Build LLC ("COMPANY") CONFIDENTIAL
 //
-// Unpublished Copyright (c) 2017-2024 Unstable Build, All Rights Reserved.
+// Unpublished Copyright (c) 2023-2024 Unstable Build, All Rights Reserved.
 //
 // NOTICE: All information contained herein is, and remains the property of COMPANY.
 // The intellectual and technical concepts contained herein are proprietary to
@@ -21,29 +21,21 @@
 // REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
 // ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
 
-package idepkg
+//go:build !windows
+
+package main
 
 import (
-	"fmt"
-	"os"
-	"strings"
+	"os/exec"
+	"syscall"
 )
 
-// SetPathEnv sets the PATH environment variable such that all executables
-// downloaded by a Manager are made available to the command line.
-func SetPathEnv(dataDir string) error {
-	const envPath = "PATH"
-
-	err := makePkgDirs(dataDir)
-	if err != nil {
-		return err
+// detachFromTerminal runs the command in its own process group so that
+// terminal-generated signals (e.g. the SIGINT raised by Ctrl-C) are delivered
+// only to Rune and never to this child.
+func detachFromTerminal(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
-	binDir := makeBinDirname(dataDir)
-	path := os.Getenv(envPath)
-	path = strings.Join([]string{binDir, path}, ":")
-	err = os.Setenv(envPath, path)
-	if err != nil {
-		return fmt.Errorf("set environment variable: %w", err)
-	}
-	return nil
+	cmd.SysProcAttr.Setpgid = true
 }
