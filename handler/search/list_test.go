@@ -341,6 +341,114 @@ func testListAsyncPush(t *testing.T, constructor listConstructor) {
 	})
 }
 
+// streamBatch pushes data through a fresh Push channel and closes it,
+// then Waits so the deterministic close-time sort/pushData settles. With
+// interruptEvery set to a long duration, the only sort happens on channel
+// close (via consumeAsyncElements' deferred sort), making the streaming
+// re-rank observable without timing races.
+func streamBatch(t *testing.T, l *List, items ...string) {
+	t.Helper()
+	ch := l.Push(context.Background())
+	for _, it := range items {
+		ch <- []byte(it)
+	}
+	close(ch)
+	l.Wait()
+}
+
+func focusIdx(t *testing.T, l *List) int {
+	t.Helper()
+	m, ok := l.Focus()
+	require.True(t, ok)
+	return m.Index()
+}
+
+// TestListFocusPreservedDuringAsyncStreaming reproduces the bug where a
+// streaming re-sort snapped the user's selection back to the first row.
+func TestListFocusPreservedDuringAsyncStreaming(t *testing.T) {
+	l := NewList(ListConfig{Interrupter: term.NopInterrupter()})
+	defer l.Close()
+	l.Resize(80, 40)
+
+	// Make the sort branch active and force scoring to favor the exact match.
+	l.Buffer().WriteString("zzz")
+	l.Wait()
+
+	// Initial batch: spread-out matches that all score below an exact "zzz".
+	streamBatch(t, l, "z_z_z a", "z_z_z b", "z_z_z c", "z_z_z d")
+	require.Equal(t, 4, l.MatchCount())
+
+	// User navigates off the top; this latches userMovedFocus.
+	require.True(t, l.FocusDown())
+	selectedIdx := focusIdx(t, l)
+	selectedOffset := l.FocusOffset()
+	require.NotZero(t, selectedOffset, "precondition: focus moved off row 0")
+
+	// More results arrive, including an exact match that would sort to the
+	// top and reset focus to row 0 if re-ranking were not gated.
+	streamBatch(t, l, "zzz", "z_z_z e")
+
+	// Focus must stay on the user's selection, not snap to the new best match.
+	assert.Equal(t, selectedIdx, focusIdx(t, l),
+		"focused item changed while user had navigated")
+	assert.Equal(t, selectedOffset, l.FocusOffset(),
+		"focus offset snapped during streaming")
+
+	// No data loss: the later items were appended.
+	assert.Equal(t, 6, l.TotalCount())
+	assert.Equal(t, 6, l.MatchCount())
+}
+
+// TestListAutoFocusTopBeforeUserNavigation preserves the existing behavior:
+// until the user navigates, the best match is auto-focused as results re-rank.
+func TestListAutoFocusTopBeforeUserNavigation(t *testing.T) {
+	l := NewList(ListConfig{Interrupter: term.NopInterrupter()})
+	defer l.Close()
+	l.Resize(80, 40)
+
+	l.Buffer().WriteString("zzz")
+	l.Wait()
+
+	streamBatch(t, l, "z_z_z a", "z_z_z b", "z_z_z c")
+	require.Equal(t, 0, l.FocusOffset())
+
+	// A later exact match should re-rank to the top and keep focus there,
+	// because the user has not taken control.
+	streamBatch(t, l, "zzz")
+
+	assert.Equal(t, 0, l.FocusOffset(), "focus should track the best match")
+	m, ok := l.Focus()
+	require.True(t, ok)
+	assert.Equal(t, "zzz", string(m.Data()))
+}
+
+// TestListFocusResetsAfterQueryChange verifies that rebuilding the result set
+// re-enables auto-focus-top after the user had taken control.
+func TestListFocusResetsAfterQueryChange(t *testing.T) {
+	l := NewList(ListConfig{Interrupter: term.NopInterrupter()})
+	defer l.Close()
+	l.Resize(80, 40)
+
+	l.Buffer().WriteString("zzz")
+	l.Wait()
+
+	streamBatch(t, l, "z_z_z a", "z_z_z b", "z_z_z c")
+	require.True(t, l.FocusDown())
+	require.NotZero(t, l.FocusOffset())
+
+	// Changing the query rebuilds the list; auto-focus-top must resume.
+	l.Buffer().WriteString("z")
+	l.Wait()
+
+	streamBatch(t, l, "zzzz", "z_z_z_z a")
+
+	assert.Equal(t, 0, l.FocusOffset(),
+		"auto-focus-top should resume after the result set is rebuilt")
+	m, ok := l.Focus()
+	require.True(t, ok)
+	assert.Equal(t, "zzzz", string(m.Data()))
+}
+
 func TestListDraw(t *testing.T) {
 	testListDraw(t, newSimpleList)
 }

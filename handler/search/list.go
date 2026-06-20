@@ -73,6 +73,12 @@ type List struct {
 		component.Virtual[*component.FocusList]
 		component.FocusList
 	}
+
+	// userMovedFocus is set once the user manually moves the focus
+	// (FocusUp/FocusDown). While set, the async streaming path appends
+	// arriving results without re-sorting, so the user's selection is not
+	// displaced. It is cleared whenever the result set is rebuilt.
+	userMovedFocus bool
 }
 
 // NewList allocates storage for a new List and initializes it.
@@ -219,14 +225,22 @@ func (l *List) PushSync(b []byte) {
 func (l *List) FocusUp() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.list.FocusUp()
+	moved := l.list.FocusUp()
+	if moved {
+		l.userMovedFocus = true
+	}
+	return moved
 }
 
 // FocusDown moves the focus of the match list down.
 func (l *List) FocusDown() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return l.list.FocusDown()
+	moved := l.list.FocusDown()
+	if moved {
+		l.userMovedFocus = true
+	}
+	return moved
 }
 
 // FocusStart moves the focus of the match list to the start.
@@ -285,6 +299,7 @@ func (l *List) DataReset() {
 	l.cancelSearch()
 	l.input = nil
 	l.list.Reset()
+	l.userMovedFocus = false
 	l.setFilesCount()
 }
 
@@ -544,7 +559,7 @@ func (l *List) consumeAsyncElements(
 			return
 		}
 		interrupter := l.cfg.interrupter
-		if len(l.getSearchQuery()) != 0 || l.cfg.bottomSearchBar {
+		if (len(l.getSearchQuery()) != 0 || l.cfg.bottomSearchBar) && !l.userMovedFocus {
 			l.sortMatchesList()
 		}
 		l.setFilesCount()
@@ -702,6 +717,7 @@ func (l *List) asyncSearchLocked(ctx context.Context) {
 	// is managed by the goroutine below, and the new items are
 	// managed by the Push goroutine
 	l.list.Reset()
+	l.userMovedFocus = false
 	go debug.CapturePanicReport(func() {
 		l.handleSearch(ctx, cancelWait, input, searchInput)
 	})
@@ -717,6 +733,7 @@ func (l *List) syncSearchLocked(ctx context.Context) {
 	copy(input, l.input)
 	searchInput := l.getSearchQuery()
 	l.list.Reset()
+	l.userMovedFocus = false
 	l.mu.Unlock()
 	defer l.mu.Lock()
 	l.handleSearch(ctx, cancelWait, input, searchInput)
