@@ -33,16 +33,20 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
 
-// capturedCompletion records the prefix and candidates that the
-// inputbox queried via the WordCompleter on a tab press. It is
-// produced by completionShim and consumed by Handler to seed the
-// fuzzy completion overlay.
+// capturedCompletion records the prefix and the live candidate
+// iterator that the inputbox queried via the WordCompleter on a tab
+// press. It is produced by completionShim and consumed by Handler to
+// stream candidates into the fuzzy completion overlay. The iterator is
+// drained off the event loop so a slow completer (e.g. a tree-sitter
+// scan over a large repo) does not freeze the prompt.
 type capturedCompletion struct {
 	// prefix is the partial word at the cursor that the user has
 	// already typed; replacing it with a candidate restores the
 	// rest of the line untouched.
-	prefix     string
-	candidates []string
+	prefix string
+	// iter yields the completion candidates. Handler owns draining
+	// and closing it.
+	iter iterator.Iterator[string]
 }
 
 // completionShim wraps the user-facing repl.CommandHandler so that
@@ -104,10 +108,13 @@ func (t *trackedIterator) Close() error {
 	return t.Iterator.Close()
 }
 
-// Complete proxies the call to the underlying handler and intercepts
-// the result. When more than one candidate is returned we keep them
-// for the caller (the IDE shell Handler) and return an empty iterator
-// so the SDK inputbox does not enter its own completion mode.
+// Complete proxies the call to the underlying handler and captures the
+// live candidate iterator without draining it. Draining on the event
+// loop would freeze the prompt for completers that start background
+// I/O (e.g. a tree-sitter scan over a large repo). The captured
+// iterator is streamed into the overlay by Handler instead. An empty
+// iterator is returned so the SDK inputbox does not enter its own
+// inline completion mode.
 func (s *completionShim) Complete(
 	ctx context.Context, cmd string, args []string,
 ) (iterator.Iterator[string], error) {
@@ -115,16 +122,9 @@ func (s *completionShim) Complete(
 	if err != nil {
 		return nil, err
 	}
-	candidates, err := iterator.ToSlice(ctx, iter)
-	if err != nil {
-		return nil, err
-	}
-	if len(candidates) <= 1 {
-		return iterator.FromSlice(candidates), nil
-	}
 	s.captured = capturedCompletion{
-		prefix:     s.prefix(cmd, args),
-		candidates: candidates,
+		prefix: s.prefix(cmd, args),
+		iter:   iter,
 	}
 	s.hasCap = true
 	return iterator.FromSlice[string](nil), nil

@@ -35,7 +35,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/component"
-	"github.com/unstablebuild/rune-go-sdk/handler/handlertest"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/term"
@@ -63,8 +62,9 @@ func newTestHandlerFull(
 			&historyDoc{Items: items, Version: 1},
 		))
 	}
+	q := &tickQueue{}
 	h, r := New(
-		func(func()) bool { return false },
+		q.schedule,
 		term.NopInterrupter(),
 		stubEditor{},
 		Config{
@@ -76,8 +76,52 @@ func newTestHandlerFull(
 	if register != nil {
 		register(r)
 	}
+	testTicks.Store(h, q)
+	t.Cleanup(func() { testTicks.Delete(h) })
 	t.Cleanup(func() { _ = h.Close() })
 	return h
+}
+
+// tickQueue records functions scheduled via scheduleNextTick so tests
+// can run them deterministically, mirroring the real event loop draining
+// pending ticks. The completion stream schedules single/zero-match
+// resolution this way.
+type tickQueue struct {
+	mu    sync.Mutex
+	funcs []func()
+}
+
+func (q *tickQueue) schedule(fn func()) bool {
+	q.mu.Lock()
+	q.funcs = append(q.funcs, fn)
+	q.mu.Unlock()
+	return true
+}
+
+func (q *tickQueue) drain() {
+	for {
+		q.mu.Lock()
+		if len(q.funcs) == 0 {
+			q.mu.Unlock()
+			return
+		}
+		fn := q.funcs[0]
+		q.funcs = q.funcs[1:]
+		q.mu.Unlock()
+		fn()
+	}
+}
+
+// testTicks maps a test handler to its pending-tick queue so helpers
+// can drain scheduled work without threading the queue through every
+// call site.
+var testTicks sync.Map
+
+// drainTicks runs any scheduled-next-tick callbacks registered for h.
+func drainTicks(h *Handler) {
+	if q, ok := testTicks.Load(h); ok {
+		q.(*tickQueue).drain()
+	}
 }
 
 // stubCmd is a no-op CommandHandler used for command-name completion
@@ -1158,13 +1202,35 @@ func TestHandler(t *testing.T) {
 				maxHist = 100
 			}
 			h := newTestHandlerFull(t, tc.items, maxHist, tc.register)
-			handlertest.RunHandlerSequence(t, h, testWidthH, testHeight,
-				[]handlertest.SequenceTestCase{{
-					InputSequence: tc.sequence,
-					Expected:      tc.expected,
-				}})
+			runShellSequence(t, h, tc.sequence, tc.expected)
 		})
 	}
+}
+
+// runShellSequence drives the shell handler through an input sequence
+// and compares the rendered output. Unlike handlertest.RunHandlerSequence
+// it waits for any in-flight completion stream to settle before drawing,
+// since completion candidates are now pushed into the overlay off the
+// event loop.
+func runShellSequence(t *testing.T, h *Handler, sequence, expected string) {
+	t.Helper()
+	h.Resize(testWidthH, testHeight)
+	keys, err := term.ParseKeys(sequence)
+	require.NoError(t, err)
+	for _, key := range keys {
+		h.Handle(term.Event{
+			Ch: key.Ch, Mod: key.Mod, Key: key.Key, Type: term.EventKey,
+		})
+		h.waitCompletion()
+		drainTicks(h)
+	}
+	w := term.NewStringWriter(testWidthH, testHeight)
+	h.Draw(w)
+	if cursor, _, ok := h.Cursor(); ok {
+		w.SetCursor(cursor)
+	}
+	require.NoError(t, w.Flush())
+	assert.Equal(t, expected, w.String(), "input: %s", sequence)
 }
 
 // TestHandlerLoadHistoryReturnsNewestFirst covers the non-UI helper

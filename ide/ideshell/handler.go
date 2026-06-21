@@ -30,10 +30,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
+	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"github.com/unstablebuild/rune-go-sdk/mouse"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/cell"
 	tcomponent "unstable.build/go-tui/component"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/command"
 	"unstable.build/go-tui/handler/search"
 	tterm "unstable.build/go-tui/term"
@@ -74,6 +76,20 @@ type Handler struct {
 	// to decide when backspace has consumed the partial word and
 	// the overlay should close.
 	compTyped int
+	// compMoved is set once the user manually navigates the
+	// completion overlay (focus up/down). It suppresses the
+	// auto-focus-top that finishCompletionStream applies when a
+	// multi-candidate stream settles, so streaming candidates do not
+	// yank focus away from the user's selection.
+	compMoved bool
+	// compCancel cancels the goroutine streaming completion
+	// candidates into the overlay. It is nil when no completion
+	// stream is in flight. Ending the overlay (accept/cancel/close)
+	// must call it so the feeder goroutine exits.
+	compCancel context.CancelFunc
+	// compDone is closed by the feeder goroutine when it stops, so
+	// the overlay can wait for it to exit before tearing down.
+	compDone chan struct{}
 
 	// shim is consulted on tab completion: it captures the head/
 	// candidates returned from the underlying repl.CommandHandler
@@ -140,6 +156,18 @@ func (h *Handler) Wait() {
 	h.inner.Wait()
 }
 
+// waitCompletion blocks until any in-flight completion feeder goroutine
+// has finished pushing candidates and the list has settled. It is used
+// by tests and by callers that need a deterministic view of the overlay
+// after a tab press; production redraws are driven by the list's
+// interrupter as candidates stream in.
+func (h *Handler) waitCompletion() {
+	if h.compDone != nil {
+		<-h.compDone
+	}
+	h.list.Wait()
+}
+
 // Submit aborts any in-flight command on the inner repl, clears the
 // current input, types line into the inputbox and dispatches it by
 // re-issuing <enter>. The leading <ctrl-c> mirrors what a real user
@@ -158,6 +186,7 @@ func (h *Handler) Submit(line string) {
 
 // Close releases both the inner repl handler and the search list.
 func (h *Handler) Close() error {
+	h.stopCompletionStream()
 	err := h.inner.Close()
 	if h.list != nil {
 		if cerr := h.list.Close(); cerr != nil && err == nil {
@@ -667,7 +696,7 @@ func (h *Handler) handleTab(ev term.Event) (exit, handled bool) {
 		return exit, handled
 	}
 	captured, ok := h.shim.consume()
-	if !ok || len(captured.candidates) <= 1 {
+	if !ok {
 		h.setEditText(h.inner.Text())
 		h.clearInner()
 		return false, true
@@ -763,9 +792,11 @@ func (h *Handler) handleHistory(ev term.Event) (exit, handled bool) {
 			return false, true
 		case term.KeyArrowUp:
 			h.list.FocusUp()
+			h.compMoved = true
 			return false, true
 		case term.KeyArrowDown:
 			h.list.FocusDown()
+			h.compMoved = true
 			return false, true
 		case term.KeyBackspace:
 			h.shrinkQuery()
@@ -838,9 +869,11 @@ func (h *Handler) handleCompletion(ev term.Event) (exit, handled bool) {
 		switch ev.Ch {
 		case 'j':
 			h.list.FocusDown()
+			h.compMoved = true
 			return false, true
 		case 'k':
 			h.list.FocusUp()
+			h.compMoved = true
 			return false, true
 		case 'c', 'g':
 			h.cancelSearch()
@@ -900,24 +933,111 @@ func (h *Handler) openSearch() {
 	h.Resize(h.width, h.height)
 }
 
-// openCompletion opens the tab-completion overlay seeded with the
-// captured candidates, sharing the search.List rendering and
-// navigation behavior with reverse-history search.
+// openCompletion opens the tab-completion overlay and streams the
+// captured candidate iterator into it off the event loop. The overlay
+// shares the search.List rendering and navigation behavior with
+// reverse-history search. Streaming keeps the prompt responsive for
+// completers that start background I/O instead of buffering the whole
+// candidate set first.
 func (h *Handler) openCompletion(c capturedCompletion) {
+	h.stopCompletionStream()
 	h.list.DataReset()
-	for _, item := range c.candidates {
-		h.list.PushSync([]byte(item))
-	}
 	h.query = h.query[:0]
 	h.list.Buffer().Replace("")
 	h.list.FocusStart()
 	h.searching = true
 	h.mode = modeCompletion
 	h.shim.lastPrefix = c.prefix
+	h.compMoved = false
 	h.Resize(h.width, h.height)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	h.compCancel = cancel
+	h.compDone = done
+	ch := h.list.Push(ctx)
+	iter := c.iter
+	go debug.CapturePanicReport(func() {
+		count := h.streamCandidates(ctx, iter, ch)
+		// Signal completion before scheduling resolution so a
+		// synchronous scheduler (tests) that runs the callback inline
+		// cannot deadlock stopCompletionStream waiting on done.
+		close(done)
+		// Schedule single/zero-match resolution on the event loop so
+		// it serializes with key handling and overlay teardown.
+		h.scheduleNextTick(func() {
+			h.finishCompletionStream(done, count)
+		})
+	})
+}
+
+// streamCandidates pumps the completion iterator into the list's async
+// push channel until the iterator is exhausted or the context is
+// cancelled, returning the number of candidates sent. It owns closing
+// both the channel and the iterator.
+func (h *Handler) streamCandidates(
+	ctx context.Context, iter iterator.Iterator[string], ch chan<- []byte,
+) int {
+	defer close(ch)
+	defer func() { _ = iter.Close() }()
+	count := 0
+	for {
+		v, ok := iter.Next(ctx)
+		if !ok {
+			return count
+		}
+		select {
+		case ch <- []byte(v):
+			count++
+		case <-ctx.Done():
+			return count
+		}
+	}
+}
+
+// finishCompletionStream runs on the event loop after the feeder
+// goroutine exits. With exactly one candidate and no user query it
+// auto-accepts (restoring the inline single-completion UX); with none
+// it closes the overlay. The done guard ensures a stale stream (one
+// the user already replaced or cancelled) cannot mutate the current
+// overlay.
+func (h *Handler) finishCompletionStream(done chan struct{}, count int) {
+	if h.compDone != done || !h.searching || h.mode != modeCompletion {
+		return
+	}
+	if len(h.query) != 0 {
+		return
+	}
+	switch count {
+	case 0:
+		h.cancelSearch()
+	case 1:
+		h.acceptSearch()
+	default:
+		// Anchor focus on the best (first) candidate once the stream
+		// settles, unless the user already navigated. Pushes append to
+		// the back, so without this focus could rest on the last item.
+		if !h.compMoved {
+			h.list.FocusStart()
+		}
+	}
+}
+
+// stopCompletionStream cancels any in-flight completion feeder
+// goroutine and waits for it to exit so it cannot push into a torn-down
+// overlay or leak.
+func (h *Handler) stopCompletionStream() {
+	if h.compCancel == nil {
+		return
+	}
+	h.compCancel()
+	<-h.compDone
+	h.compCancel = nil
+	h.compDone = nil
 }
 
 func (h *Handler) cancelSearch() {
+	h.stopCompletionStream()
 	h.list.Cancel()
 	h.list.Wait()
 	h.searching = false
@@ -929,6 +1049,7 @@ func (h *Handler) cancelSearch() {
 }
 
 func (h *Handler) acceptSearch() {
+	h.stopCompletionStream()
 	h.list.Cancel()
 	h.list.Wait()
 	match, ok := h.list.Focus()

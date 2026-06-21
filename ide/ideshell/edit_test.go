@@ -955,6 +955,10 @@ func TestAcceptCompletionCandidateReplacesEditorBuffer(t *testing.T) {
 	// <tab> opens the completion overlay with the two matches; the
 	// first is focused.
 	h.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+	// Candidates stream into the overlay off the event loop; wait for
+	// them to settle before asserting and accepting.
+	h.waitCompletion()
+	drainTicks(h)
 	require.True(t, h.searching)
 	require.Equal(t, modeCompletion, h.mode)
 
