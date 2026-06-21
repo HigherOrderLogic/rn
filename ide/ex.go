@@ -2036,6 +2036,7 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 					underlying: handler,
 					observer:   e.commandObserver,
 					name:       cmd.Name,
+					schedule:   e.sched,
 				}
 			}
 			if err := registry.RegisterREPLCommand(cmd, handler); err != nil {

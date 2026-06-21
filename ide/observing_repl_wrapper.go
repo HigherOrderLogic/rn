@@ -44,6 +44,13 @@ type observingREPLHandler struct {
 	underlying textapi.REPLHandler
 	observer   commandObserver
 	name       string
+	// schedule marshals the observer callback onto the event loop. The
+	// companion-shell REPL runs HandleCommand (and the returned
+	// iterator's Next/Close) on a transient shell goroutine, off the
+	// event loop, while the observer mutates event-loop-owned state
+	// (e.g. tutorialRunner.overlay). schedule is an invariant non-nil
+	// dependency supplied at construction.
+	schedule func(func()) bool
 }
 
 var _ textapi.REPLHandler = observingREPLHandler{}
@@ -64,13 +71,17 @@ func (w observingREPLHandler) HandleCommand(
 	}
 	args := append([]string{w.name}, cmd.Args...)
 	if err != nil {
-		w.observer.observeCommand("shell", "shell", args, err)
+		w.schedule(func() {
+			w.observer.observeCommand("shell", "shell", args, err)
+		})
 		return it, err
 	}
 	return &observingCompletionIter{
 		inner: it,
 		fire: func() {
-			w.observer.observeCommand("shell", "shell", args, nil)
+			w.schedule(func() {
+				w.observer.observeCommand("shell", "shell", args, nil)
+			})
 		},
 	}, nil
 }

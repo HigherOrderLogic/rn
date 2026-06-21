@@ -26,6 +26,7 @@ package ide
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,13 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/handler/repl"
 	sdkiterator "github.com/unstablebuild/rune-go-sdk/iterator"
 )
+
+// syncSchedule runs fn on the calling goroutine, mirroring an event-loop
+// scheduler that the wrapper marshals its observer callbacks through.
+func syncSchedule(fn func()) bool {
+	fn()
+	return true
+}
 
 // stubREPLHandler records the last command it received and returns a
 // canned iterator/error so the wrapper's forwarding and observation
@@ -104,7 +112,8 @@ func TestObservingREPLHandlerReportsShellCommand(t *testing.T) {
 
 	stub := &stubREPLHandler{}
 	obs := &recordingArgsObserver{}
-	wrapper := observingREPLHandler{underlying: stub, observer: obs, name: "pkg"}
+	wrapper := observingREPLHandler{
+		underlying: stub, observer: obs, name: "pkg", schedule: syncSchedule}
 
 	iter, err := wrapper.HandleCommand(
 		context.Background(),
@@ -137,7 +146,8 @@ func TestObservingREPLHandlerObservesOnceOnCloseAfterDrain(t *testing.T) {
 
 	stub := &stubREPLHandler{}
 	obs := &recordingArgsObserver{}
-	wrapper := observingREPLHandler{underlying: stub, observer: obs, name: "pkg"}
+	wrapper := observingREPLHandler{
+		underlying: stub, observer: obs, name: "pkg", schedule: syncSchedule}
 
 	iter, err := wrapper.HandleCommand(
 		context.Background(),
@@ -163,7 +173,8 @@ func TestObservingREPLHandlerForwardsError(t *testing.T) {
 	wantErr := errors.New("boom")
 	stub := &stubREPLHandler{handleErr: wantErr}
 	obs := &recordingArgsObserver{}
-	wrapper := observingREPLHandler{underlying: stub, observer: obs, name: "models"}
+	wrapper := observingREPLHandler{
+		underlying: stub, observer: obs, name: "models", schedule: syncSchedule}
 
 	iter, err := wrapper.HandleCommand(
 		context.Background(),
@@ -189,7 +200,9 @@ func TestObservingREPLHandlerForwardsCompleteAndHelp(t *testing.T) {
 	t.Parallel()
 
 	stub := &stubREPLHandler{}
-	wrapper := observingREPLHandler{underlying: stub, observer: &recordingArgsObserver{}, name: "pkg"}
+	wrapper := observingREPLHandler{
+		underlying: stub, observer: &recordingArgsObserver{},
+		name: "pkg", schedule: syncSchedule}
 
 	_, err := wrapper.Complete(context.Background(), "pkg", []string{"inst"})
 	require.NoError(t, err)
@@ -199,4 +212,86 @@ func TestObservingREPLHandlerForwardsCompleteAndHelp(t *testing.T) {
 	_, err = wrapper.Help(context.Background(), []string{"install"})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"install"}, stub.lastHelpArgs)
+}
+
+// TestObservingREPLHandlerObservesOnSchedulerNotCaller is a regression
+// test for a data race: the companion-shell REPL runs HandleCommand and
+// the returned iterator's drain on a transient shell goroutine, off the
+// event loop, while the observer mutates event-loop-owned state. The
+// wrapper must marshal the observer callback through its scheduler rather
+// than invoking it on the calling (worker) goroutine. Run under -race.
+func TestObservingREPLHandlerObservesOnSchedulerNotCaller(t *testing.T) {
+	t.Parallel()
+
+	// scheduled collects the observer callbacks the wrapper defers
+	// instead of running inline; the "event loop" goroutine drains them.
+	var mu sync.Mutex
+	var scheduled []func()
+	schedule := func(fn func()) bool {
+		mu.Lock()
+		scheduled = append(scheduled, fn)
+		mu.Unlock()
+		return true
+	}
+
+	// shared stands in for event-loop-owned state (e.g.
+	// tutorialRunner.overlay) that both the loop and the observer touch.
+	var shared int
+	obs := &funcObserver{fn: func() { shared++ }}
+	stub := &stubREPLHandler{}
+	wrapper := observingREPLHandler{
+		underlying: stub, observer: obs, name: "pkg", schedule: schedule}
+
+	// Worker goroutine: the shell-command goroutine that drives the
+	// command and drains its output iterator off the event loop.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		iter, err := wrapper.HandleCommand(
+			context.Background(),
+			repl.Command{Name: "pkg", Args: []string{"status"}},
+			repl.NopProgressWriter(),
+		)
+		require.NoError(t, err)
+		_, _ = sdkiterator.ToSlice(context.Background(), iter)
+	}()
+
+	// Event-loop goroutine: mutate shared and run any scheduled
+	// observer callbacks. Because the wrapper defers the callback to the
+	// scheduler, the access to shared stays on this goroutine.
+	for {
+		mu.Lock()
+		pending := scheduled
+		scheduled = nil
+		mu.Unlock()
+		for _, fn := range pending {
+			fn()
+		}
+		shared++
+		select {
+		case <-done:
+			mu.Lock()
+			pending = scheduled
+			scheduled = nil
+			mu.Unlock()
+			for _, fn := range pending {
+				fn()
+			}
+			require.Equal(t, 1, obs.calls,
+				"observer must fire exactly once, on the scheduler")
+			return
+		default:
+		}
+	}
+}
+
+// funcObserver runs fn on each observeCommand and counts invocations.
+type funcObserver struct {
+	fn    func()
+	calls int
+}
+
+func (o *funcObserver) observeCommand(_, _ string, _ []string, _ error) {
+	o.fn()
+	o.calls++
 }
