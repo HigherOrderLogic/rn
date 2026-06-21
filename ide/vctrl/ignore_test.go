@@ -118,6 +118,35 @@ func TestLoadGitignore(t *testing.T) {
 		assert.False(t, matcher.Match(makeURI(t, cwd, ".ox.awe"), false))
 	})
 
+	t.Run("common ignores exclude dependency and build noise dirs", func(t *testing.T) {
+		cwd := newScheme(t)
+		matcher, err := LoadGitignore(cwd)
+		require.NoError(t, err)
+
+		// Python tooling / virtualenv / caches.
+		assert.True(t, matcher.Match(makeURI(t, cwd, ".venv/lib/x.py"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, ".tox/py3/x.py"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, ".mypy_cache/x"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, ".pytest_cache/x"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, "__pycache__/z.pyc"), false))
+		// Nested virtualenv/caches in a monorepo sub-package.
+		assert.True(t, matcher.Match(makeURI(t, cwd, "pkg/.venv/lib/x.py"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, "pkg/__pycache__/z.pyc"), false))
+
+		// JS/TS dependencies (unanchored, matches at any depth).
+		assert.True(t, matcher.Match(makeURI(t, cwd, "node_modules/y.js"), false))
+		assert.True(t, matcher.Match(makeURI(t, cwd, "pkg/node_modules/y.js"), false))
+
+		// Rust build output is root-anchored.
+		assert.True(t, matcher.Match(makeURI(t, cwd, "target/debug/app"), false))
+
+		// Real source is not excluded.
+		assert.False(t, matcher.Match(makeURI(t, cwd, "src/main.py"), false))
+		// A nested user dir literally named "target" must NOT be excluded
+		// (Rust pattern is root-anchored).
+		assert.False(t, matcher.Match(makeURI(t, cwd, "src/target/x.rs"), false))
+	})
+
 	t.Run("uri returns error is bubbled up", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		mock := schemetest.NewMockScheme(ctrl)

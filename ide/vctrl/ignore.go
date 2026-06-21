@@ -53,6 +53,21 @@ var commonExcludes = []gitignore.Pattern{
 	// OSX
 	gitignore.ParsePattern(".DS_Store/**", nil),
 
+	// Python tooling / virtualenv / caches
+	gitignore.ParsePattern(".venv/", nil),
+	gitignore.ParsePattern(".tox/", nil),
+	gitignore.ParsePattern(".mypy_cache/", nil),
+	gitignore.ParsePattern(".pytest_cache/", nil),
+	gitignore.ParsePattern("__pycache__/", nil),
+
+	// JS/TS dependencies
+	gitignore.ParsePattern("node_modules/", nil),
+
+	// Rust / Cargo build output. Root-anchored because "target" is a
+	// generic name: only the workspace-root build dir is excluded, not a
+	// user source dir named "target" deeper in the tree.
+	gitignore.ParsePattern("/target/", nil),
+
 	// temporary files
 	gitignore.ParsePattern("*.swp", nil),
 	gitignore.ParsePattern("*"+workspace.SwapFileExtensionName, nil),

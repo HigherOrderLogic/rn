@@ -48,6 +48,7 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/idelsp/languages"
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
@@ -55,11 +56,13 @@ import (
 func NewParser(
 	w workspaceapi.FileSystem, pkg PkgManager, uri workspaceapi.URI,
 ) syntaxapi.Parser {
+	filter := &queryFilter{w: w}
 	return parserSearcher{
-		w:     w,
-		uri:   uri,
-		pkg:   newCachingPkgManager(pkg),
-		specs: &specCache{fs: w},
+		w:      w,
+		uri:    uri,
+		pkg:    newCachingPkgManager(pkg),
+		specs:  &specCache{fs: w, filter: filter},
+		filter: filter,
 	}
 }
 
@@ -70,6 +73,54 @@ type parserSearcher struct {
 	pkg   PkgManager
 	uri   workspaceapi.URI
 	specs *specCache
+	// filter prunes noise/dependency directories (gitignored entries and
+	// hidden directories) from the workspace source-code walks. It is built
+	// once per parser and shared with specCache.
+	filter *queryFilter
+}
+
+// queryFilter lazily builds and caches the walkdir.Filter applied to the
+// workspace source-code walks. LoadGitignore walks the tree to read
+// .gitignore files, so the matcher is built at most once per parser and
+// reused across every Search/SearchNode/DetectSpecs invocation.
+type queryFilter struct {
+	w    workspaceapi.FileSystem
+	once sync.Once
+	f    walkdir.Filter
+}
+
+// get returns the cached filter, building it on first use. Failure to load
+// the gitignore matcher degrades to hidden-directory pruning only rather
+// than failing the walk. A nil filesystem (highlight-only parsers) yields a
+// hidden-directory-only filter.
+func (q *queryFilter) get() walkdir.Filter {
+	q.once.Do(func() {
+		hidden := hiddenDirMatcher{vctrl.HiddenBaseMatcher()}
+		if q.w == nil {
+			q.f = hidden
+			return
+		}
+		m, err := vctrl.LoadGitignore(q.w)
+		if err != nil {
+			q.f = hidden
+			return
+		}
+		q.f = vctrl.AnyMatcher(m, hidden)
+	})
+	return q.f
+}
+
+// hiddenDirMatcher restricts a basename-hidden matcher to directories so
+// that hidden source files at visible paths (e.g. a hand-written .foo.py)
+// are still scanned, while hidden directories like .venv or .git are pruned.
+type hiddenDirMatcher struct{ m vctrl.Matcher }
+
+func (h hiddenDirMatcher) Match(uri workspaceapi.URI, isDir bool) bool {
+	return isDir && h.m.Match(uri, isDir)
+}
+
+func (h hiddenDirMatcher) MatchRelPath(relpath string, isDir bool) bool {
+	return isDir && h.m.MatchRelPath(relpath, isDir)
 }
 
 var (
@@ -84,6 +135,10 @@ var (
 // before the walk completes. Later callers replay the same growing cache.
 type specCache struct {
 	fs walkdir.Reader
+	// filter prunes noise/dependency directories from the detection walk.
+	// Shared with the owning parserSearcher so the gitignore matcher is
+	// built once.
+	filter *queryFilter
 	// source produces the spec stream to cache. It defaults to
 	// symbolresolve.DetectSpecs and exists so tests can drive detection
 	// without a real filesystem walk.
@@ -117,6 +172,9 @@ func (c *specCache) run() {
 	source := c.source
 	if source == nil {
 		source = symbolresolve.DetectSpecs
+		// Only the real workspace walk needs noise/dependency pruning; tests
+		// inject their own source and leave filter nil.
+		ctx = walkdir.WithContextFilter(ctx, c.filter.get())
 	}
 	it := source(ctx, c.fs)
 	defer func() { _ = it.Close() }()
@@ -395,6 +453,7 @@ func (p parserSearcher) search(
 	queryFile, query string, captureNames []string, langs ...string,
 ) (iterator.Iterator[syntaxapi.Result], error) {
 	ctx, cancel := context.WithCancel(context.Background())
+	ctx = walkdir.WithContextFilter(ctx, p.filter.get())
 	paths, err := walkdir.ListFiles(ctx, p.w, ".")
 	if err != nil {
 		cancel()

@@ -147,6 +147,18 @@ func TestHandler_CompleteLaunchProgram_Go(t *testing.T) {
 			[]string{"go"})
 		assert.Empty(t, drain(t, h.completeLaunchProgram("")))
 	})
+
+	t.Run("excludes entrypoints under noise dirs", func(t *testing.T) {
+		mainSrc := "package main\n\nfunc main() {}\n"
+		h := newCompletionHandler(t, "go", grammar, map[string]string{
+			"cmd/app/main.go":                   mainSrc,
+			".venv/dep/main.go":                 mainSrc,
+			"node_modules/dep/main.go":          mainSrc,
+			"target/debug/build_script/main.go": mainSrc,
+		}, []string{"go"})
+		assert.Equal(t, []string{"cmd/app/main.go"},
+			drain(t, h.completeLaunchProgram("")))
+	})
 }
 
 func TestHandler_CompleteArgs_Launch(t *testing.T) {
@@ -229,6 +241,20 @@ func TestHandler_CompleteLaunchProgram_Python(t *testing.T) {
 	}
 	h := newCompletionHandler(t, "python", grammar, files, []string{"python"})
 	assert.Equal(t, []string{"app/main.py"},
+		drain(t, h.completeLaunchProgram("")))
+}
+
+func TestHandler_CompleteLaunchProgram_PythonExcludesVenv(t *testing.T) {
+	t.Parallel()
+	grammar := pyGrammarDir(t)
+
+	guard := "if __name__ == \"__main__\":\n    pass\n"
+	files := map[string]string{
+		"src/main.py":       guard,
+		".venv/app/main.py": guard,
+	}
+	h := newCompletionHandler(t, "python", grammar, files, []string{"python"})
+	assert.Equal(t, []string{"src/main.py"},
 		drain(t, h.completeLaunchProgram("")))
 }
 

@@ -329,3 +329,50 @@ type myType struct {
 	a string
 }
 `
+
+// TestSearchExcludesNoiseDirs verifies the workspace source-code walk skips
+// dependency/build/hidden directories (e.g. .venv, node_modules, target) so
+// their files never surface in symbol search results.
+func TestSearchExcludesNoiseDirs(t *testing.T) {
+	logrus.SetLevel(logrus.TraceLevel)
+	dir := t.TempDir()
+
+	writeFile := func(rel string) workspaceapi.URI {
+		full := filepath.Join(dir, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o755))
+		require.NoError(t, os.WriteFile(full, []byte(searchFileContent), 0o644))
+		uri, err := workspaceapi.CurrentUserHostURI(full)
+		require.NoError(t, err)
+		return uri
+	}
+
+	srcURI := writeFile("src/a.go")
+	writeFile(".venv/lib/v.go")
+	writeFile("node_modules/n.go")
+	writeFile("__pycache__/p.go")
+	writeFile("target/debug/t.go")
+
+	wd, err := os.Getwd()
+	require.NoError(t, err)
+	pkgs := &mockPkgManager{fullPathFiles: []string{
+		filepath.Join(wd, "go/tree-sitter.so"),
+		filepath.Join(wd, "go/locals.scm"),
+	}}
+
+	uri, err := workspaceapi.CurrentUserHostURI(dir)
+	require.NoError(t, err)
+	scheme, err := workspace.NewFileScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	searcher := syntax.NewParser(scheme, pkgs, uri)
+	it, err := searcher.Search(string(locals), []string{"local.definition.function"})
+	require.NoError(t, err)
+	funcs, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+
+	require.NotEmpty(t, funcs)
+	for _, f := range funcs {
+		assert.Equal(t, srcURI, f.File,
+			"expected only src/a.go results, got file under a noise dir")
+	}
+}

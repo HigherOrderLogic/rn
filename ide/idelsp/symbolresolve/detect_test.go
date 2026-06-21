@@ -36,7 +36,9 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 
 	"unstable.build/go-tui/ide/idelsp/symbolresolve"
+	"unstable.build/go-tui/ide/vctrl"
 	"unstable.build/go-tui/workspace"
+	"unstable.build/go-tui/workspace/walkdir"
 )
 
 func TestDetectSpecs(t *testing.T) {
@@ -103,6 +105,33 @@ func TestDetectSpecs(t *testing.T) {
 			assert.ElementsMatch(t, wantIDs, gotIDs)
 		})
 	}
+}
+
+// TestDetectSpecsHonorsContextFilter verifies DetectSpecs respects a
+// walkdir.Filter installed on the context: source files that live only
+// inside excluded dependency/build directories (.venv, target) must not
+// trigger language detection, while real source under src/ still does.
+func TestDetectSpecsHonorsContextFilter(t *testing.T) {
+	t.Parallel()
+
+	fs := newDetectFS(t, []string{
+		"src/main.go",
+		".venv/lib/app.py",
+		"target/debug/build.rs",
+	})
+
+	matcher, err := vctrl.LoadGitignore(fs)
+	require.NoError(t, err)
+	ctx := walkdir.WithContextFilter(context.Background(), matcher)
+
+	got, err := iterator.ToSlice(ctx, symbolresolve.DetectSpecs(ctx, fs))
+	require.NoError(t, err)
+
+	gotIDs := make([]string, len(got))
+	for i := range got {
+		gotIDs[i] = got[i].LangID
+	}
+	assert.ElementsMatch(t, []string{symbolresolve.Go.LangID}, gotIDs)
 }
 
 func newDetectFS(t *testing.T, files []string) workspaceapi.FileSystem {
