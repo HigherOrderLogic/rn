@@ -532,6 +532,7 @@ func (e *Handler) handleInput(ev term.Event) (handled bool, raw []byte) {
 			// so append term.EventPasteEnd or end of paste sequence.
 			raw = append(raw, ev.Raw...)
 		} else {
+			raw = e.bracketedPasteBuf.Bytes()
 			// replace line breaks with a single carriage, to reproduce
 			// the enter key as much as possible.
 			raw = bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\r"))

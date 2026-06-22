@@ -623,6 +623,32 @@ func TestHandlerHandleReturnsHandledWithoutPtyEcho(t *testing.T) {
 			"(e.g. ide/ex) duplicate input on slow remote ptys.")
 }
 
+func TestHandlerPasteEndWritesBufferedInput(t *testing.T) {
+	t.Parallel()
+
+	handler := &Handler{
+		comp: &Component{
+			parserHandler: &parserHandler{useAlt: true},
+		},
+	}
+
+	handled, raw := handler.handleInput(term.Event{Type: term.EventPasteStart})
+	assert.True(t, handled)
+	assert.Empty(t, raw)
+
+	handled, raw = handler.handleInput(term.Event{
+		Type: term.EventKey,
+		Ch:   's',
+		Raw:  []byte("secret\n"),
+	})
+	assert.True(t, handled)
+	assert.Empty(t, raw)
+
+	handled, raw = handler.handleInput(term.Event{Type: term.EventPasteEnd})
+	assert.False(t, handled)
+	assert.Equal(t, []byte("secret\r"), raw)
+}
+
 // TestHandlerCoalescesInterruptsDuringHandle pins that vte.Handler
 // suppresses publisher-bound EventInterrupts for the duration of a
 // Handle call, so a single keystroke that drives the embedded program

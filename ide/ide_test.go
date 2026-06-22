@@ -49,12 +49,14 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/docmarshal/docbson"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"github.com/unstablebuild/rune-go-sdk/tui"
 	"unstable.build/go-tui/browser"
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/component/shader"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/handler/handlertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
@@ -935,6 +937,119 @@ workspace:
 		"post-reload right leaf must reference a concrete window")
 	require.Equal(t, rightLeafAfter.WindowID, after.windowID,
 		"the restored terminal must live in the right leaf of the post-reload layout")
+}
+
+func TestE2EClipboardPasteIntoNoEchoTerminalRead(t *testing.T) {
+	dir := t.TempDir()
+	dataDir := t.TempDir()
+
+	script := filepath.Join(dir, "read-secret.sh")
+	require.NoError(t, os.WriteFile(script, []byte(`#!/bin/sh
+printf 'password: '
+stty -echo
+IFS= read -r secret
+stty echo
+printf '\nRESULT:%s\n' "$secret"
+`), 0o755))
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+clipboard: memory
+editor:
+  mode: modal
+command:
+  key: "<c-\\\\>"
+  key_bindings:
+    <m-v>: clipboardpaste
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	sendKeys := func(t *testing.T, seq string) {
+		t.Helper()
+		keys, err := term.ParseKeys(seq)
+		require.NoError(t, err)
+		for _, k := range keys {
+			mu.Lock()
+			root.Handle(term.Event{
+				Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key,
+			})
+			mu.Unlock()
+			i.WaitInflight()
+		}
+	}
+
+	snapshotTerminalText := func() (string, bool) {
+		mu.Lock()
+		defer mu.Unlock()
+		ex := i.workspaceHandler.focusEx()
+		var text string
+		var ok bool
+		ex.comp.Browser().IterateWindows(func(win browser.Window) {
+			if ok {
+				return
+			}
+			content, err := win.Content()
+			if err != nil {
+				return
+			}
+			vte, isVTE := content.(vtereservoir.VTE)
+			if !isVTE {
+				return
+			}
+			snap, err := vte.Snapshot()
+			if err != nil {
+				return
+			}
+			text = term.CellsToString(snap.ActiveCells())
+			ok = true
+		})
+		return text, ok
+	}
+
+	sendKeys(t, "<c-\\\\>terminalnew<space>"+script+"<enter>")
+	var promptText string
+	require.Eventually(t, func() bool {
+		text, ok := snapshotTerminalText()
+		promptText = text
+		return ok && strings.Contains(text, "password:")
+	}, 10*time.Second, 50*time.Millisecond,
+		"terminal did not reach password prompt; screen was:\n%s", promptText)
+
+	require.NoError(t, i.workspaceHandler.clip.Copy(
+		clipboard.DefaultRegisterID,
+		clipboard.Data{Text: "s3cr3t"},
+	))
+	sendKeys(t, "<m-v><enter>")
+
+	var resultText string
+	require.Eventually(t, func() bool {
+		text, ok := snapshotTerminalText()
+		resultText = text
+		return ok && strings.Contains(text, "RESULT:s3cr3t")
+	}, 10*time.Second, 50*time.Millisecond,
+		"terminal did not receive pasted secret; screen was:\n%s", resultText)
 }
 
 type mockShader struct {
