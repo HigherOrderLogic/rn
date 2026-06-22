@@ -2115,6 +2115,305 @@ func TestRefreshRebuildsFromScratch(t *testing.T) {
 		"unexpanded subdir must not be read from disk")
 }
 
+func TestExpandedDirectories(t *testing.T) {
+	tests := []struct {
+		name     string
+		dirs     map[string][]mockEntry
+		expand   []string
+		collapse []string
+		want     []string
+	}{
+		{
+			name: "no expanded directories",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}, {name: "README.md"}},
+				"/project/src": {{name: "main.go"}},
+			},
+		},
+		{
+			name: "top-level expanded directory",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go"}},
+			},
+			expand: []string{"src/"},
+			want:   []string{"file:///project/src"},
+		},
+		{
+			name: "expanded empty directory",
+			dirs: map[string][]mockEntry{
+				"/project":       {{name: "empty", isDir: true}},
+				"/project/empty": {},
+			},
+			expand: []string{"empty/"},
+			want:   []string{"file:///project/empty"},
+		},
+		{
+			name: "nested expanded directories",
+			dirs: map[string][]mockEntry{
+				"/project":         {{name: "src", isDir: true}},
+				"/project/src":     {{name: "pkg", isDir: true}, {name: "root.go"}},
+				"/project/src/pkg": {{name: "main.go"}},
+			},
+			expand: []string{"src/", "pkg/"},
+			want: []string{
+				"file:///project/src",
+				"file:///project/src/pkg",
+			},
+		},
+		{
+			name: "multiple expanded sibling directories",
+			dirs: map[string][]mockEntry{
+				"/project": {
+					{name: "docs", isDir: true},
+					{name: "src", isDir: true},
+				},
+				"/project/docs": {{name: "guide.md"}},
+				"/project/src":  {{name: "main.go"}},
+			},
+			expand: []string{"docs/", "src/"},
+			want: []string{
+				"file:///project/docs",
+				"file:///project/src",
+			},
+		},
+		{
+			name: "collapsed nested directory is omitted",
+			dirs: map[string][]mockEntry{
+				"/project":         {{name: "src", isDir: true}},
+				"/project/src":     {{name: "pkg", isDir: true}, {name: "root.go"}},
+				"/project/src/pkg": {{name: "main.go"}},
+			},
+			expand: []string{"src/"},
+			want:   []string{"file:///project/src"},
+		},
+		{
+			name: "collapsed directory is omitted after toggle",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go"}},
+			},
+			expand:   []string{"src/"},
+			collapse: []string{"src/"},
+		},
+		{
+			name: "expanded child is omitted when ancestor collapses",
+			dirs: map[string][]mockEntry{
+				"/project":         {{name: "src", isDir: true}},
+				"/project/src":     {{name: "pkg", isDir: true}},
+				"/project/src/pkg": {{name: "main.go"}},
+			},
+			expand:   []string{"src/", "pkg/"},
+			collapse: []string{"src/"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, buf, _ := newComp(t, tc.dirs, Config{})
+			for _, label := range tc.expand {
+				toggleComponentRowContaining(t, c, buf, label)
+			}
+			for _, label := range tc.collapse {
+				toggleComponentRowContaining(t, c, buf, label)
+			}
+
+			assert.Equal(t, tc.want, uriStrings(c.ExpandedDirectories()))
+		})
+	}
+}
+
+func TestExpandDirectories(t *testing.T) {
+	tests := []struct {
+		name string
+		dirs map[string][]mockEntry
+		cfg  Config
+		uris []string
+		want string
+	}{
+		{
+			name: "empty URI list leaves tree collapsed",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go"}},
+			},
+			want: " src/",
+		},
+		{
+			name: "top-level directory is expanded",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}, {name: "README.md"}},
+				"/project/src": {{name: "main.go"}},
+			},
+			uris: []string{"file:///project/src"},
+			want: " src/\n│    main.go\n README.md",
+		},
+		{
+			name: "nested directories are expanded when ancestors are included",
+			dirs: map[string][]mockEntry{
+				"/project":         {{name: "src", isDir: true}},
+				"/project/src":     {{name: "pkg", isDir: true}, {name: "root.go"}},
+				"/project/src/pkg": {{name: "main.go"}},
+			},
+			uris: []string{
+				"file:///project/src",
+				"file:///project/src/pkg",
+			},
+			want: " src/\n│    pkg/\n│   │    main.go\n│    root.go",
+		},
+		{
+			name: "nested directory without expanded ancestor remains hidden",
+			dirs: map[string][]mockEntry{
+				"/project":         {{name: "src", isDir: true}},
+				"/project/src":     {{name: "pkg", isDir: true}},
+				"/project/src/pkg": {{name: "main.go"}},
+			},
+			uris: []string{"file:///project/src/pkg"},
+			want: " src/",
+		},
+		{
+			name: "multiple sibling directories are expanded",
+			dirs: map[string][]mockEntry{
+				"/project": {
+					{name: "docs", isDir: true},
+					{name: "src", isDir: true},
+				},
+				"/project/docs": {{name: "guide.md"}},
+				"/project/src":  {{name: "main.go"}, {name: "util.go"}},
+			},
+			uris: []string{"file:///project/docs", "file:///project/src"},
+			want: " docs/\n│    guide.md\n src/\n│    main.go\n│    util.go",
+		},
+		{
+			name: "deleted top-level directory is ignored",
+			dirs: map[string][]mockEntry{
+				"/project": {{name: "README.md"}},
+			},
+			uris: []string{"file:///project/src"},
+			want: " README.md",
+		},
+		{
+			name: "renamed directory is not reopened from old URI",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "app", isDir: true}},
+				"/project/app": {{name: "main.go"}},
+			},
+			uris: []string{"file:///project/src"},
+			want: " app/",
+		},
+		{
+			name: "new child file appears in restored directory",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go"}, {name: "util.go"}},
+			},
+			uris: []string{"file:///project/src"},
+			want: " src/\n│    main.go\n│    util.go",
+		},
+		{
+			name: "removed child file stays absent in restored directory",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go"}},
+			},
+			uris: []string{"file:///project/src"},
+			want: " src/\n│    main.go",
+		},
+		{
+			name: "collapsed sibling remains collapsed",
+			dirs: map[string][]mockEntry{
+				"/project": {
+					{name: "docs", isDir: true},
+					{name: "src", isDir: true},
+				},
+				"/project/docs": {{name: "api.md"}, {name: "guide.md"}},
+				"/project/src":  {{name: "main.go"}, {name: "util.go"}},
+			},
+			uris: []string{"file:///project/src"},
+			want: " docs/\n src/\n│    main.go\n│    util.go",
+		},
+		{
+			name: "inaccessible target directory remains collapsed",
+			dirs: map[string][]mockEntry{
+				"/project": {{name: "src", isDir: true}},
+			},
+			uris: []string{"file:///project/src"},
+			want: " src/",
+		},
+		{
+			name: "file URI is ignored",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}, {name: "README.md"}},
+				"/project/src": {{name: "main.go"}},
+			},
+			uris: []string{"file:///project/README.md"},
+			want: " src/\n README.md",
+		},
+		{
+			name: "ignore filter still applies to restored children",
+			dirs: map[string][]mockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "app.go"}, {name: "tmp.swp"}},
+			},
+			cfg:  Config{Ignore: suffixIgnore{".swp"}},
+			uris: []string{"file:///project/src"},
+			want: " src/\n│    app.go",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c, buf, _ := newComp(t, tc.dirs, tc.cfg)
+
+			c.ExpandDirectories(parseURIs(t, tc.uris))
+
+			assert.Equal(t, tc.want, buf.String())
+		})
+	}
+}
+
+func toggleComponentRowContaining(
+	t *testing.T,
+	c *Component,
+	buf *cell.Buffer,
+	label string,
+) {
+	t.Helper()
+	for y, line := range strings.Split(buf.String(), "\n") {
+		if !strings.Contains(line, label) {
+			continue
+		}
+		_, isFile := c.ExpandNodeAt(term.Coordinates{Y: y})
+		require.False(t, isFile)
+		return
+	}
+	require.Failf(t, "row not found", "no explorer row contains %q in:\n%s",
+		label, buf.String())
+}
+
+func uriStrings(uris []workspaceapi.URI) []string {
+	if len(uris) == 0 {
+		return nil
+	}
+	ret := make([]string, 0, len(uris))
+	for _, uri := range uris {
+		ret = append(ret, uri.String())
+	}
+	return ret
+}
+
+func parseURIs(t *testing.T, raw []string) []workspaceapi.URI {
+	t.Helper()
+	if len(raw) == 0 {
+		return nil
+	}
+	ret := make([]workspaceapi.URI, 0, len(raw))
+	for _, s := range raw {
+		ret = append(ret, mustParseURI(s))
+	}
+	return ret
+}
+
 // TestRefreshDiscardsUnflushedBufferEdits is a property that
 // callers must know about: Refresh re-renders the canonical tree
 // from disk, dropping any unflushed in-buffer edits. Callers that

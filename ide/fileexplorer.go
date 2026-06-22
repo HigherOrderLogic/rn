@@ -210,10 +210,12 @@ func (h *fileExplorerHandler) windowVisible() bool {
 // in-place so the editor's cursor needs to be re-clamped to the
 // new bounds, mirroring enterAtCursor.
 func (h *fileExplorerHandler) refreshTree() {
+	expanded := h.comp.ExpandedDirectories()
 	if err := h.comp.Refresh(); err != nil {
 		h.host.SetError(err)
 		return
 	}
+	h.comp.ExpandDirectories(expanded)
 	if h.ed != nil {
 		h.clampCursorToBuffer()
 	}

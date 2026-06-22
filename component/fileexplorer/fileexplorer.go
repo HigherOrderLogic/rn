@@ -445,6 +445,64 @@ func (c *Component) Refresh() error {
 	return c.init()
 }
 
+// ExpandedDirectories returns the URIs of directory nodes currently
+// expanded in the rendered tree.
+func (c *Component) ExpandedDirectories() []workspaceapi.URI {
+	var uris []workspaceapi.URI
+	for _, id := range c.rowIDs {
+		if id == 0 {
+			continue
+		}
+		n := c.findNodeByID(c.baseTree, id)
+		if n != nil && n.isDir && n.expanded {
+			uris = append(uris, n.uri)
+		}
+	}
+	return uris
+}
+
+// ExpandDirectories expands any directory in uris that still exists in
+// the current tree.
+func (c *Component) ExpandDirectories(uris []workspaceapi.URI) {
+	if len(uris) == 0 {
+		return
+	}
+	wanted := make(map[string]struct{}, len(uris))
+	for _, uri := range uris {
+		wanted[uri.String()] = struct{}{}
+	}
+	var changed bool
+	var walk func(*node)
+	walk = func(n *node) {
+		if n == nil {
+			return
+		}
+		if n.isDir {
+			if _, ok := wanted[n.uri.String()]; ok {
+				if n.children == nil {
+					if err := readChildren(c.fs, c.cfg.Ignore, n); err != nil {
+						return
+					}
+					c.assignIDs(n)
+				}
+				if !n.expanded {
+					n.expanded = true
+					changed = true
+				}
+			}
+		}
+		if n.expanded {
+			for _, child := range n.children {
+				walk(child)
+			}
+		}
+	}
+	walk(c.baseTree)
+	if changed {
+		c.rewriteBufferFromTree(c.baseTree)
+	}
+}
+
 // Flush runs the same logic as DryFlush and, if there are no
 // conflicts, executes the ordered operations on the filesystem. On
 // success, the base tree is updated to match the applied changes and

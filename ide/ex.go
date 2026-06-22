@@ -1920,6 +1920,7 @@ func (e *ex) initFileExplorer() error {
 	} else {
 		// Keep the target in sync with the latest focus.
 		e.fileExplorerHandler.SetTargetWindow(e.fileExplorerTarget)
+		e.fileExplorerHandler.refreshTree()
 	}
 
 	win, err := e.comp.SplitRoot(component.AlignmentLeft, e.fileExplorerHandler)

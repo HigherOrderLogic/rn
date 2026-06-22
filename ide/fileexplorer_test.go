@@ -583,6 +583,197 @@ func TestFileExplorerHandlerFSEventRefreshesWhenWindowClosed(t *testing.T) {
 	require.NotContains(t, buf.String(), "typed.go")
 }
 
+func TestFileExplorerHandlerRefreshPreservesExpandedDirectories(t *testing.T) {
+	tests := []struct {
+		name        string
+		initial     map[string][]explorerMockEntry
+		expand      []string
+		mutate      func(map[string][]explorerMockEntry)
+		wantVisible []string
+		wantHidden  []string
+	}{
+		{
+			name: "top-level expanded directory survives root sibling create",
+			initial: map[string][]explorerMockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project"] = append(dirs["/project"],
+					explorerMockEntry{name: "README.md", isDir: false})
+			},
+			wantVisible: []string{"README.md", "main.go"},
+		},
+		{
+			name: "nested expanded directories survive root sibling create",
+			initial: map[string][]explorerMockEntry{
+				"/project":         {{name: "src", isDir: true}},
+				"/project/src":     {{name: "pkg", isDir: true}},
+				"/project/src/pkg": {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/", "pkg/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project"] = append(dirs["/project"],
+					explorerMockEntry{name: "README.md", isDir: false})
+			},
+			wantVisible: []string{"README.md", "pkg/", "main.go"},
+		},
+		{
+			name: "expanded directory shows newly-created child file",
+			initial: map[string][]explorerMockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project/src"] = append(dirs["/project/src"],
+					explorerMockEntry{name: "util.go", isDir: false})
+			},
+			wantVisible: []string{"main.go", "util.go"},
+		},
+		{
+			name: "expanded directory drops deleted child file",
+			initial: map[string][]explorerMockEntry{
+				"/project": {{name: "src", isDir: true}},
+				"/project/src": {
+					{name: "main.go", isDir: false},
+					{name: "old.go", isDir: false},
+				},
+			},
+			expand: []string{"src/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project/src"] = []explorerMockEntry{
+					{name: "main.go", isDir: false},
+				}
+			},
+			wantVisible: []string{"main.go"},
+			wantHidden:  []string{"old.go"},
+		},
+		{
+			name: "deleted expanded top-level directory is not restored",
+			initial: map[string][]explorerMockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project"] = []explorerMockEntry{
+					{name: "README.md", isDir: false},
+				}
+				delete(dirs, "/project/src")
+			},
+			wantVisible: []string{"README.md"},
+			wantHidden:  []string{"src/", "main.go"},
+		},
+		{
+			name: "renamed expanded directory is not reopened under old path",
+			initial: map[string][]explorerMockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project"] = []explorerMockEntry{{name: "app", isDir: true}}
+				delete(dirs, "/project/src")
+				dirs["/project/app"] = []explorerMockEntry{
+					{name: "main.go", isDir: false},
+				}
+			},
+			wantVisible: []string{"app/"},
+			wantHidden:  []string{"src/", "main.go"},
+		},
+		{
+			name: "deleted expanded nested directory is not restored",
+			initial: map[string][]explorerMockEntry{
+				"/project": {{name: "src", isDir: true}},
+				"/project/src": {
+					{name: "pkg", isDir: true},
+					{name: "root.go", isDir: false},
+				},
+				"/project/src/pkg": {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/", "pkg/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project/src"] = []explorerMockEntry{
+					{name: "root.go", isDir: false},
+				}
+				delete(dirs, "/project/src/pkg")
+			},
+			wantVisible: []string{"src/", "root.go"},
+			wantHidden:  []string{"pkg/", "main.go"},
+		},
+		{
+			name: "collapsed nested directory remains collapsed",
+			initial: map[string][]explorerMockEntry{
+				"/project": {{name: "src", isDir: true}},
+				"/project/src": {
+					{name: "pkg", isDir: true},
+					{name: "root.go", isDir: false},
+				},
+				"/project/src/pkg": {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project/src/pkg"] = append(dirs["/project/src/pkg"],
+					explorerMockEntry{name: "util.go", isDir: false})
+			},
+			wantVisible: []string{"src/", "pkg/", "root.go"},
+			wantHidden:  []string{"main.go", "util.go"},
+		},
+		{
+			name: "collapsed sibling remains collapsed while expanded sibling is restored",
+			initial: map[string][]explorerMockEntry{
+				"/project":      {{name: "docs", isDir: true}, {name: "src", isDir: true}},
+				"/project/docs": {{name: "guide.md", isDir: false}},
+				"/project/src":  {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				dirs["/project/docs"] = append(dirs["/project/docs"],
+					explorerMockEntry{name: "api.md", isDir: false})
+				dirs["/project/src"] = append(dirs["/project/src"],
+					explorerMockEntry{name: "util.go", isDir: false})
+			},
+			wantVisible: []string{"docs/", "src/", "main.go", "util.go"},
+			wantHidden:  []string{"guide.md", "api.md"},
+		},
+		{
+			name: "previously expanded inaccessible directory is left collapsed",
+			initial: map[string][]explorerMockEntry{
+				"/project":     {{name: "src", isDir: true}},
+				"/project/src": {{name: "main.go", isDir: false}},
+			},
+			expand: []string{"src/"},
+			mutate: func(dirs map[string][]explorerMockEntry) {
+				delete(dirs, "/project/src")
+			},
+			wantVisible: []string{"src/"},
+			wantHidden:  []string{"main.go"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			dirs := cloneExplorerMockDirs(tc.initial)
+			h, _ := newTestFileExplorerHandler(t, dirs)
+			for _, label := range tc.expand {
+				expandExplorerRowContaining(t, h, label)
+			}
+
+			tc.mutate(dirs)
+			h.refreshTree()
+
+			for _, want := range tc.wantVisible {
+				require.Contains(t, h.buf.String(), want)
+			}
+			for _, unwanted := range tc.wantHidden {
+				require.NotContains(t, h.buf.String(), unwanted)
+			}
+		})
+	}
+}
+
 // TestFileExplorerHandlerFSEventOutsideRootIgnored asserts that
 // FS events for paths not strictly under the explorer's root
 // (including the root itself) do not trigger a refresh.
@@ -610,6 +801,27 @@ func TestFileExplorerHandlerFSEventOutsideRootIgnored(t *testing.T) {
 
 	require.False(t, h.pendingRefresh)
 	require.Equal(t, before, h.buf.String())
+}
+
+func cloneExplorerMockDirs(in map[string][]explorerMockEntry) map[string][]explorerMockEntry {
+	out := make(map[string][]explorerMockEntry, len(in))
+	for path, entries := range in {
+		out[path] = append([]explorerMockEntry(nil), entries...)
+	}
+	return out
+}
+
+func expandExplorerRowContaining(t *testing.T, h *fileExplorerHandler, label string) {
+	t.Helper()
+	for y, line := range strings.Split(h.buf.String(), "\n") {
+		if !strings.Contains(line, label) {
+			continue
+		}
+		_, opened := h.comp.ExpandNodeAt(term.Coordinates{Y: y})
+		require.False(t, opened)
+		return
+	}
+	require.Failf(t, "row not found", "no explorer row contains %q in:\n%s", label, h.buf.String())
 }
 
 func newTestFileExplorerHandler(t *testing.T, dirs map[string][]explorerMockEntry) (*fileExplorerHandler, *testFileExplorerHost) {
