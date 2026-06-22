@@ -45,10 +45,9 @@ RUN set -eux; \
 WORKDIR /src
 
 RUN git config --global url.ssh://git@github.com/.insteadOf https://github.com/
-RUN mkdir -p ~/.ssh && \
-	echo "$GIT_SSH_KEY" > ~/.ssh/id_rsa && \
-	chmod 600 ~/.ssh/id_rsa && \
-	chmod 700 ~/.ssh
+RUN mkdir -p ~/.ssh && chmod 700 ~/.ssh && \
+	printf '%s\n' "$GIT_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa && \
+	chmod 600 ~/.ssh/id_rsa
 # rune-agent's private deps live on github.com/unstablebuild/*; we do not
 # pull from git.unstable.build. Tolerate transient DNS/network failures.
 RUN ssh-keyscan -t rsa github.com >> ~/.ssh/known_hosts || true
