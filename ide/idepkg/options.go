@@ -64,3 +64,14 @@ func WithConfigBase(base func() map[string]any) Option {
 		m.configBase = base
 	}
 }
+
+// WithAfterConfigMerge installs a hook invoked after a package config merge is
+// written to the user config file. The hook is generic and unaware of GUI or
+// environment concerns; callers inspect the applied diff and report back
+// whether any live reload happened via ConfigMergeResult. The hook runs for
+// both the auto-apply path and the prompt's Allow path, and never for Deny.
+func WithAfterConfigMerge(hook func(ConfigMergeEvent) (ConfigMergeResult, error)) Option {
+	return func(m *Manager) {
+		m.afterConfigMerge = hook
+	}
+}

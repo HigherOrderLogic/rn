@@ -765,3 +765,68 @@ func TestBackupUserConfig(t *testing.T) {
 		require.Error(t, err)
 	})
 }
+
+func TestConfigDiffPath(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		doc       string
+		path      []string
+		wantTouch bool
+		wantValue string
+	}{
+		{
+			name:      "gui.env present extracts mapping",
+			doc:       "gui:\n  env:\n    FOO: bar\n",
+			path:      []string{"gui", "env"},
+			wantTouch: true,
+			wantValue: "FOO: bar\n",
+		},
+		{
+			name:      "top-level env alone is not gui.env",
+			doc:       "env:\n  FOO: bar\n",
+			path:      []string{"gui", "env"},
+			wantTouch: false,
+		},
+		{
+			name:      "gui without env",
+			doc:       "gui:\n  font_size: 12\n",
+			path:      []string{"gui", "env"},
+			wantTouch: false,
+		},
+		{
+			name:      "gui.env scalar (non-mapping) still detected at path",
+			doc:       "gui:\n  env: nonsense\n",
+			path:      []string{"gui", "env"},
+			wantTouch: true,
+			wantValue: "nonsense\n",
+		},
+		{
+			name:      "empty doc",
+			doc:       "",
+			path:      []string{"gui", "env"},
+			wantTouch: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc := mustParseYAML(t, tt.doc)
+			assert.Equal(t, tt.wantTouch, configDiffTouchesPath(doc, tt.path...))
+			node := configDiffMappingAtPath(doc, tt.path...)
+			if tt.wantTouch {
+				require.NotNil(t, node)
+				assert.Equal(t, tt.wantValue, nodeToString(t, node))
+			} else {
+				assert.Nil(t, node)
+			}
+		})
+	}
+}
+
+func TestConfigDiffMappingAtPathNilAndEmpty(t *testing.T) {
+	t.Parallel()
+	assert.Nil(t, configDiffMappingAtPath(nil, "gui", "env"))
+	doc := mustParseYAML(t, "gui:\n  env:\n    FOO: bar\n")
+	assert.Nil(t, configDiffMappingAtPath(doc))
+}

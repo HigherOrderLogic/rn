@@ -204,6 +204,10 @@ type Manager struct {
 	// overlay-style mutations (config[...] = ...) resolve. May be nil.
 	configBase func() map[string]any
 
+	// afterConfigMerge, when set, is invoked after a package config merge is
+	// written to the user config file. See WithAfterConfigMerge.
+	afterConfigMerge func(ConfigMergeEvent) (ConfigMergeResult, error)
+
 	iterators struct {
 		sync.Mutex
 		m map[string]*sync.Mutex
@@ -843,13 +847,12 @@ func (m *Manager) promptConfigChange(
 			if !allowed {
 				return
 			}
-			if err := m.applyConfigMerge(userDoc, pkgDoc); err != nil {
+			result, err := m.applyConfigMerge(pkgID, pkgVersion, userDoc, pkgDoc)
+			if err != nil {
 				_, _ = m.n.Notify(browserapi.LevelError, "apply configuration: %s", err)
-			} else {
-				_, _ = m.n.Notify(browserapi.LevelSuccess, "applied %s "+
-					"configuration updates. Restart the program to load the changes.",
-					pkgID)
+				return
 			}
+			m.notifyConfigApplied(browserapi.LevelSuccess, pkgID, result)
 		}, func() error { return nil }),
 	})
 
@@ -869,20 +872,48 @@ func (m *Manager) promptConfigChange(
 	return nil
 }
 
+// ConfigMergeEvent describes a package config merge that was just written to
+// the user config file. The applied diff (Diff) carries only the keys that
+// were merged. Consumers inspect it to decide whether any live reload is
+// possible; the idepkg package itself is unaware of what the keys mean.
+type ConfigMergeEvent struct {
+	PkgID      string
+	PkgVersion release.Version
+	// Diff is the YAML document node for the applied diff. Its first content
+	// child is the mapping of merged keys.
+	Diff *yaml.Node
+}
+
+// TouchesPath reports whether the applied diff includes the given nested key
+// path, e.g. TouchesPath("gui", "env").
+func (e ConfigMergeEvent) TouchesPath(path ...string) bool {
+	return configDiffTouchesPath(e.Diff, path...)
+}
+
+// ConfigMergeResult reports what a post-merge hook did. LiveApplied is true
+// when the hook applied changes to the running process such that a full
+// restart is not required for new work to observe them.
+type ConfigMergeResult struct {
+	LiveApplied bool
+}
+
 // applyConfigMerge deep-merges addDoc into userDoc and writes the result to
 // the user config file atomically, after backing up the existing file. It is
 // shared by the auto-apply path (purely-new keys) and the prompt's Allow path
-// (version-dependent conflicts the user approved).
-func (m *Manager) applyConfigMerge(userDoc, addDoc *yaml.Node) error {
+// (version-dependent conflicts the user approved). On success it invokes the
+// post-merge hook (if configured) and returns its result.
+func (m *Manager) applyConfigMerge(
+	pkgID string, pkgVersion release.Version, userDoc, addDoc *yaml.Node,
+) (ConfigMergeResult, error) {
 	starConfig := strings.HasSuffix(strings.ToLower(m.configPath), ".star")
 	merged, err := buildMergedConfig(userDoc, addDoc, starConfig)
 	if err != nil {
-		return err
+		return ConfigMergeResult{}, err
 	}
 
 	backup, err := backupUserConfig(m.configPath)
 	if err != nil {
-		return fmt.Errorf("backup user config: %w", err)
+		return ConfigMergeResult{}, fmt.Errorf("backup user config: %w", err)
 	}
 
 	m.log(log.InfoLevel, "created config backup "+
@@ -890,14 +921,44 @@ func (m *Manager) applyConfigMerge(userDoc, addDoc *yaml.Node) error {
 
 	if starConfig {
 		if err := starlarkconfig.WriteManagedConfigFileAtomic(m.configPath, merged.starDiff); err != nil {
-			return fmt.Errorf("write starlark config: %w", err)
+			return ConfigMergeResult{}, fmt.Errorf("write starlark config: %w", err)
 		}
-		return nil
+		return m.runAfterConfigMerge(pkgID, pkgVersion, addDoc)
 	}
 	if err := writeYAMLAtomic(m.configPath, merged.yamlDoc, addDoc.Content[0]); err != nil {
-		return fmt.Errorf("write config: %w", err)
+		return ConfigMergeResult{}, fmt.Errorf("write config: %w", err)
 	}
-	return nil
+	return m.runAfterConfigMerge(pkgID, pkgVersion, addDoc)
+}
+
+func (m *Manager) runAfterConfigMerge(
+	pkgID string, pkgVersion release.Version, addDoc *yaml.Node,
+) (ConfigMergeResult, error) {
+	if m.afterConfigMerge == nil {
+		return ConfigMergeResult{}, nil
+	}
+	return m.afterConfigMerge(ConfigMergeEvent{
+		PkgID:      pkgID,
+		PkgVersion: pkgVersion,
+		Diff:       addDoc,
+	})
+}
+
+// notifyConfigApplied reports a successful config merge. When the post-merge
+// hook live-applied changes, it tells the user that new local processes will
+// pick them up and that already-running tools need a workspace reload;
+// otherwise it keeps the restart-oriented wording.
+func (m *Manager) notifyConfigApplied(
+	level browserapi.NotificationLevel, pkgID string, result ConfigMergeResult,
+) {
+	if result.LiveApplied {
+		_, _ = m.n.Notify(level, "applied %s configuration updates. "+
+			"Environment updates are now active for new local processes; "+
+			"reload the workspace to update already-running tools.", pkgID)
+		return
+	}
+	_, _ = m.n.Notify(level, "applied %s configuration updates. "+
+		"Restart the program to load the changes.", pkgID)
 }
 
 func (m *Manager) processConfig(
@@ -932,12 +993,11 @@ func (m *Manager) processConfig(
 	}
 
 	if plan.autoApplyDoc != nil {
-		if err := m.applyConfigMerge(plan.userDoc, plan.autoApplyDoc); err != nil {
+		result, err := m.applyConfigMerge(pkgID, pkgVersion, plan.userDoc, plan.autoApplyDoc)
+		if err != nil {
 			return fmt.Errorf("auto-apply config change: %w", err)
 		}
-		_, _ = m.n.Notify(browserapi.LevelInfo, "applied %s "+
-			"configuration updates. Restart the program to load the changes.",
-			pkgID)
+		m.notifyConfigApplied(browserapi.LevelInfo, pkgID, result)
 	}
 
 	if plan.prompt {

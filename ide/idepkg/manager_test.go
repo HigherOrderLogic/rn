@@ -3834,3 +3834,150 @@ func TestConfigMergeIntegration(t *testing.T) {
 		assert.Equal(t, 0, promptCount, "unchanged version-dependent value must not re-prompt")
 	})
 }
+
+func TestAfterConfigMergeHook(t *testing.T) {
+	t.Parallel()
+
+	t.Run("auto-apply invokes hook after config written", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "vpkg", Version: "1"}})
+		m, n, _, _ := newTestManager(t, pkgs, versions)
+		require.NoError(t, os.WriteFile(m.configPath, []byte("existing: true\n"), 0o644))
+
+		var events []ConfigMergeEvent
+		var configOnDisk string
+		m.afterConfigMerge = func(e ConfigMergeEvent) (ConfigMergeResult, error) {
+			events = append(events, e)
+			data, _ := os.ReadFile(m.configPath)
+			configOnDisk = string(data)
+			return ConfigMergeResult{LiveApplied: true}, nil
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"gui:\n  env:\n    FOO: bar\n"), 0o644))
+
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+		n.RequireNoErrorNotification()
+
+		require.Len(t, events, 1)
+		assert.Equal(t, "vpkg", events[0].PkgID)
+		assert.Equal(t, release.Version("1"), events[0].PkgVersion)
+		assert.True(t, events[0].TouchesPath("gui", "env"))
+		assert.Contains(t, configOnDisk, "FOO",
+			"hook must run after the merged config is written to disk")
+	})
+
+	t.Run("live-applied result yields env-oriented notification", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "vpkg", Version: "1"}})
+		m, n, _, _ := newTestManager(t, pkgs, versions)
+		require.NoError(t, os.WriteFile(m.configPath, []byte("existing: true\n"), 0o644))
+		m.afterConfigMerge = func(ConfigMergeEvent) (ConfigMergeResult, error) {
+			return ConfigMergeResult{LiveApplied: true}, nil
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"gui:\n  env:\n    FOO: bar\n"), 0o644))
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+
+		require.True(t, hasNotificationContaining(n, "reload the workspace"))
+		assert.False(t, hasNotificationContaining(n, "Restart the program"))
+	})
+
+	t.Run("non-live result keeps restart notification", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "vpkg", Version: "1"}})
+		m, n, _, _ := newTestManager(t, pkgs, versions)
+		require.NoError(t, os.WriteFile(m.configPath, []byte("existing: true\n"), 0o644))
+		m.afterConfigMerge = func(ConfigMergeEvent) (ConfigMergeResult, error) {
+			return ConfigMergeResult{}, nil
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"settings:\n  theme: dark\n"), 0o644))
+		require.NoError(t, m.processConfig("vpkg", release.Version("1"), pkgConfig))
+
+		require.True(t, hasNotificationContaining(n, "Restart the program"))
+	})
+
+	t.Run("hook error propagates through auto-apply", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{{Package: "vpkg", Version: "1"}})
+		m, _, _, _ := newTestManager(t, pkgs, versions)
+		require.NoError(t, os.WriteFile(m.configPath, []byte("existing: true\n"), 0o644))
+		m.afterConfigMerge = func(ConfigMergeEvent) (ConfigMergeResult, error) {
+			return ConfigMergeResult{}, errors.New("boom")
+		}
+
+		pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, os.WriteFile(pkgConfig, []byte(
+			"gui:\n  env:\n    FOO: bar\n"), 0o644))
+		err := m.processConfig("vpkg", release.Version("1"), pkgConfig)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "boom")
+	})
+
+	t.Run("prompt allow invokes hook, deny does not", func(t *testing.T) {
+		t.Parallel()
+		pkgs := idepkgtest.MakePackages()
+		versions := idepkgtest.MakeBundles([]release.Bundle{
+			{Package: "vpkg", Version: "1"},
+			{Package: "vpkg", Version: "2"},
+		})
+
+		run := func(t *testing.T, deny bool) int {
+			m, n, _, datadir := newTestManager(t, pkgs, versions)
+			v1GOROOT := filepath.Join(datadir, "pkg", "vpkg", "1", "go")
+			require.NoError(t, os.WriteFile(m.configPath, []byte(
+				"env:\n  GOROOT: "+v1GOROOT+"\n"), 0o644))
+
+			var calls int
+			m.afterConfigMerge = func(ConfigMergeEvent) (ConfigMergeResult, error) {
+				calls++
+				return ConfigMergeResult{}, nil
+			}
+			m.wm = &mockWindowManager{
+				floatingFn: func(h browserapi.Floating, _ browserapi.FloatingConfig) (browserapi.Window, error) {
+					h.Resize(70, 20)
+					if deny {
+						h.Handle(term.Event{Type: term.EventKey, Key: term.KeyArrowRight})
+					}
+					h.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+					return &mockWindow{}, nil
+				},
+			}
+
+			pkgConfig := filepath.Join(t.TempDir(), "config.yaml")
+			require.NoError(t, os.WriteFile(pkgConfig, []byte(
+				"env:\n  GOROOT: $RUNE_DATADIR/pkg/$RUNE_PKG_ID/$RUNE_PKG_VERSION/go\n"), 0o644))
+			require.NoError(t, m.processConfig("vpkg", release.Version("2"), pkgConfig))
+			n.RequireNoErrorNotification()
+			return calls
+		}
+
+		t.Run("allow", func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, 1, run(t, false))
+		})
+		t.Run("deny", func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, 0, run(t, true))
+		})
+	})
+}
+
+func hasNotificationContaining(n *idepkgtest.Notifications, substr string) bool {
+	for _, noti := range n.Active() {
+		if strings.Contains(noti.Msg, substr) {
+			return true
+		}
+	}
+	return false
+}

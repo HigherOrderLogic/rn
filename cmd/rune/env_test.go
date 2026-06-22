@@ -29,6 +29,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/api/config"
 )
 
 func fakeLoginShell(t *testing.T, lines ...string) string {
@@ -164,4 +168,71 @@ func TestStartLoginPathResolvePropagatesError(t *testing.T) {
 	if err := <-startLoginShellPATHResolve(dataDir); err == nil {
 		t.Fatal("expected resolution error, got nil")
 	}
+}
+
+func TestApplyGUIEnvVarsSemantics(t *testing.T) {
+	resetGUIEnvBaseline()
+	t.Setenv("RUNE_TEST_BASE", "base-value")
+
+	env := config.JSONFromMap(map[string]any{
+		"STRING_EXPAND": "$RUNE_TEST_BASE/sub",
+		"NUMBER":        42,
+		"BOOLEAN":       true,
+	})
+	require.NoError(t, applyGUIEnvVars(env))
+
+	assert.Equal(t, "base-value/sub", os.Getenv("STRING_EXPAND"),
+		"string values expand via os.Expand")
+	assert.Equal(t, "42", os.Getenv("NUMBER"),
+		"non-string values use fmt.Sprintf(%%v)")
+	assert.Equal(t, "true", os.Getenv("BOOLEAN"))
+}
+
+func TestApplyGUIEnvVarsUpdatesLiveEnv(t *testing.T) {
+	resetGUIEnvBaseline()
+	require.Empty(t, os.Getenv("RUNE_LIVE_APPLY_TEST"))
+
+	env := config.JSONFromMap(map[string]any{"RUNE_LIVE_APPLY_TEST": "set"})
+	require.NoError(t, applyGUIEnvVars(env))
+	assert.Equal(t, "set", os.Getenv("RUNE_LIVE_APPLY_TEST"))
+	t.Cleanup(func() { _ = os.Unsetenv("RUNE_LIVE_APPLY_TEST") })
+}
+
+// TestApplyGUIEnvVarsNoPATHDuplication asserts that applying a self-referential
+// PATH value twice does not accumulate duplicate entries, because both applies
+// expand against the stable pre-gui.env baseline.
+func TestApplyGUIEnvVarsNoPATHDuplication(t *testing.T) {
+	resetGUIEnvBaseline()
+	t.Setenv("PATH", "/usr/bin:/bin")
+
+	env := config.JSONFromMap(map[string]any{"PATH": "/extra/bin:$PATH"})
+	require.NoError(t, applyGUIEnvVars(env))
+	first := os.Getenv("PATH")
+	assert.Equal(t, "/extra/bin:/usr/bin:/bin", first)
+
+	require.NoError(t, applyGUIEnvVars(env))
+	second := os.Getenv("PATH")
+	assert.Equal(t, first, second,
+		"repeated apply must not duplicate PATH entries")
+	assert.Equal(t, 1, strings.Count(second, "/extra/bin"))
+}
+
+func TestApplyGUIEnvVarsWithLookup(t *testing.T) {
+	lookup := func(key string) string {
+		if key == "CUSTOM" {
+			return "custom-value"
+		}
+		return ""
+	}
+	env := config.JSONFromMap(map[string]any{"OUT": "$CUSTOM/x"})
+	require.NoError(t, applyGUIEnvVarsWithLookup(env, lookup))
+	assert.Equal(t, "custom-value/x", os.Getenv("OUT"))
+	t.Cleanup(func() { _ = os.Unsetenv("OUT") })
+}
+
+func resetGUIEnvBaseline() {
+	guiEnvBaselineMu.Lock()
+	guiEnvBaseline = nil
+	guiEnvBaselineDone = false
+	guiEnvBaselineMu.Unlock()
 }

@@ -689,9 +689,10 @@ func runGUI(
 				"could not resolve your login shell PATH; tools on it "+
 					"(e.g. homebrew, mise) may be unavailable: %v", err)
 		}
-		env.Iterate(func(k string, value any) {
-			os.Setenv(k, evalVar(value))
-		})
+		if err := applyGUIEnvVars(env); err != nil {
+			_, _ = browser.Notify(browserapi.LevelError,
+				"could not apply gui.env: %v", err)
+		}
 	})
 
 	defaultColorTheme := getGUIDefaultColorTheme(browser, cfg)

@@ -501,6 +501,7 @@ func (i *IDE) init(
 	// through workspaceManagerHandler.init; the tutorial runner
 	// subscribes after it has been built below.
 	commandObserver := newCommandObserverRegistry()
+	i.workspaceHandler.packageConfigMergeHook = op.packageConfigMergeHook
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
 		i.ideConfig.notificationsConfig(), i.ideConfig, i.storage, dataDir,
 		i.publishEvent,

@@ -77,6 +77,7 @@ func (m *pkgManager) init(
 	parser syntaxapi.Parser,
 	editorMode string,
 	autoInstall bool,
+	afterConfigMerge func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error),
 ) {
 	storage := storageapi.WithPartition(rootStorage, "idepkg")
 	m.pkg = idepkg.NewManager(n, rm, storage, scheme, dataDir,
@@ -91,6 +92,7 @@ func (m *pkgManager) init(
 			}
 			return cfg.cfg
 		}),
+		idepkg.WithAfterConfigMerge(afterConfigMerge),
 	)
 	m.uc = idepkg.NewUpdateChecker(m.pkg)
 	m.scheduleNextTick = scheduleNextTick

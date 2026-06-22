@@ -47,6 +47,7 @@ import (
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/ide/ideupgrade"
 	"unstable.build/go-tui/term/gui"
@@ -203,6 +204,7 @@ func (b *bootstrapHandler) buildConfiguredIDE(
 		ide.WithZdotDir(b.zdotDir),
 		ide.WithScheme(docsScheme, newDocsSchemeFunc(b.configPath)),
 		ide.WithTabsClickCallback(b.handleTabsClick),
+		ide.WithPackageConfigMergeHook(b.guiEnvLiveApplyHook),
 		ide.WithDispatchOnPreview(cmdSetTheme,
 			func(cmd string, args ...string) (component.Responsive, func(), bool) {
 				if cmd != cmdSetTheme || b.g == nil {
@@ -307,6 +309,34 @@ func (b *bootstrapHandler) config() config.Config {
 		return b.realIDE.Config()
 	}
 	return b.preIDE.Config()
+}
+
+// guiEnvLiveApplyHook live-applies package-installed gui.env to the local
+// process environment after a package config merge. It is invoked by the
+// package manager for both the auto-apply and prompt-Allow paths. When the
+// applied diff does not touch gui.env it reports no live application so the
+// package manager keeps its restart-oriented notification. Otherwise it
+// re-reads the resolved gui.env block from the current config and applies it
+// so the live process environment matches the persisted config; new local
+// child processes inherit the updated environment.
+func (b *bootstrapHandler) guiEnvLiveApplyHook(
+	event idepkg.ConfigMergeEvent,
+) (idepkg.ConfigMergeResult, error) {
+	if !event.TouchesPath("gui", "env") {
+		return idepkg.ConfigMergeResult{}, nil
+	}
+	guiCfg, ok, err := getGUIConfig(b.config())
+	if err != nil {
+		return idepkg.ConfigMergeResult{}, fmt.Errorf("load gui config: %w", err)
+	}
+	if !ok {
+		return idepkg.ConfigMergeResult{}, nil
+	}
+	env := getGUIEnvVars(b.browser(), guiCfg)
+	if err := applyGUIEnvVars(env); err != nil {
+		return idepkg.ConfigMergeResult{}, fmt.Errorf("apply gui.env: %w", err)
+	}
+	return idepkg.ConfigMergeResult{LiveApplied: true}, nil
 }
 
 func (b *bootstrapHandler) setupConfiguredIDE(

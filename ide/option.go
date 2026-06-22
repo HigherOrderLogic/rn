@@ -47,6 +47,7 @@ import (
 	"unstable.build/go-tui/component/shader"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/ideplan"
 	"unstable.build/go-tui/text"
 )
@@ -101,6 +102,18 @@ func WithPublishEvent(p EventPublisher) Option {
 func WithReleaseManager(m release.Manager) Option {
 	return func(opts *options) {
 		opts.releaseManager = m
+	}
+}
+
+// WithPackageConfigMergeHook installs a hook invoked after a package config
+// merge is written to the user config file. The hook inspects the applied
+// diff and may live-apply changes to the running process, reporting back via
+// idepkg.ConfigMergeResult. It is wired into the package manager.
+func WithPackageConfigMergeHook(
+	hook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error),
+) Option {
+	return func(opts *options) {
+		opts.packageConfigMergeHook = hook
 	}
 }
 
@@ -439,6 +452,8 @@ type options struct {
 	zdotDir                string
 	starlarkTutorials      map[string]string
 	startingTutorial       string
+
+	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
 }
 
 func defaultOptions() options {

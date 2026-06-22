@@ -241,6 +241,43 @@ func TestStartCommand(t *testing.T) {
 
 	})
 
+	t.Run("local command inherits live process env", func(t *testing.T) {
+		// Documents why os.Setenv is sufficient for future local launches:
+		// StartCommand seeds the child env from the live process environment
+		// at launch time, so a gui.env live-apply via os.Setenv is observed
+		// by subsequently launched local commands.
+		t.Setenv("RUNE_FILE_SCHEME_ENV_TEST", "inherited")
+
+		tmpDir, err := os.MkdirTemp("", "")
+		require.NoError(t, err)
+
+		uri, err := workspaceapi.ParseURI("file://" + tmpDir)
+		require.NoError(t, err)
+
+		s, err := newTestFileScheme(uri)
+		require.NoError(t, err)
+
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		ch := make(chan error)
+		ctx := context.Background()
+
+		cmd := workspaceapi.Cmd{
+			Path:    "/bin/sh",
+			Args:    []string{"-c", "printf %s \"$RUNE_FILE_SCHEME_ENV_TEST\""},
+			Watcher: workspaceapi.ChanProcessWatcher(ch),
+			Stdout:  &stdout,
+			Stderr:  &stderr,
+		}
+
+		_, err = s.StartCommand(ctx, cmd)
+		require.NoError(t, err)
+
+		require.NoError(t, <-ch)
+		assert.Equal(t, "", stderr.String())
+		assert.Equal(t, "inherited", stdout.String())
+	})
+
 	t.Run("omitting Cmd.Dir makes command run on workspace dir", func(t *testing.T) {
 		tmpDir, err := os.MkdirTemp("", "")
 		require.NoError(t, err)

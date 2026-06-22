@@ -73,6 +73,7 @@ import (
 	"unstable.build/go-tui/ide/idelsp/lspcmd"
 	"unstable.build/go-tui/ide/idemacro"
 	"unstable.build/go-tui/ide/idenotice"
+	"unstable.build/go-tui/ide/idepkg"
 	"unstable.build/go-tui/ide/ideshell/debugshell"
 	"unstable.build/go-tui/ide/ideshell/workspaceshell"
 	"unstable.build/go-tui/ide/llmshell"
@@ -149,6 +150,8 @@ type workspaceManagerHandler struct {
 	frame                   bool
 	streamingOpen           bool
 	reloadConfig            func() (ideConfig, error)
+
+	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
 
 	commandObserver *commandObserverRegistry
 
@@ -2798,7 +2801,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	h.pkgmanager.init(notifications, releaseManager, wm,
 		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser,
-		editorMode, autoInstall)
+		editorMode, autoInstall, h.packageConfigMergeHook)
 }
 
 func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {

@@ -137,6 +137,41 @@ func findMappingKey(mapping *yaml.Node, key string) int {
 	return -1
 }
 
+// configDiffMappingAtPath descends an applied config diff document following
+// the given key path and returns the value node at that path, or nil if the
+// path is absent. doc may be a DocumentNode (its first content child is used)
+// or a MappingNode. Each intermediate node along the path must be a mapping;
+// the final value may be of any kind.
+func configDiffMappingAtPath(doc *yaml.Node, path ...string) *yaml.Node {
+	if doc == nil || len(path) == 0 {
+		return nil
+	}
+	node := doc
+	if node.Kind == yaml.DocumentNode {
+		if len(node.Content) == 0 {
+			return nil
+		}
+		node = node.Content[0]
+	}
+	for _, key := range path {
+		if node.Kind != yaml.MappingNode {
+			return nil
+		}
+		idx := findMappingKey(node, key)
+		if idx < 0 {
+			return nil
+		}
+		node = node.Content[idx+1]
+	}
+	return node
+}
+
+// configDiffTouchesPath reports whether an applied config diff includes the
+// given nested key path.
+func configDiffTouchesPath(doc *yaml.Node, path ...string) bool {
+	return configDiffMappingAtPath(doc, path...) != nil
+}
+
 // expandNodeValues walks all scalar nodes in the tree and applies
 // os.Expand with the given mapping function. Only string-tagged scalars
 // are expanded (int, float, bool, null are skipped).
