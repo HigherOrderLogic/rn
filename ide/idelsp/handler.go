@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net/url"
@@ -47,6 +48,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/component"
 	"github.com/unstablebuild/rune-go-sdk/handler"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cell"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/handler/html"
 )
@@ -1049,25 +1051,6 @@ func (h *CallbackHandler) applyDocumentChanges(
 	return nil
 }
 
-// editorForURI returns the editor handler for the given URI.
-// If the editor is not available, it opens the resource via
-// the resource opener and retries.
-func (h *CallbackHandler) editorForURI(
-	uri workspaceapi.URI,
-) (textapi.Handler, error) {
-	eh, err := h.editor.Editor(uri)
-	if err == nil {
-		return eh, nil
-	}
-	if h.resourceOpener == nil {
-		return nil, err
-	}
-	if _, openErr := h.resourceOpener.Open(uri); openErr != nil {
-		return nil, err
-	}
-	return h.editor.Editor(uri)
-}
-
 func (h *CallbackHandler) applyTextDocumentEdit(
 	ctx context.Context,
 	edit *semanticapi.TextDocumentEdit,
@@ -1076,11 +1059,7 @@ func (h *CallbackHandler) applyTextDocumentEdit(
 	if err != nil {
 		return fmt.Errorf("parse URI: %w", err)
 	}
-	editorHandler, err := h.editorForURI(uri)
-	if err != nil {
-		return fmt.Errorf("editor for %s: %w", uri.Name(), err)
-	}
-	return applyTextEdits(ctx, h.editor, editorHandler, edit.Edits)
+	return h.applyEditsToURI(ctx, uri, edit.Edits)
 }
 
 func applyTextEdits(
@@ -1088,6 +1067,24 @@ func applyTextEdits(
 	editor Editor,
 	editorHandler textapi.Handler,
 	edits []semanticapi.TextEdit,
+) error {
+	cellEditor := editor.CellEditor(editorHandler)
+	return applyEditsWith(ctx, edits,
+		func(ctx context.Context, start, end term.Coordinates, str string) error {
+			_, _, _, err := cellEditor.Edit(ctx, start, end, str)
+			return err
+		})
+}
+
+// applyEditsWith applies LSP text edits through edit, sorting them
+// bottom-to-top so earlier offsets stay valid as later ones are
+// applied. Per the LSP spec, inserts sharing a position keep array
+// order; applying bottom-to-top reverses same-position groups so the
+// first-in-array insert ends up first in the resulting text.
+func applyEditsWith(
+	ctx context.Context,
+	edits []semanticapi.TextEdit,
+	edit func(ctx context.Context, start, end term.Coordinates, str string) error,
 ) error {
 	sorted := make([]semanticapi.TextEdit, len(edits))
 	copy(sorted, edits)
@@ -1099,25 +1096,18 @@ func applyTextEdits(
 		}
 		return a.Character > b.Character
 	})
-	// Per the LSP spec, when multiple inserts share the same
-	// position, the array order defines the resulting text order.
-	// Since we apply bottom-to-top, same-position inserts must be
-	// reversed so the first-in-array insert ends up first in text.
 	reverseSameStartEdits(sorted)
 
-	cellEditor := editor.CellEditor(editorHandler)
-	for _, edit := range sorted {
+	for _, e := range sorted {
 		start := term.Coordinates{
-			X: int(edit.Range.Start.Character),
-			Y: int(edit.Range.Start.Line),
+			X: int(e.Range.Start.Character),
+			Y: int(e.Range.Start.Line),
 		}
 		end := term.Coordinates{
-			X: int(edit.Range.End.Character),
-			Y: int(edit.Range.End.Line),
+			X: int(e.Range.End.Character),
+			Y: int(e.Range.End.Line),
 		}
-		if _, _, _, err := cellEditor.Edit(
-			ctx, start, end, edit.NewText,
-		); err != nil {
+		if err := edit(ctx, start, end, e.NewText); err != nil {
 			return fmt.Errorf("cell edit: %w", err)
 		}
 	}
@@ -1168,6 +1158,65 @@ func (h *CallbackHandler) applyCreateFile(
 	f, err := h.fileSystem.OpenFile(path, flag, 0644)
 	if err != nil {
 		return fmt.Errorf("create file %s: %w", path, err)
+	}
+	return f.Close()
+}
+
+// applyEditsToURI applies text edits from a workspace/applyEdit to uri.
+//
+// When the file is open in the editor, the edits go through the cell
+// editor so the editor owns persistence and stays the single source of
+// truth. When the file is not open (the common go.mod / go.sum vuln-fix
+// case), the edits are applied directly on disk via the file system:
+// routing them through a force-opened buffer would leave a dirty buffer
+// whose contents differ from disk, and any later write-through would
+// race the file-system watcher into an unsaved-changes prompt.
+func (h *CallbackHandler) applyEditsToURI(
+	ctx context.Context,
+	uri workspaceapi.URI,
+	edits []semanticapi.TextEdit,
+) error {
+	if editorHandler, err := h.editor.Editor(uri); err == nil {
+		return applyTextEdits(ctx, h.editor, editorHandler, edits)
+	}
+	return h.applyEditsOnDisk(ctx, uri, edits)
+}
+
+func (h *CallbackHandler) applyEditsOnDisk(
+	ctx context.Context, uri workspaceapi.URI, edits []semanticapi.TextEdit,
+) error {
+	path := uri.Path()
+	rf, err := h.fileSystem.Open(path)
+	if err != nil {
+		return fmt.Errorf("open %s for read: %w", path, err)
+	}
+	data, err := io.ReadAll(rf)
+	_ = rf.Close()
+	if err != nil {
+		return fmt.Errorf("read %s: %w", path, err)
+	}
+
+	buf := cell.NewBuffer()
+	buf.Replace(string(data))
+	bufEditor := buf.Editor()
+	if err := applyEditsWith(ctx, edits,
+		func(ctx context.Context, start, end term.Coordinates, str string) error {
+			bufEditor.Edit(ctx, start, end, str)
+			return nil
+		}); err != nil {
+		return err
+	}
+	updated := cell.NewView(buf.RawCells()).String()
+
+	f, err := h.fileSystem.OpenFile(
+		path, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0644,
+	)
+	if err != nil {
+		return fmt.Errorf("open %s for write: %w", path, err)
+	}
+	if _, err := f.Write([]byte(updated)); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write %s: %w", path, err)
 	}
 	return f.Close()
 }
@@ -1223,11 +1272,7 @@ func (h *CallbackHandler) applyChanges(
 		if err != nil {
 			return fmt.Errorf("parse URI: %w", err)
 		}
-		editorHandler, err := h.editorForURI(uri)
-		if err != nil {
-			return fmt.Errorf("editor for %s: %w", uri.Name(), err)
-		}
-		if err := applyTextEdits(ctx, h.editor, editorHandler, edits); err != nil {
+		if err := h.applyEditsToURI(ctx, uri, edits); err != nil {
 			return err
 		}
 	}

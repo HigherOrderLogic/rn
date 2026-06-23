@@ -1534,118 +1534,171 @@ func TestCallbackHandler_ApplyEdit(t *testing.T) {
 	}
 }
 
-func TestCallbackHandler_ApplyEdit_OpensUnopenedFile(
-	t *testing.T,
-) {
+// TestCallbackHandler_ApplyEdit_OpenFileUsesCellEditor verifies that
+// when the target file is already open in the editor, applyEdit routes
+// the edits through the cell editor and does NOT write to disk (the
+// editor owns persistence) nor open the resource.
+func TestCallbackHandler_ApplyEdit_OpenFileUsesCellEditor(t *testing.T) {
 	t.Parallel()
-	uri, err := workspaceapi.ParseURI("file:///tmp/test.go")
+	tmpDir, err := os.MkdirTemp("", "open-*")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+	path := filepath.Join(tmpDir, "main.go")
+	uriStr := "file://" + path
+	initial := "package main\n\nfunc main() {}\n"
+	require.NoError(t, os.WriteFile(path, []byte(initial), 0644))
+
+	uri, err := workspaceapi.ParseURI(uriStr)
 	require.NoError(t, err)
 
-	handler := &mockEditorHandler{uri: uri}
-	ed := &mockEditor{
-		handler:   handler,
-		editorErr: fmt.Errorf("not open"),
-	}
-	opener := &mockResourceOpener{
-		openFn: func(_ workspaceapi.URI) {
-			ed.mu.Lock()
-			ed.editorErr = nil
-			ed.mu.Unlock()
-		},
-	}
-	h := NewCallbackHandler(
-		nil, nil, opener, ed,
-		newTestScheme(),
-		"",
-		CallbackHandlerConfig{},
-	)
-
-	t.Run("document changes retries after open", func(t *testing.T) {
-		result, err := h.ApplyEdit(t.Context(),
-			semanticapi.ApplyWorkspaceEditParams{
+	cases := []struct {
+		name   string
+		params semanticapi.ApplyWorkspaceEditParams
+		want   mockCellEdit
+	}{
+		{
+			name: "document changes",
+			params: semanticapi.ApplyWorkspaceEditParams{
 				Edit: semanticapi.WorkspaceEdit{
-					DocumentChanges: []semanticapi.DocumentChange{
-						{
-							TextDocumentEdit: &semanticapi.TextDocumentEdit{
-								TextDocument: semanticapi.VersionedTextDocumentIdentifier{
-									URI: "file:///tmp/test.go",
+					DocumentChanges: []semanticapi.DocumentChange{{
+						TextDocumentEdit: &semanticapi.TextDocumentEdit{
+							TextDocument: semanticapi.VersionedTextDocumentIdentifier{URI: uriStr},
+							Edits: []semanticapi.TextEdit{{
+								Range: semanticapi.Range{
+									Start: semanticapi.Position{Line: 0, Character: 0},
+									End:   semanticapi.Position{Line: 0, Character: 7},
 								},
-								Edits: []semanticapi.TextEdit{
-									{
-										Range: semanticapi.Range{
-											Start: semanticapi.Position{
-												Line: 0, Character: 0,
-											},
-											End: semanticapi.Position{
-												Line: 0, Character: 3,
-											},
-										},
-										NewText: "fixed",
-									},
-								},
-							},
+								NewText: "pkg",
+							}},
 						},
-					},
+					}},
 				},
 			},
-		)
-		require.NoError(t, err)
-		assert.True(t, result.Applied)
-		assert.Equal(t, []mockCellEdit{
-			{
+			want: mockCellEdit{
 				start: term.Coordinates{X: 0, Y: 0},
-				end:   term.Coordinates{X: 3, Y: 0},
-				text:  "fixed",
+				end:   term.Coordinates{X: 7, Y: 0},
+				text:  "pkg",
 			},
-		}, ed.cellEdits)
-		opener.mu.Lock()
-		assert.Len(t, opener.opened, 1)
-		opener.mu.Unlock()
-	})
-
-	t.Run("changes retries after open", func(t *testing.T) {
-		ed.mu.Lock()
-		ed.editorErr = fmt.Errorf("not open")
-		ed.cellEdits = nil
-		ed.mu.Unlock()
-		opener.mu.Lock()
-		opener.opened = nil
-		opener.mu.Unlock()
-
-		result, err := h.ApplyEdit(t.Context(),
-			semanticapi.ApplyWorkspaceEditParams{
+		},
+		{
+			name: "changes map",
+			params: semanticapi.ApplyWorkspaceEditParams{
 				Edit: semanticapi.WorkspaceEdit{
 					Changes: map[string][]semanticapi.TextEdit{
-						"file:///tmp/test.go": {
-							{
-								Range: semanticapi.Range{
-									Start: semanticapi.Position{
-										Line: 2, Character: 0,
-									},
-									End: semanticapi.Position{
-										Line: 2, Character: 4,
-									},
-								},
-								NewText: "done",
+						uriStr: {{
+							Range: semanticapi.Range{
+								Start: semanticapi.Position{Line: 2, Character: 0},
+								End:   semanticapi.Position{Line: 2, Character: 4},
 							},
-						},
+							NewText: "type",
+						}},
 					},
 				},
 			},
-		)
-		require.NoError(t, err)
-		assert.True(t, result.Applied)
-		assert.Equal(t, []mockCellEdit{
-			{
+			want: mockCellEdit{
 				start: term.Coordinates{X: 0, Y: 2},
 				end:   term.Coordinates{X: 4, Y: 2},
-				text:  "done",
+				text:  "type",
 			},
-		}, ed.cellEdits)
-		opener.mu.Lock()
-		assert.Len(t, opener.opened, 1)
-		opener.mu.Unlock()
-	})
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NoError(t, os.WriteFile(path, []byte(initial), 0644))
+			ed := &mockEditor{handler: &mockEditorHandler{uri: uri}}
+			opener := &mockResourceOpener{}
+			h := NewCallbackHandler(
+				nil, nil, opener, ed,
+				newTestScheme(), "",
+				CallbackHandlerConfig{},
+			)
+			result, err := h.ApplyEdit(t.Context(), tc.params)
+			require.NoError(t, err)
+			assert.True(t, result.Applied)
+
+			assert.Equal(t, []mockCellEdit{tc.want}, ed.cellEdits)
+
+			opener.mu.Lock()
+			assert.Empty(t, opener.opened, "open file must not be re-opened")
+			opener.mu.Unlock()
+
+			got, err := os.ReadFile(path)
+			require.NoError(t, err)
+			assert.Equal(t, initial, string(got),
+				"open file must not be written behind the editor buffer")
+		})
+	}
+}
+
+// TestCallbackHandler_ApplyEdit_ClosedFileWritesDisk verifies that when
+// the target file is NOT open, applyEdit applies the edits directly on
+// disk via the file system without opening the resource or touching a
+// cell editor — avoiding a dirty buffer racing the FS watcher.
+func TestCallbackHandler_ApplyEdit_ClosedFileWritesDisk(t *testing.T) {
+	t.Parallel()
+	goModURITmpl := "file://%s"
+	initial := "module example.com/x\n\ngo 1.21\n\nrequire foo v1.0.0\n"
+	want := "module example.com/x\n\ngo 1.21\n\nrequire foo v1.2.3\n"
+
+	upgradeEdit := semanticapi.TextEdit{
+		Range: semanticapi.Range{
+			Start: semanticapi.Position{Line: 4, Character: 12},
+			End:   semanticapi.Position{Line: 4, Character: 18},
+		},
+		NewText: "v1.2.3",
+	}
+
+	build := func(uriStr string) []semanticapi.ApplyWorkspaceEditParams {
+		return []semanticapi.ApplyWorkspaceEditParams{
+			{Edit: semanticapi.WorkspaceEdit{
+				DocumentChanges: []semanticapi.DocumentChange{{
+					TextDocumentEdit: &semanticapi.TextDocumentEdit{
+						TextDocument: semanticapi.VersionedTextDocumentIdentifier{URI: uriStr},
+						Edits:        []semanticapi.TextEdit{upgradeEdit},
+					},
+				}},
+			}},
+			{Edit: semanticapi.WorkspaceEdit{
+				Changes: map[string][]semanticapi.TextEdit{uriStr: {upgradeEdit}},
+			}},
+		}
+	}
+	names := []string{"document changes", "changes map"}
+	for i, name := range names {
+		t.Run(name, func(t *testing.T) {
+			tmpDir, err := os.MkdirTemp("", "closed-*")
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+			goModPath := filepath.Join(tmpDir, "go.mod")
+			require.NoError(t, os.WriteFile(goModPath, []byte(initial), 0644))
+			uriStr := fmt.Sprintf(goModURITmpl, goModPath)
+
+			ed := &mockEditor{
+				handler:   &mockEditorHandler{},
+				editorErr: fmt.Errorf("not open"),
+			}
+			opener := &mockResourceOpener{}
+			h := NewCallbackHandler(
+				nil, nil, opener, ed,
+				newTestScheme(), "",
+				CallbackHandlerConfig{},
+			)
+			result, err := h.ApplyEdit(t.Context(), build(uriStr)[i])
+			require.NoError(t, err)
+			assert.True(t, result.Applied)
+
+			assert.Empty(t, ed.cellEdits,
+				"closed file must not go through the cell editor")
+			opener.mu.Lock()
+			assert.Empty(t, opener.opened,
+				"closed file must not be force-opened")
+			opener.mu.Unlock()
+
+			got, err := os.ReadFile(goModPath)
+			require.NoError(t, err)
+			assert.Equal(t, want, string(got))
+		})
+	}
 }
 
 func TestCallbackHandler_ApplyEdit_CreateFile(

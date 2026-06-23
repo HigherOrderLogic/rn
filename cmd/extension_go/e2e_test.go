@@ -25,6 +25,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -2198,4 +2200,150 @@ func TestAbsDiff(t *testing.T) {
 	assert.Equal(t, uint32(5), absDiff(10, 5))
 	assert.Equal(t, uint32(5), absDiff(5, 10))
 	assert.Equal(t, uint32(0), absDiff(7, 7))
+}
+
+// closedFileEditor is an idelsp.Editor that reports every URI as not
+// open, forcing the CallbackHandler down its on-disk apply path. This
+// matches the real go.mod vuln-fix case where the file is not an open
+// tab, so the edit must be written straight to the file system.
+type closedFileEditor struct{}
+
+func (closedFileEditor) Editor(
+	workspaceapi.URI,
+) (textapi.Handler, error) {
+	return nil, errors.New("not open")
+}
+
+func (closedFileEditor) SetLocationList(
+	textapi.Handler, textapi.LocationPriority, string, textapi.LocationList,
+) error {
+	return nil
+}
+
+func (closedFileEditor) SetCursor(
+	textapi.Handler, term.Coordinates,
+) error {
+	return nil
+}
+
+func (closedFileEditor) CellEditor(
+	textapi.Handler,
+) textapi.CellEditor {
+	return nil
+}
+
+// TestE2EApplyEditPersistsGoMod verifies that a gopls-style
+// workspace/applyEdit upgrading a go.mod require line is persisted to
+// disk by the production CallbackHandler, and that the resulting go.mod
+// is consistent (go.sum reconciles via the go command). This exercises
+// the apply-edit persistence path independently of the upstream
+// check_upgrades panic that blocks TestE2E/UpgradeDependency.
+func TestE2EApplyEditPersistsGoMod(t *testing.T) {
+	t.Parallel()
+	goplsBin := findGopls(t)
+
+	const oldVer = "v0.3.7"
+	const newVer = "v0.3.8"
+	goModContent := "module example.com/test\n\ngo 1.22\n\n" +
+		"require golang.org/x/text " + oldVer + "\n"
+	mainContent := "package main\n\n" +
+		"import _ \"golang.org/x/text/language\"\n\nfunc main() {}\n"
+
+	dir := setupWorkspace(t, "example.com/test", []testFile{
+		{name: "go.mod", content: goModContent},
+		{name: "main.go", content: mainContent},
+	})
+
+	tidy := exec.Command("go", "mod", "tidy")
+	tidy.Dir = dir
+	out, err := tidy.CombinedOutput()
+	require.NoError(t, err, "go mod tidy: %s", out)
+
+	env := initGoplsFromDir(t, goplsBin, dir, []testFile{
+		{name: "main.go", content: mainContent},
+	})
+
+	goModPath := filepath.Join(dir, "go.mod")
+	goModURI := "file://" + goModPath
+	parsedURI := parseTestURI(t, goModURI)
+
+	onDisk, err := os.ReadFile(goModPath)
+	require.NoError(t, err)
+
+	cbh := idelsp.NewCallbackHandler(
+		nil, nil, nil, closedFileEditor{},
+		newTestScheme(),
+		"file://"+dir,
+		idelsp.CallbackHandlerConfig{},
+	)
+
+	// Locate the require line and version span to upgrade.
+	lines := strings.Split(string(onDisk), "\n")
+	reqLine, col := -1, -1
+	for i, l := range lines {
+		if idx := strings.Index(l, oldVer); strings.HasPrefix(l, "require golang.org/x/text") && idx >= 0 {
+			reqLine, col = i, idx
+			break
+		}
+	}
+	require.GreaterOrEqual(t, reqLine, 0, "require line not found in go.mod:\n%s", onDisk)
+
+	edit := semanticapi.TextEdit{
+		Range: semanticapi.Range{
+			Start: semanticapi.Position{
+				Line: uint32(reqLine), Character: uint32(col),
+			},
+			End: semanticapi.Position{
+				Line: uint32(reqLine), Character: uint32(col + len(oldVer)),
+			},
+		},
+		NewText: newVer,
+	}
+	params := semanticapi.ApplyWorkspaceEditParams{
+		Edit: semanticapi.WorkspaceEdit{
+			DocumentChanges: []semanticapi.DocumentChange{
+				{
+					TextDocumentEdit: &semanticapi.TextDocumentEdit{
+						TextDocument: semanticapi.VersionedTextDocumentIdentifier{
+							URI: goModURI,
+						},
+						Edits: []semanticapi.TextEdit{edit},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := cbh.ApplyEdit(t.Context(), params)
+	require.NoError(t, err)
+	require.True(t, result.Applied)
+
+	persisted, err := os.ReadFile(goModPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(persisted), "golang.org/x/text "+newVer,
+		"go.mod on disk should reflect the upgraded version")
+	assert.NotContains(t, string(persisted), oldVer,
+		"old version must be gone from go.mod on disk")
+
+	// Notify the language server of the save, mirroring the real flow
+	// where persistence is followed by textDocument/didSave.
+	env.mgr.Handle(t.Context(), textapi.Event{
+		Type:    textapi.EventTypeFlush,
+		URI:     parsedURI,
+		Content: string(persisted),
+	})
+
+	// go.sum reconciliation is performed by the go command (run by
+	// gopls or the next build). With go.mod now persisted to disk, that
+	// reconciliation succeeds and records the upgraded version — which
+	// it could not do while the change lived only in the editor buffer.
+	reconcile := exec.Command("go", "mod", "tidy")
+	reconcile.Dir = dir
+	out, err = reconcile.CombinedOutput()
+	require.NoError(t, err, "go mod tidy after persisted upgrade: %s", out)
+
+	sum, err := os.ReadFile(filepath.Join(dir, "go.sum"))
+	require.NoError(t, err)
+	assert.Contains(t, string(sum), "golang.org/x/text "+newVer,
+		"go.sum should contain the upgraded version after reconciliation")
 }
