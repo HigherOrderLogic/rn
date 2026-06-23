@@ -34,7 +34,6 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Xuanwo/go-locale"
@@ -280,55 +279,12 @@ func windowsShell() (string, error) {
 	return consoleApp, nil
 }
 
-// guiEnvBaseline captures the process environment as it stood right before the
-// first startup application of gui.env, after login-shell PATH resolution.
-// Both startup and later live applications expand gui.env values against this
-// baseline so that variables referencing themselves (e.g. PATH: "$PATH:...")
-// do not accumulate duplicate entries when package config is processed
-// repeatedly during a session.
-var (
-	guiEnvBaselineMu   sync.Mutex
-	guiEnvBaseline     map[string]string
-	guiEnvBaselineDone bool
-)
-
-// captureGUIEnvBaseline snapshots the current process environment once. Later
-// calls are no-ops so the baseline reflects the pre-gui.env state.
-func captureGUIEnvBaseline() {
-	guiEnvBaselineMu.Lock()
-	defer guiEnvBaselineMu.Unlock()
-	if guiEnvBaselineDone {
-		return
-	}
-	guiEnvBaselineDone = true
-	guiEnvBaseline = make(map[string]string)
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok {
-			guiEnvBaseline[k] = v
-		}
-	}
-}
-
-// guiEnvBaselineLookup resolves a variable against the captured baseline,
-// falling back to the live environment for variables absent from it (e.g.
-// ones introduced by an earlier gui.env apply that a later value references).
-func guiEnvBaselineLookup(key string) string {
-	guiEnvBaselineMu.Lock()
-	v, ok := guiEnvBaseline[key]
-	guiEnvBaselineMu.Unlock()
-	if ok {
-		return v
-	}
-	return os.Getenv(key)
-}
-
 // applyGUIEnvVars applies the resolved gui.env config block to the local
 // process environment with os.Setenv, expanding values against a stable
 // baseline so repeated applications do not duplicate self-referential entries.
 // It captures the baseline on first use.
 func applyGUIEnvVars(env config.Config) error {
-	captureGUIEnvBaseline()
-	return applyGUIEnvVarsWithLookup(env, guiEnvBaselineLookup)
+	return applyGUIEnvVarsWithLookup(env, os.Getenv)
 }
 
 // applyGUIEnvVarsWithLookup applies env to the local process environment,

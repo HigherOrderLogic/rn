@@ -234,7 +234,6 @@ func TestStartLoginPathResolvePropagatesError(t *testing.T) {
 }
 
 func TestApplyGUIEnvVarsSemantics(t *testing.T) {
-	resetGUIEnvBaseline()
 	t.Setenv("RUNE_TEST_BASE", "base-value")
 
 	env := config.JSONFromMap(map[string]any{
@@ -252,32 +251,12 @@ func TestApplyGUIEnvVarsSemantics(t *testing.T) {
 }
 
 func TestApplyGUIEnvVarsUpdatesLiveEnv(t *testing.T) {
-	resetGUIEnvBaseline()
 	require.Empty(t, os.Getenv("RUNE_LIVE_APPLY_TEST"))
 
 	env := config.JSONFromMap(map[string]any{"RUNE_LIVE_APPLY_TEST": "set"})
 	require.NoError(t, applyGUIEnvVars(env))
 	assert.Equal(t, "set", os.Getenv("RUNE_LIVE_APPLY_TEST"))
 	t.Cleanup(func() { _ = os.Unsetenv("RUNE_LIVE_APPLY_TEST") })
-}
-
-// TestApplyGUIEnvVarsNoPATHDuplication asserts that applying a self-referential
-// PATH value twice does not accumulate duplicate entries, because both applies
-// expand against the stable pre-gui.env baseline.
-func TestApplyGUIEnvVarsNoPATHDuplication(t *testing.T) {
-	resetGUIEnvBaseline()
-	t.Setenv("PATH", "/usr/bin:/bin")
-
-	env := config.JSONFromMap(map[string]any{"PATH": "/extra/bin:$PATH"})
-	require.NoError(t, applyGUIEnvVars(env))
-	first := os.Getenv("PATH")
-	assert.Equal(t, "/extra/bin:/usr/bin:/bin", first)
-
-	require.NoError(t, applyGUIEnvVars(env))
-	second := os.Getenv("PATH")
-	assert.Equal(t, first, second,
-		"repeated apply must not duplicate PATH entries")
-	assert.Equal(t, 1, strings.Count(second, "/extra/bin"))
 }
 
 func TestApplyGUIEnvVarsWithLookup(t *testing.T) {
@@ -293,9 +272,64 @@ func TestApplyGUIEnvVarsWithLookup(t *testing.T) {
 	t.Cleanup(func() { _ = os.Unsetenv("OUT") })
 }
 
-func resetGUIEnvBaseline() {
-	guiEnvBaselineMu.Lock()
-	guiEnvBaseline = nil
-	guiEnvBaselineDone = false
-	guiEnvBaselineMu.Unlock()
+func TestGUIEnvSetsPATH(t *testing.T) {
+	tests := []struct {
+		name string
+		env  map[string]any
+		want bool
+	}{
+		{"empty", map[string]any{}, false},
+		{"no path", map[string]any{"FOO": "bar"}, false},
+		{"sets path", map[string]any{"PATH": "/extra/bin:$PATH"}, true},
+		{"path among others", map[string]any{"FOO": "bar", "PATH": "/x"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := guiEnvSetsPATH(config.JSONFromMap(tt.env))
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestApplyShellPATHAndGUIEnvNoPATHDoesNotBlock asserts that when gui.env does
+// not define PATH, gui.env is applied without waiting on the login-shell PATH
+// resolve, so a stuck resolve cannot delay startup.
+func TestApplyShellPATHAndGUIEnvNoPATHDoesNotBlock(t *testing.T) {
+	cfg := config.MapConfig(map[string]any{
+		"env": map[string]any{"RUNE_NO_PATH_TEST": "value"},
+	})
+	t.Cleanup(func() { _ = os.Unsetenv("RUNE_NO_PATH_TEST") })
+
+	// Never sends: blocking on it would deadlock the test.
+	pathDone := make(chan error)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- applyShellPATHAndGUIEnv(cfg, pathDone)
+	}()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("applyShellPATHAndGUIEnv blocked on pathDone despite gui.env not setting PATH")
+	}
+	assert.Equal(t, "value", os.Getenv("RUNE_NO_PATH_TEST"))
+}
+
+// TestApplyShellPATHAndGUIEnvWithPATHWaits asserts that when gui.env defines
+// PATH, the resolve result is consumed before gui.env is applied so the value
+// expands against the resolved login PATH.
+func TestApplyShellPATHAndGUIEnvWithPATHWaits(t *testing.T) {
+	t.Setenv("PATH", "/resolved/bin")
+	cfg := config.MapConfig(map[string]any{
+		"env": map[string]any{"PATH": "/extra/bin:$PATH"},
+	})
+
+	pathDone := make(chan error, 1)
+	pathDone <- nil
+
+	require.NoError(t, applyShellPATHAndGUIEnv(cfg, pathDone))
+
+	assert.Equal(t, "/extra/bin:/resolved/bin", os.Getenv("PATH"))
 }

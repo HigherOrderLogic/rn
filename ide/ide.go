@@ -91,6 +91,13 @@ func New(
 	return
 }
 
+// Config loads and returns the IDE configuration without starting workspaces.
+func Config(cfgfilename string, opts ...Option) (config.Config, error) {
+	op := newOptions(opts...)
+	cfg, err := loadIDEConfig(cfgfilename, op)
+	return config.MapConfig(cfg.cfg), err
+}
+
 // Interrupt satisfies term.Interrupter
 func (i *IDE) Interrupt(ctx context.Context) error {
 	return i.workspaceHandler.Interrupt(ctx)
@@ -366,20 +373,12 @@ func (i *IDE) closeResources() (ret error) {
 func (i *IDE) init(
 	cwd, cfgfilename, dataDir string, storage storageapi.Service, opts ...Option,
 ) error {
-	op := defaultOptions()
-	for _, o := range opts {
-		o(&op)
-	}
+	op := newOptions(opts...)
 	i.options = op
 
-	defaultCfg := defaultConfigSource{
-		src:   op.defaultConfig,
-		modal: op.defaultConfigModeModal,
-		tui:   op.defaultConfigTUI,
-	}
-	configErr := loadConfig(&i.ideConfig, cfgfilename,
-		op.defaultWallpaper, defaultCfg, op.bell,
-		op.scheduleFn, op.zdotDir)
+	defaultCfg := newDefaultConfigSource(op)
+	var configErr error
+	i.ideConfig, configErr = loadIDEConfig(cfgfilename, op)
 
 	i.storage = storage
 	i.ideConfig.storage = storageapi.WithPartition(i.storage, "ide")
@@ -584,6 +583,30 @@ func (i *IDE) init(
 		return err
 	}
 	return i.workspaceHandler.subscribeCommand(tutorialCmdManual, &i.tutorial)
+}
+
+func newOptions(opts ...Option) options {
+	op := defaultOptions()
+	for _, o := range opts {
+		o(&op)
+	}
+	return op
+}
+
+func newDefaultConfigSource(op options) defaultConfigSource {
+	return defaultConfigSource{
+		src:   op.defaultConfig,
+		modal: op.defaultConfigModeModal,
+		tui:   op.defaultConfigTUI,
+	}
+}
+
+func loadIDEConfig(cfgfilename string, op options) (ideConfig, error) {
+	var cfg ideConfig
+	err := loadConfig(&cfg, cfgfilename,
+		op.defaultWallpaper, newDefaultConfigSource(op), op.bell,
+		op.scheduleFn, op.zdotDir)
+	return cfg, err
 }
 
 func (i *IDE) initRunning() {
