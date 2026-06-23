@@ -433,6 +433,116 @@ func TestComplete(t *testing.T) {
 	assert.Equal(t, []string{"baz"}, got)
 }
 
+// blockingIter blocks on Next until released or the context is
+// cancelled, modelling a completer that streams from a slow background
+// scan (e.g. the debugger-launch program completer).
+func blockingIter(release <-chan struct{}) iterator.Iterator[string] {
+	return iterator.FromFunc(
+		func(ctx context.Context) (string, bool, error) {
+			select {
+			case <-ctx.Done():
+				return "", false, ctx.Err()
+			case <-release:
+				return "", false, nil
+			}
+		},
+		func() error { return nil },
+	)
+}
+
+// TestCompleteNeverBlocksCallingGoroutine guards against the prompt
+// freeze: Complete must return promptly even when the underlying
+// completer blocks producing its first element, regardless of whether
+// cmd resolves on $PATH. The emptiness probe and any fallback must be
+// deferred into the returned iterator (driven by Next off the event
+// loop), not performed on the calling goroutine.
+func TestCompleteNeverBlocksCallingGoroutine(t *testing.T) {
+	cases := []struct {
+		name string
+		cmd  string
+		args []string
+	}{
+		{"arg completion, non-executable", "definitely-not-on-path", []string{""}},
+		// "sh" is reliably on PATH, exercising the file-fallback path
+		// whose emptiness probe used to block.
+		{"arg completion, executable", "sh", []string{""}},
+		{"command-name completion", "definitely-not-on-path", nil},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			release := make(chan struct{})
+			t.Cleanup(func() { close(release) })
+			mock := &mockHandler{
+				completeFn: func(
+					context.Context, string, []string,
+				) (iterator.Iterator[string], error) {
+					return blockingIter(release), nil
+				},
+			}
+			h := New(mock, workspaceapi.URI{})
+
+			done := make(chan iterator.Iterator[string], 1)
+			go func() {
+				it, err := h.Complete(context.Background(), tc.cmd, tc.args)
+				require.NoError(t, err)
+				done <- it
+			}()
+
+			select {
+			case it := <-done:
+				_ = it.Close()
+			case <-time.After(2 * time.Second):
+				t.Fatal("Complete blocked on the underlying completer")
+			}
+		})
+	}
+}
+
+// TestCompleteFallsBackWhenUnderlyingEmpty verifies the lazy fallback
+// still kicks in: when the underlying yields nothing, an executable's
+// argument completion falls through to file-based completion.
+func TestCompleteFallsBackWhenUnderlyingEmpty(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "alpha.txt"), nil, 0o600))
+	t.Chdir(dir)
+
+	mock := &mockHandler{
+		completeFn: func(
+			context.Context, string, []string,
+		) (iterator.Iterator[string], error) {
+			return iterator.FromSlice[string](nil), nil
+		},
+	}
+	h := New(mock, workspaceapi.URI{})
+
+	iter, err := h.Complete(context.Background(), "sh", []string{"alph"})
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+	got, err := iterator.ToSlice(context.Background(), iter)
+	require.NoError(t, err)
+	assert.Contains(t, got, "alpha.txt")
+}
+
+// TestCompletePrefersUnderlyingOverFallback verifies that a non-empty
+// underlying result suppresses the fallback entirely.
+func TestCompletePrefersUnderlyingOverFallback(t *testing.T) {
+	mock := &mockHandler{
+		completeFn: func(
+			context.Context, string, []string,
+		) (iterator.Iterator[string], error) {
+			return iterator.FromSlice([]string{"one", "two"}), nil
+		},
+	}
+	h := New(mock, workspaceapi.URI{})
+
+	iter, err := h.Complete(context.Background(), "sh", []string{""})
+	require.NoError(t, err)
+	defer func() { _ = iter.Close() }()
+	got, err := iterator.ToSlice(context.Background(), iter)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"one", "two"}, got)
+}
+
 func TestInterpreterDirFromWorkspaceURI(t *testing.T) {
 	// pwd must report the workspace directory, not the process
 	// working directory. Under a macOS .app launch the process cwd

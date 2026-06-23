@@ -128,13 +128,8 @@ func (h *commandHandler) HandleCommand(
 	}, func() error { return nil }), nil
 }
 
-// Complete delegates to the underlying handler. When
-// completing a command name (args == nil) and the
-// underlying returns no results, it falls back to
-// scanning $PATH directories for matching executables.
-// When completing arguments (args != nil) and the
-// underlying returns no results, it falls back to
-// file-based completion if cmd is a known executable.
+// Complete delegates to the underlying handler but as a fallback
+// completes dirs or files.
 func (h *commandHandler) Complete(
 	ctx context.Context, cmd string, args []string,
 ) (iterator.Iterator[string], error) {
@@ -143,27 +138,63 @@ func (h *commandHandler) Complete(
 		return nil, err
 	}
 	if args == nil {
-		// Command name completion — PATH fallback.
-		iter, empty := iterator.IsEmpty(ctx, iter)
-		if !empty {
-			return iter, nil
+		return withFallback(iter, func() []string {
+			return pathCompletions(cmd)
+		}), nil
+	}
+	return withFallback(iter, func() []string {
+		if _, err := exec.LookPath(cmd); err != nil {
+			return nil
 		}
-		return iterator.FromSlice(pathCompletions(cmd)), nil
+		var prefix string
+		if len(args) > 0 {
+			prefix = args[len(args)-1]
+		}
+		return fileCompletions(prefix)
+	}), nil
+}
+
+func withFallback(
+	primary iterator.Iterator[string], fallback func() []string,
+) iterator.Iterator[string] {
+	it := &fallbackIter{primary: primary, fallback: fallback}
+	return iterator.FromFunc(it.next, primary.Close)
+}
+
+type fallbackIter struct {
+	primary  iterator.Iterator[string]
+	fallback func() []string
+
+	decided  bool
+	usingFB  bool
+	fbValues []string
+}
+
+func (f *fallbackIter) next(ctx context.Context) (string, bool, error) {
+	if !f.decided {
+		f.decided = true
+		if v, ok := f.primary.Next(ctx); ok {
+			return v, true, nil
+		}
+		if err := f.primary.Err(); err != nil {
+			return "", false, err
+		}
+		f.usingFB = true
+		f.fbValues = f.fallback()
 	}
-	// Argument completion — file fallback when the
-	// underlying returns nothing and cmd is on PATH.
-	iter, empty := iterator.IsEmpty(ctx, iter)
-	if !empty {
-		return iter, nil
+	if !f.usingFB {
+		v, ok := f.primary.Next(ctx)
+		if !ok {
+			return "", false, f.primary.Err()
+		}
+		return v, true, nil
 	}
-	if _, err := exec.LookPath(cmd); err != nil {
-		return iter, nil
+	if len(f.fbValues) == 0 {
+		return "", false, nil
 	}
-	var prefix string
-	if len(args) > 0 {
-		prefix = args[len(args)-1]
-	}
-	return iterator.FromSlice(fileCompletions(prefix)), nil
+	v := f.fbValues[0]
+	f.fbValues = f.fbValues[1:]
+	return v, true, nil
 }
 
 func (h *commandHandler) execMiddleware(
