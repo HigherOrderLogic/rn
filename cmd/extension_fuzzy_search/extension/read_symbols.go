@@ -251,6 +251,12 @@ func makeSymbolItem(
 	from, to term.Coordinates, filename string, buf *cell.Buffer,
 	captureName string,
 ) (match, error) {
+	// ConvertRunePosToCoordinates clamps a row past the last line to the
+	// end-of-buffer sentinel Y == buf.Rows(); guard against it so
+	// buf.Columns does not index out of range.
+	if rows := buf.Rows(); rows > 0 && from.Y >= rows {
+		from.Y = rows - 1
+	}
 	to.Y = from.Y
 	to.X = buf.Columns(from.Y)
 	cells, _, _ := buf.Select(from, to)
