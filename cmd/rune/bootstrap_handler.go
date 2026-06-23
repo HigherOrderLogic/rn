@@ -672,7 +672,7 @@ func (b *bootstrapHandler) openLoginPrompt() error {
 		"fire, will outlive every company betting against them.\n\n" +
 		"**Rune is how we stay irreplaceable**.\n\n" +
 		"Independent and user-supported. Your subscription keeps it that way.\n\n" +
-		"$19.90/month or $218.90/year. Cancel anytime."
+		"$10/month or $100/year. Cancel anytime."
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
