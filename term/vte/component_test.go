@@ -997,6 +997,46 @@ func TestComponentRestoreFromSnapshotDrivesSetPtySize(t *testing.T) {
 		"follow-up Resize at the same size is a legitimate no-op")
 }
 
+// TestComponentRestoreFromSnapshotCursorWithScrollback reproduces a bug
+// where restoring a snapshot whose buffer has scrollback (rows > height)
+// placed the cursor too high. The snapshot stores the cursor in screen
+// coordinates (the contract vteprobe/exoeditor depend on), but Restore
+// re-projected it through ScrollToWindowCoordinates, subtracting
+// rows-height. CursorAtScreen is what DeviceStatus reports to zsh, so the
+// shell cleared/redrew from the wrong row.
+func TestComponentRestoreFromSnapshotCursorWithScrollback(t *testing.T) {
+	t.Parallel()
+
+	tm := mockTabManager{}
+	exe := &recordingExecutor{}
+	cfg := DefaultConfig()
+	comp, err := NewComponent(exe, exe, &tm, cfg)
+	require.NoError(t, err)
+
+	const w, h = 80, 24
+	require.NoError(t, comp.Resize(w, h))
+
+	cells := make([][]term.Cell, 30)
+	for i := range cells {
+		cells[i] = []term.Cell{{Ch: 'x'}}
+	}
+
+	snap := Snapshot{
+		Schema: terminalSnapshotVersion,
+		Width:  w,
+		Height: h,
+		Primary: ScreenSnapshot{
+			Cells:  cells,
+			Cursor: term.Coordinates{X: 5, Y: 23},
+		},
+	}
+
+	_, err = comp.RestoreFromSnapshot(snap)
+	require.NoError(t, err)
+
+	assert.Equal(t, term.Coordinates{X: 5, Y: 23}, comp.CursorAtScreen())
+}
+
 type pidExecutor struct {
 	testExecutor
 	startedPid workspaceapi.Pid

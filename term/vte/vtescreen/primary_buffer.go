@@ -64,7 +64,6 @@ func (b *PrimaryBuffer) Init(minWidth int, maxHistory int) {
 // saved snapshot while preserving primary-buffer configuration.
 func (b *PrimaryBuffer) Restore(cells [][]term.Cell, cursor term.Coordinates, width, height int) {
 	b.AltBuffer.restore(cells, cursor, max(b.minWidth, width), height)
-	b.cursor.position, _ = b.scroll.ScrollToWindowCoordinates(cursor)
 }
 
 const wrapMarker uint8 = 1 << 7

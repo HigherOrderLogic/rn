@@ -101,13 +101,13 @@ func TestPrimaryCoordinates(t *testing.T) {
 	assert.Equal(t, term.Coordinates{Y: 4, X: 4}, b.CursorAtScreen())
 }
 
-func TestPrimaryRestorePreservesCursorAtScroll(t *testing.T) {
+func TestPrimaryRestorePreservesCursorAtScreen(t *testing.T) {
 	b := NewPrimaryBuffer(0, testHistory)
 	b.Restore(term.StringToCells("0\n1\n2\n3\n4\n5\n6\n7\n8\n9"),
-		term.Coordinates{Y: 7, X: 1}, 5, 5)
+		term.Coordinates{Y: 2, X: 1}, 5, 5)
 
-	assert.Equal(t, term.Coordinates{Y: 7, X: 1}, b.CursorAtScroll())
 	assert.Equal(t, term.Coordinates{Y: 2, X: 1}, b.CursorAtScreen())
+	assert.Equal(t, term.Coordinates{Y: 7, X: 1}, b.CursorAtScroll())
 }
 
 func TestPrimarySelection(t *testing.T) {
@@ -471,7 +471,7 @@ func BenchmarkPrimaryBufferResize(b *testing.B) {
 				prepared.Resize(test.initialWidth, height)
 			}
 			snapshot := term.CloneCells(prepared.Cells.RawCells())
-			cursor := prepared.CursorAtScroll()
+			cursor := prepared.CursorAtScreen()
 			savedCursor := prepared.savedCursor
 			wraps := prepared.wraps
 			probe := NewPrimaryBuffer(0, testHistory)
