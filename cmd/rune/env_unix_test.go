@@ -25,20 +25,25 @@
 
 package main
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
-// TestLoginShellPATHCmdDetachesFromTerminal is a regression for the Ctrl-C
-// quitting breakage: the interactive login shell spawned to resolve PATH must
-// not inherit Rune's terminal and must run in its own process group, so the
-// SIGINT raised by Ctrl-C is delivered only to Rune and the child cannot
-// mutate the controlling terminal's modes.
+// TestLoginShellPATHCmdDetachesFromTerminal is a regression for two terminal
+// interactions: the Ctrl-C quitting breakage and the SIGTTOU stop that froze
+// the GUI. The interactive login shell spawned to resolve PATH must not
+// inherit Rune's terminal and must run in a new session (Setsid) with no
+// controlling terminal, so its startup tcsetpgrp/tcsetattr calls cannot raise
+// SIGTTOU (which would STOP it in state T and block the probe forever) and
+// terminal-generated signals (the SIGINT raised by Ctrl-C) never reach it.
 func TestLoginShellPATHCmdDetachesFromTerminal(t *testing.T) {
-	cmd := loginShellPATHCmd("/bin/sh")
+	cmd := loginShellPATHCmd(context.Background(), "/bin/sh")
 
 	if cmd.Stdin != nil {
 		t.Fatalf("login shell stdin must not be inherited from the terminal")
 	}
-	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setpgid {
-		t.Fatalf("login shell must run in its own process group (Setpgid)")
+	if cmd.SysProcAttr == nil || !cmd.SysProcAttr.Setsid {
+		t.Fatalf("login shell must run in a new session (Setsid)")
 	}
 }

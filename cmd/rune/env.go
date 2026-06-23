@@ -24,6 +24,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -34,6 +35,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Xuanwo/go-locale"
 	log "github.com/sirupsen/logrus"
@@ -43,6 +45,15 @@ import (
 )
 
 const fallbackLocale = "UTF-8"
+
+// runeShellEnvMarker is printed by the login-shell probe immediately before the
+// shell's environment dump so we can ignore any banner chatter rc files emit on
+// stdout before our probe runs, and parse only the env that follows it.
+const runeShellEnvMarker = "RUNE_SHELL_ENV_START"
+
+// loginPathTimeout bounds the login-shell probe so a wedged shell can never
+// block startup.
+const loginPathTimeout = 10 * time.Second
 
 var darwinRe = regexp.MustCompile("UserShell: (/[^ ]+)\n")
 
@@ -56,7 +67,7 @@ func setupRuneBinPATH(dataDir string) error {
 func startLoginShellPATHResolve(dataDir string) <-chan error {
 	done := make(chan error, 1)
 	go debug.CapturePanicReport(func() {
-		login, err := resolveLoginPath()
+		login, err := resolveLoginPath(loginPathTimeout, userShell)
 		if err != nil {
 			done <- err
 			return
@@ -74,38 +85,53 @@ func setRuneBinPATH(dataDir, base string) error {
 	return nil
 }
 
-func resolveLoginPath() (string, error) {
+func resolveLoginPath(timeout time.Duration, userShell func() (string, error)) (string, error) {
 	shell := os.Getenv("SHELL")
 	if shell == "" {
-		shell = "/bin/sh"
+		if s, err := userShell(); err == nil && s != "" {
+			shell = s
+		} else {
+			shell = "/bin/sh"
+		}
 	}
 
-	out, err := loginShellPATHCmd(shell).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	out, err := loginShellPATHCmd(ctx, shell).Output()
 	if err != nil {
-		return "", fmt.Errorf("shell echo PATH: %w", err)
+		if ctx.Err() != nil {
+			return "", fmt.Errorf("login shell PATH probe timed out after %s: %w", timeout, ctx.Err())
+		}
+		return "", fmt.Errorf("shell env probe: %w", err)
 	}
 
-	// Interactive rc files may print banners to stdout before our echo
-	// runs. Take the last non-empty line so prior chatter is ignored.
-	p := lastNonEmptyLine(string(out))
+	p := pathFromMarkerEnv(string(out))
 	if p == "" {
 		return "", fmt.Errorf("shell returned empty PATH")
 	}
 	return p, nil
 }
 
-// loginShellPATHCmd builds the command that prints the login shell PATH.
+// loginShellPATHCmd builds the command that dumps the login shell environment.
 //
-// The shell is invoked interactively (-i) so rc files that mutate PATH are
-// sourced, but interactive shells touch the controlling terminal on startup
-// (zsh ZLE, job control) and sit in the foreground process group. If the
-// shell inherited Rune's terminal it could change its modes or absorb the
-// SIGINT raised by Ctrl-C, which previously broke Ctrl-C quitting `rune`
-// from the command line. Detach it from the terminal: read from /dev/null
-// and run in its own process group so terminal-generated signals never reach
-// it.
-func loginShellPATHCmd(shell string) *exec.Cmd {
-	cmd := exec.Command(shell, "-i", "-l", "-c", "echo $PATH")
+// The shell is invoked interactively (-i) and as a login shell (-l) so rc
+// files that mutate PATH are sourced. The probe cd's to $HOME first so
+// directory-scoped tools (direnv, asdf, mise, nvm) contribute to PATH, prints
+// a marker so banner chatter is ignored during parsing, dumps the env with
+// `/usr/bin/env -0` (NUL-delimited so values containing newlines cannot
+// corrupt parsing), and ends with `exit 0` as defense-in-depth against a shell
+// that would otherwise wedge on a non-zero/interactive exit. This mirrors
+// Zed's battle-tested login-shell environment probe.
+//
+// Interactive shells touch the controlling terminal on startup (zsh ZLE, job
+// control); detachFromTerminal runs the child in a new session with no
+// controlling terminal so those calls cannot raise SIGTTOU (which would stop
+// the shell and hang the probe) nor can the SIGINT raised by Ctrl-C reach it.
+// The context bounds the probe so it can never block startup indefinitely.
+func loginShellPATHCmd(ctx context.Context, shell string) *exec.Cmd {
+	script := `cd "$HOME" 2>/dev/null; printf '%s' ` + runeShellEnvMarker + `; /usr/bin/env -0; exit 0;`
+	cmd := exec.CommandContext(ctx, shell, "-i", "-l", "-c", script)
 	cmd.Stdin = nil
 	detachFromTerminal(cmd)
 	return cmd
@@ -121,11 +147,17 @@ func makePkgDirs(dataDir string) error {
 	return nil
 }
 
-func lastNonEmptyLine(s string) string {
-	lines := strings.Split(s, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		if t := strings.TrimSpace(lines[i]); t != "" {
-			return t
+// pathFromMarkerEnv extracts PATH from a NUL-delimited `/usr/bin/env -0` dump
+// that follows the env marker. Everything before the last marker occurrence is
+// banner chatter and is ignored, so rc-file output that happens to look like
+// KEY=VALUE cannot shadow the real environment.
+func pathFromMarkerEnv(out string) string {
+	if idx := strings.LastIndex(out, runeShellEnvMarker); idx >= 0 {
+		out = out[idx+len(runeShellEnvMarker):]
+	}
+	for entry := range strings.SplitSeq(out, "\x00") {
+		if v, ok := strings.CutPrefix(entry, "PATH="); ok {
+			return v
 		}
 	}
 	return ""

@@ -29,59 +29,79 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 )
 
-func fakeLoginShell(t *testing.T, lines ...string) string {
+// fakeShell writes an executable shell script with the given body and returns
+// its path. The script ignores all the interactive/login flags Rune passes.
+func fakeShell(t *testing.T, body string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("login-shell resolution is POSIX-only")
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "fakeshell")
-	var body strings.Builder
-	body.WriteString("#!/bin/sh\n")
-	for _, l := range lines {
-		body.WriteString("echo " + l + "\n")
-	}
-	if err := os.WriteFile(path, []byte(body.String()), 0o755); err != nil {
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatalf("write fake shell: %v", err)
 	}
 	return path
 }
 
+// fakeLoginShell writes a fake shell that prints the given pre-marker banner
+// lines, then the env marker, then a NUL-delimited PATH entry — mimicking a
+// real interactive shell whose rc files emit chatter before `env -0` runs.
+func fakeLoginShell(t *testing.T, path string, banner ...string) string {
+	t.Helper()
+	var body strings.Builder
+	for _, l := range banner {
+		body.WriteString("printf '%s\\n' " + shellQuote(l) + "\n")
+	}
+	body.WriteString("printf '%s' " + shellQuote(runeShellEnvMarker) + "\n")
+	if path != "" {
+		body.WriteString("printf 'PATH=%s\\0' " + shellQuote(path) + "\n")
+	}
+	return fakeShell(t, body.String())
+}
+
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 func TestResolveLoginPath(t *testing.T) {
 	tests := []struct {
 		name    string
-		lines   []string
+		path    string
+		banner  []string
 		want    string
 		wantErr bool
 	}{
 		{
-			name:  "ignores leading banner lines",
-			lines: []string{"welcome-banner", "", "/login/bin:/usr/bin"},
-			want:  "/login/bin:/usr/bin",
+			name:   "ignores leading banner lines",
+			path:   "/login/bin:/usr/bin",
+			banner: []string{"welcome-banner", "", "PATH=/should/be/ignored"},
+			want:   "/login/bin:/usr/bin",
 		},
 		{
-			name:  "single line",
-			lines: []string{"/usr/bin"},
-			want:  "/usr/bin",
+			name: "single entry",
+			path: "/usr/bin",
+			want: "/usr/bin",
 		},
 		{
-			name:    "empty output is an error",
-			lines:   []string{""},
+			name:    "no PATH after marker is an error",
+			path:    "",
 			wantErr: true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("SHELL", fakeLoginShell(t, tc.lines...))
+			t.Setenv("SHELL", fakeLoginShell(t, tc.path, tc.banner...))
 
-			got, err := resolveLoginPath()
+			got, err := resolveLoginPath(loginPathTimeout, userShell)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error, got PATH %q", got)
@@ -96,6 +116,49 @@ func TestResolveLoginPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestResolveLoginPathParsesMarkerEnv asserts the resolver locates PATH after
+// the env marker even when the shell prints pre-marker chatter that itself
+// looks like KEY=VALUE env output.
+func TestResolveLoginPathParsesMarkerEnv(t *testing.T) {
+	t.Setenv("SHELL", fakeLoginShell(t, "/login/bin:/usr/bin",
+		"some banner", "PATH=/decoy/should/not/win", "HOME=/decoy"))
+
+	got, err := resolveLoginPath(loginPathTimeout, userShell)
+	require.NoError(t, err)
+	assert.Equal(t, "/login/bin:/usr/bin", got)
+}
+
+// TestResolveLoginPathTimesOut reproduces the GUI freeze: a shell that hangs
+// (and ignores SIGTERM) must not block the resolver forever. With a short
+// injected timeout the resolver returns an error instead of hanging.
+func TestResolveLoginPathTimesOut(t *testing.T) {
+	hanging := fakeShell(t, "trap '' TERM\nwhile true; do sleep 1; done\n")
+	t.Setenv("SHELL", hanging)
+
+	start := time.Now()
+	_, err := resolveLoginPath(200*time.Millisecond, userShell)
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("resolveLoginPath blocked too long: %v", elapsed)
+	}
+}
+
+// TestResolveLoginPathFallsBackShell asserts that when $SHELL is empty the
+// resolver consults userShell() rather than silently using /bin/sh.
+func TestResolveLoginPathFallsBackShell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("login-shell resolution is POSIX-only")
+	}
+	t.Setenv("SHELL", "")
+	fake := fakeLoginShell(t, "/fallback/bin")
+
+	got, err := resolveLoginPath(loginPathTimeout, func() (string, error) { return fake, nil })
+	require.NoError(t, err)
+	assert.Equal(t, "/fallback/bin", got)
 }
 
 // TestSetupManagedBinPathPrependsBinDirOnce asserts that setupManagedBinPath
@@ -147,7 +210,7 @@ func TestStartLoginPathResolveObservesResolvedPATH(t *testing.T) {
 		t.Fatalf("minimal launch PATH leaked into resolved PATH: %q", got)
 	}
 
-	expanded := evalVar("$RUNE_DATADIR/lib/foo/bin:$PATH")
+	expanded := os.ExpandEnv("$RUNE_DATADIR/lib/foo/bin:$PATH")
 	if !strings.Contains(expanded, filepath.Join(dataDir, "lib", "foo", "bin")) {
 		t.Fatalf("RUNE_DATADIR not expanded in gui.env value: %q", expanded)
 	}

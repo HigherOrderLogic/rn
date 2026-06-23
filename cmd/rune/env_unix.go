@@ -30,12 +30,19 @@ import (
 	"syscall"
 )
 
-// detachFromTerminal runs the command in its own process group so that
-// terminal-generated signals (e.g. the SIGINT raised by Ctrl-C) are delivered
-// only to Rune and never to this child.
+// detachFromTerminal runs the command in a new session with no controlling
+// terminal. An interactive login shell touches the controlling terminal on
+// startup (zsh ZLE, job control: tcsetpgrp/tcsetattr). If it ran merely in a
+// background process group of Rune's session, those calls would raise
+// SIGTTOU/SIGTTIN whose default disposition is to STOP the process, so the
+// shell would wedge in state T and never exit, blocking the probe forever.
+// Setsid makes the child a session leader with no controlling terminal, so
+// those calls become no-ops (ENOTTY) and terminal-generated signals (the
+// SIGINT raised by Ctrl-C, SIGTTOU, SIGTTIN) can never reach it. This is
+// strictly stronger than Setpgid for keeping Ctrl-C quitting `rune` working.
 func detachFromTerminal(cmd *exec.Cmd) {
 	if cmd.SysProcAttr == nil {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
-	cmd.SysProcAttr.Setpgid = true
+	cmd.SysProcAttr.Setsid = true
 }

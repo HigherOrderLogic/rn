@@ -55,6 +55,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/sys/unix"
 	"google.golang.org/grpc"
+	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/cmd/rune/crashreport"
 	"unstable.build/go-tui/cmd/rune/ide/apiclient"
 	"unstable.build/go-tui/component/shader"
@@ -655,9 +656,6 @@ func runGUI(
 		}
 	}
 
-	// attempt to paralellize shell PATH extraction as much as possible
-	// even though we'll probably not save much, though every initialization ms counts
-	getShellErr := <-pathDone
 	checkoutURL, signupURL := mustResolveBootstrapURLs(*flagWebsiteAddress)
 	root, err := newBootstrapHandler(
 		*flagDataPath, *flagConfigPath,
@@ -674,11 +672,6 @@ func runGUI(
 	}
 
 	browser := root.browser()
-	if getShellErr != nil {
-		_, _ = browser.Notify(browserapi.LevelError,
-			"could not resolve your login shell PATH; tools on it "+
-				"(e.g. homebrew, mise) may be unavailable: %v", getShellErr)
-	}
 	if chdirerr != nil {
 		_, _ = browser.Notify(browserapi.LevelError, "%v", chdirerr)
 	}
@@ -693,13 +686,15 @@ func runGUI(
 	defaultColorTheme := getGUIDefaultColorTheme(browser, cfg)
 	themes := getGUIColorThemes(browser, cfg)
 	transparentWindow := getGUITransparentWindow(browser, cfg)
-	if env, err := getGUIEnvVars(cfg); err != nil {
-		_, _ = browser.Notify(browserapi.LevelError,
-			"Could not load 'gui.env' from config: %v", err)
-	} else if err := applyGUIEnvVars(env); err != nil {
-		_, _ = browser.Notify(browserapi.LevelError,
-			"could not apply gui.env: %v", err)
-	}
+
+	// Resolving the login-shell PATH spawns an interactive shell that can be
+	// slow or wedge entirely; never block render on it. Wait off the render
+	// path, then apply gui.env. gui.env must be applied AFTER PATH resolution
+	// because applyGUIEnvVars captures its baseline on first use, and values
+	// like PATH: "$PATH:..." must expand against the resolved login PATH.
+	go debug.CapturePanicReport(func() {
+		applyShellPATHAndGUIEnv(browser, cfg, pathDone)
+	})
 
 	options := []gui.Option{
 		gui.WithColorThemes(defaultColorTheme, themes),
@@ -760,6 +755,35 @@ func runGUI(
 	saveLastSize(storage, g)
 	saveLastPosition(storage, g)
 	return 0
+}
+
+// applyShellPATHAndGUIEnv waits for the login-shell PATH resolution to finish
+// off the render path, then applies gui.env. PATH resolution applies the
+// resolved PATH via os.Setenv on success; gui.env is applied afterwards so
+// values referencing $PATH expand against the resolved login PATH and the
+// applyGUIEnvVars baseline captured here is race-free. On resolution timeout
+// or error Rune continues with the inherited PATH and notifies the user.
+func applyShellPATHAndGUIEnv(b browser.Browser, cfg config.Config, pathDone <-chan error) {
+	select {
+	case err := <-pathDone:
+		if err != nil {
+			_, _ = b.Notify(browserapi.LevelError,
+				"could not resolve your login shell PATH; tools on it "+
+					"(e.g. homebrew, mise) may be unavailable: %v", err)
+		}
+	case <-time.After(loginPathTimeout + time.Second):
+		_, _ = b.Notify(browserapi.LevelError,
+			"resolving your login shell PATH timed out; tools on it "+
+				"(e.g. homebrew, mise) may be unavailable")
+	}
+
+	if env, err := getGUIEnvVars(cfg); err != nil {
+		_, _ = b.Notify(browserapi.LevelError,
+			"Could not load 'gui.env' from config: %v", err)
+	} else if err := applyGUIEnvVars(env); err != nil {
+		_, _ = b.Notify(browserapi.LevelError,
+			"could not apply gui.env: %v", err)
+	}
 }
 
 // newAPIClient constructs the production apiclient.Client and its
@@ -828,14 +852,4 @@ func openFiles(i *ide.IDE, filenames []string) {
 			continue
 		}
 	}
-}
-
-func evalVar(value any) (ret string) {
-	str, ok := value.(string)
-	if !ok {
-		ret = fmt.Sprintf("%v", value)
-		return
-	}
-	ret = os.ExpandEnv(str)
-	return
 }
