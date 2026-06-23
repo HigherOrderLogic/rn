@@ -267,6 +267,70 @@ func TestDeferHandlerSetWrapAndShowCommandBarReplayed(t *testing.T) {
 	}, real.calls)
 }
 
+// deferRecordingEditor records every Edit so tests can assert whether
+// pre-Swap edits reach the real handler.
+type deferRecordingEditor struct {
+	edits []string
+}
+
+func (e *deferRecordingEditor) Edit(
+	_ context.Context, start, end term.Coordinates, str string,
+) (from, to term.Coordinates, old string) {
+	e.edits = append(e.edits,
+		fmt.Sprintf("Edit(%d,%d-%d,%d,%q)", start.X, start.Y, end.X, end.Y, str))
+	return start, end, ""
+}
+
+// TestDeferHandlerEditBeforeSwapReachesRealHandler reproduces the
+// dropped-edit bug behind gopls go.mod vuln upgrades not landing: a
+// server-driven workspace/applyEdit force-opens the closed file during
+// its async streaming load, so the edit is applied through the
+// deferHandler before Swap. Edits issued pre-Swap must be queued and
+// replayed on the real handler; today CellEditor returns a no-op editor
+// and they are silently dropped.
+func TestDeferHandlerEditBeforeSwapReachesRealHandler(t *testing.T) {
+	sh := newDeferStreamload(t)
+	d := newDeferHandler(sh)
+
+	_, _, _ = d.CellEditor().Edit(
+		context.Background(),
+		term.Coordinates{X: 12, Y: 4},
+		term.Coordinates{X: 18, Y: 4},
+		"v0.3.8",
+	)
+
+	real := newDeferFakeReal()
+	rec := &deferRecordingEditor{}
+	real.editor = rec
+	d.Swap(real)
+
+	assert.Equal(t,
+		[]string{`Edit(12,4-18,4,"v0.3.8")`}, rec.edits,
+		"pre-Swap edit must be replayed on the real handler, not dropped")
+}
+
+// TestDeferHandlerEditReplayedBeforeCursor pins the replay order:
+// queued edits mutate the buffer before the cursor is restored, so the
+// cursor lands on the post-edit content.
+func TestDeferHandlerEditReplayedBeforeCursor(t *testing.T) {
+	sh := newDeferStreamload(t)
+	d := newDeferHandler(sh)
+
+	_, _, _ = d.CellEditor().Edit(
+		context.Background(),
+		term.Coordinates{X: 0, Y: 0}, term.Coordinates{X: 0, Y: 0}, "x",
+	)
+	d.SetCursorAtScroll(term.Coordinates{X: 1, Y: 0})
+
+	real := newDeferFakeReal()
+	rec := &deferRecordingEditor{}
+	real.editor = rec
+	d.Swap(real)
+
+	require.Len(t, rec.edits, 1)
+	assert.Equal(t, []string{"SetCursorAtScroll(1,0)"}, real.calls)
+}
+
 func TestDeferHandlerReadsReturnSafeDefaultsBeforeSwap(t *testing.T) {
 	sh := newDeferStreamload(t)
 	sh.Resize(80, 24)

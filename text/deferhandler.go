@@ -64,12 +64,18 @@ type deferPendingOps struct {
 	showCommandBar *bool
 	defaultAttrs   *term.Attributes
 	locationLists  []deferPendingLocList
+	edits          []deferPendingEdit
 }
 
 type deferPendingLocList struct {
 	priority textapi.LocationPriority
 	id       string
 	list     LocationList
+}
+
+type deferPendingEdit struct {
+	start, end term.Coordinates
+	text       string
 }
 
 func newDeferHandler(sh *streamload.Handler) *deferHandler {
@@ -100,6 +106,12 @@ func (h *deferHandler) Swap(real Handler) {
 	}
 	if pending.showCommandBar != nil {
 		real.ShowCommandBar(*pending.showCommandBar)
+	}
+	if len(pending.edits) > 0 {
+		ce := real.CellEditor()
+		for _, e := range pending.edits {
+			ce.Edit(context.Background(), e.start, e.end, e.text)
+		}
 	}
 	for _, op := range pending.locationLists {
 		real.SetLocationList(op.priority, op.id, op.list)
@@ -216,7 +228,7 @@ func (h *deferHandler) CellEditor() cell.Editor {
 	if h.real != nil {
 		return h.real.CellEditor()
 	}
-	return deferNoopCellEditor{}
+	return deferQueueingCellEditor{h: h}
 }
 
 func (h *deferHandler) SetDefaultAttributes(attrs term.Attributes) {
@@ -247,6 +259,26 @@ func (h *deferHandler) IsSearchMode() bool {
 		return real.IsSearchMode()
 	}
 	return h.Handler.InSearchMode()
+}
+
+// deferQueueingCellEditor records edits issued before Swap so they can
+// be replayed on the real handler's buffer. Without this, a
+// server-driven workspace/applyEdit that force-opens a closed file
+// during its async streaming load is silently dropped (e.g. gopls
+// go.mod vuln upgrades never landing).
+type deferQueueingCellEditor struct{ h *deferHandler }
+
+func (e deferQueueingCellEditor) Edit(
+	_ context.Context, start, end term.Coordinates, str string,
+) (from, to term.Coordinates, old string) {
+	e.h.mu.Lock()
+	defer e.h.mu.Unlock()
+	if e.h.real != nil {
+		return e.h.real.CellEditor().Edit(context.Background(), start, end, str)
+	}
+	e.h.pending.edits = append(e.h.pending.edits,
+		deferPendingEdit{start: start, end: end, text: str})
+	return start, end, ""
 }
 
 type deferNoopCellEditor struct{}
