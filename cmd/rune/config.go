@@ -292,13 +292,13 @@ func getGUIKeyMapping(browser browser.Browser, cfg config.Config) map[term.KeyCo
 	return ret
 }
 
-func getGUIEnvVars(browser browser.Browser, cfg config.Config) (ret config.Config) {
+func getGUIEnvVars(cfg config.Config) (ret config.Config, err error) {
+	var env config.Config
 	ret = config.NopConfig()
-	env, err := cfg.GetConfig("env")
+	env, err = cfg.GetConfig("env")
 	if err != nil {
-		if err != config.ErrNotFound {
-			_, _ = browser.Notify(browserapi.LevelError,
-				"Could not load 'gui.env' from config: %v", err)
+		if err == config.ErrNotFound {
+			err = nil
 		}
 		return
 	}

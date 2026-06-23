@@ -655,6 +655,9 @@ func runGUI(
 		}
 	}
 
+	// attempt to paralellize shell PATH extraction as much as possible
+	// even though we'll probably not save much, though every initialization ms counts
+	getShellErr := <-pathDone
 	checkoutURL, signupURL := mustResolveBootstrapURLs(*flagWebsiteAddress)
 	root, err := newBootstrapHandler(
 		*flagDataPath, *flagConfigPath,
@@ -671,6 +674,11 @@ func runGUI(
 	}
 
 	browser := root.browser()
+	if getShellErr != nil {
+		_, _ = browser.Notify(browserapi.LevelError,
+			"could not resolve your login shell PATH; tools on it "+
+				"(e.g. homebrew, mise) may be unavailable: %v", getShellErr)
+	}
 	if chdirerr != nil {
 		_, _ = browser.Notify(browserapi.LevelError, "%v", chdirerr)
 	}
@@ -682,22 +690,17 @@ func runGUI(
 		cfg = config.NopConfig()
 	}
 
-	env := getGUIEnvVars(browser, cfg)
-	go debug.CapturePanicReport(func() {
-		if err := <-pathDone; err != nil {
-			_, _ = browser.Notify(browserapi.LevelError,
-				"could not resolve your login shell PATH; tools on it "+
-					"(e.g. homebrew, mise) may be unavailable: %v", err)
-		}
-		if err := applyGUIEnvVars(env); err != nil {
-			_, _ = browser.Notify(browserapi.LevelError,
-				"could not apply gui.env: %v", err)
-		}
-	})
-
 	defaultColorTheme := getGUIDefaultColorTheme(browser, cfg)
 	themes := getGUIColorThemes(browser, cfg)
 	transparentWindow := getGUITransparentWindow(browser, cfg)
+	if env, err := getGUIEnvVars(cfg); err != nil {
+		_, _ = browser.Notify(browserapi.LevelError,
+			"Could not load 'gui.env' from config: %v", err)
+	} else if err := applyGUIEnvVars(env); err != nil {
+		_, _ = browser.Notify(browserapi.LevelError,
+			"could not apply gui.env: %v", err)
+	}
+
 	options := []gui.Option{
 		gui.WithColorThemes(defaultColorTheme, themes),
 		gui.WithFontDPI(getGUIFontDPI(browser, cfg)),

@@ -332,8 +332,9 @@ func (b *bootstrapHandler) guiEnvLiveApplyHook(
 	if !ok {
 		return idepkg.ConfigMergeResult{}, nil
 	}
-	env := getGUIEnvVars(b.browser(), guiCfg)
-	if err := applyGUIEnvVars(env); err != nil {
+	if env, err := getGUIEnvVars(guiCfg); err != nil {
+		return idepkg.ConfigMergeResult{}, fmt.Errorf("decode gui.env: %w", err)
+	} else if err := applyGUIEnvVars(env); err != nil {
 		return idepkg.ConfigMergeResult{}, fmt.Errorf("apply gui.env: %w", err)
 	}
 	return idepkg.ConfigMergeResult{LiveApplied: true}, nil
