@@ -83,7 +83,7 @@ func (h *vulncheckCmd) HandleCommand(
 	fileURI := lspcmd.URIToLSP(cmd.URI)
 	goModURI := findGoModURI(fileURI)
 
-	argsData, err := json.Marshal(map[string]any{"URI": goModURI})
+	argsData, err := json.Marshal(map[string]any{"URI": goModURI, "Pattern": "./..."})
 	if err != nil {
 		return fmt.Errorf("marshal args: %w", err)
 	}
