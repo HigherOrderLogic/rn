@@ -391,18 +391,21 @@ func (t *findImplementationsTool) Definition() llmapi.Tool {
 		Type: llmapi.ToolTypeFunction,
 		Function: llmapi.FunctionDefinition{
 			Name: "find_implementations",
-			Description: `Find concrete types that implement an interface. Returns file paths and
-line numbers for each implementation (e.g. "handler.go:15").
+			Description: `Find implementation relationships for a symbol. Returns file paths and
+line numbers (e.g. "handler.go:15"). Works in both directions: given an
+interface, it lists the concrete types that satisfy it; given a concrete
+type, it lists the interfaces that the type satisfies.
 
-Use when you see an interface and want to know what types satisfy it.
-Prefer over search_content for finding implementors.`,
+Prefer over search_content for finding implementors or satisfied
+interfaces.`,
 			Parameters: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"symbol": map[string]any{
 						"type": "string",
-						"description": `The interface name to find implementations of. Use the
-package-qualified name (e.g. "io.Reader") when the interface is not
+						"description": `The interface name (to find implementing types) or the
+concrete type name (to find satisfied interfaces). Use the
+package-qualified name (e.g. "io.Reader") when the symbol is not
 unique across the workspace.`,
 					},
 				},

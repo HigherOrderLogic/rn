@@ -97,8 +97,18 @@ func TestProviderToolAddendum(t *testing.T) {
 		assert.Contains(t, a, "grep_files")
 	})
 
+	t.Run("gemini addendum", func(t *testing.T) {
+		a := ProviderToolAddendum("gemini")
+		assert.Contains(t, a, "CRITICAL: TOOL SELECTION")
+		assert.Contains(t, a, "find_definition")
+		assert.Contains(t, a, "search_symbols")
+		assert.Contains(t, a, "outline_file")
+		assert.Contains(t, a, "run_command")
+		assert.Contains(t, a, "grep_search")
+		assert.NotContains(t, a, "search_content")
+	})
+
 	t.Run("unknown provider returns empty", func(t *testing.T) {
-		assert.Empty(t, ProviderToolAddendum("gemini"))
 		assert.Empty(t, ProviderToolAddendum("ollama"))
 		assert.Empty(t, ProviderToolAddendum("unknown"))
 		assert.Empty(t, ProviderToolAddendum(""))

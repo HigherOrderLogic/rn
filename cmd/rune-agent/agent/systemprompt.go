@@ -55,18 +55,16 @@ Tool strategy:
 - When you need a file's structure (what functions, types, or methods it
   contains), always use outline_file instead of reading the entire file.
   Do NOT use cat, head, or bash to inspect file structure.
-- When formatting a file or renaming a symbol, always use format_file
-  or rename_symbol instead of running a formatter via bash or doing
-  find-and-replace.
 - Use search_content and bash only for tasks that dedicated tools cannot
   handle: searching for string literals, error messages, comments,
-  configuration values, running build/test commands, or invoking compilers/linters.
+  configuration values.
 - read_file is still required before modifying a file. Use it to read
   specific line ranges once you know where to look.
 
 Context management:
 - Use the compact tool to compress the conversation when context grows large.
-  This creates a fresh conversation from a summary of the current one.
+  This replaces the conversation contents with a summary; the original
+  contents are preserved under "<dialogueid>-archived".
 - Compact proactively when:
   - You have accumulated many tool call results no longer needed verbatim.
   - A new user message introduces a different task from what you have been
@@ -135,10 +133,12 @@ func skillsPromptSection(loaded []skills.Skill) string {
 func ProviderToolAddendum(provider string) string {
 	var shellTool, searchTool string
 	switch provider {
-	case "anthropic":
+	case "anthropic", "claude":
 		shellTool, searchTool = "bash", "search_content"
 	case "openai", "codex", "llamacpp":
 		shellTool, searchTool = "exec_command", "grep_files"
+	case "gemini", "antigravity":
+		shellTool, searchTool = "run_command", "grep_search"
 	default:
 		return ""
 	}

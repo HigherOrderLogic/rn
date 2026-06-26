@@ -2970,7 +2970,6 @@ func TestDefaultSystemPrompt(t *testing.T) {
 	// Tool strategy section recommends semantic tools.
 	assert.Contains(t, prompt, "find_definition")
 	assert.Contains(t, prompt, "outline_file")
-	assert.Contains(t, prompt, "format_file")
 	assert.Contains(t, prompt, "read_file")
 
 	// Stronger directive language.
