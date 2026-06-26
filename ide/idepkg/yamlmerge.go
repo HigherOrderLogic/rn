@@ -189,6 +189,21 @@ func addedExtensionIDs(doc *yaml.Node) []string {
 	return ids
 }
 
+// addedTutorialNames returns the keys added under the top-level "tutorials"
+// mapping of an applied config diff. It returns nil when the diff does not
+// touch "tutorials" or that key is not a (non-empty) mapping.
+func addedTutorialNames(doc *yaml.Node) []string {
+	node := configDiffMappingAtPath(doc, "tutorials")
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	var names []string
+	for i := 0; i < len(node.Content)-1; i += 2 {
+		names = append(names, node.Content[i].Value)
+	}
+	return names
+}
+
 // expandRuneVars expands only the variables for which lookup returns
 // ok; every other $VAR / ${VAR} reference is left verbatim in the
 // result. It parses s as a single shell word with mvdan/sh so brace

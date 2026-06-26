@@ -209,6 +209,24 @@ func TestTutorialRunnerComplete(t *testing.T) {
 	assert.Empty(t, drain(it))
 }
 
+func TestTutorialRunnerRegister(t *testing.T) {
+	t.Parallel()
+	r, _ := newTestRunner(nil)
+	assert.False(t, r.has("intro"))
+
+	tut := &tutStub{exitOn: 'q'}
+	assert.True(t, r.register("intro", tut), "first register should add")
+	assert.True(t, r.has("intro"))
+
+	assert.False(t, r.register("intro", &tutStub{}),
+		"register must not overwrite an existing tutorial")
+
+	require.NoError(t, r.HandleCommand(context.Background(),
+		textapi.Command{Name: "tutorial", Args: []string{"start", "intro"}}))
+	assert.NotNil(t, r.overlay, "registered tutorial should be startable")
+	assert.Equal(t, "intro", r.activeName)
+}
+
 // TestTutorialRunnerBasicsFlowEndToEnd asserts that the runner drives
 // a real starlark tutorial through the full basics flow and clears the
 // overlay once the final step exits.

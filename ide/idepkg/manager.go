@@ -896,6 +896,12 @@ func (e ConfigMergeEvent) AddedExtensionIDs() []string {
 	return addedExtensionIDs(e.Diff)
 }
 
+// AddedTutorialNames returns the names added under the top-level "tutorials"
+// key of the applied diff, or nil when the diff did not add any.
+func (e ConfigMergeEvent) AddedTutorialNames() []string {
+	return addedTutorialNames(e.Diff)
+}
+
 // ConfigMergeResult reports what a post-merge hook did. LiveApplied is true
 // when the hook applied changes to the running process such that a full
 // restart is not required for new work to observe them.

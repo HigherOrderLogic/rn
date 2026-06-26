@@ -65,6 +65,7 @@ type IDE struct {
 	workspaceHandler *workspaceManagerHandler
 	root             shaderRunner
 	tutorial         tutorialRunner
+	tutorialsConfig  tutorialsConfig
 	planLockdown     *planLockdownRunner
 	planMonitor      *ideplan.Monitor
 	publishEventFn   EventPublisher
@@ -501,6 +502,7 @@ func (i *IDE) init(
 	// subscribes after it has been built below.
 	commandObserver := newCommandObserverRegistry()
 	i.workspaceHandler.packageConfigMergeHook = op.packageConfigMergeHook
+	i.workspaceHandler.tutorialsInstalled = i.onTutorialsInstalled
 	err = i.workspaceHandler.init(cwdURI, homeDirURI, workspaceManager,
 		i.ideConfig.notificationsConfig(), i.ideConfig, i.storage, dataDir,
 		i.publishEvent,

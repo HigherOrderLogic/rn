@@ -909,3 +909,69 @@ func TestConfigMergeEventAddedExtensionIDs(t *testing.T) {
 	e := ConfigMergeEvent{Diff: doc}
 	assert.Equal(t, []string{"rune-agent"}, e.AddedExtensionIDs())
 }
+
+func TestAddedTutorialNames(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		doc  string
+		want []string
+	}{
+		{
+			name: "single tutorial added",
+			doc:  "tutorials:\n  go-intro: go-intro.star\n",
+			want: []string{"go-intro"},
+		},
+		{
+			name: "multiple tutorials added",
+			doc:  "tutorials:\n  go-intro: a.star\n  rust-intro: b.star\n",
+			want: []string{"go-intro", "rust-intro"},
+		},
+		{
+			name: "tutorials alongside other keys",
+			doc:  "extensions:\n  rune-agent:\n    path: a\ntutorials:\n  go-intro: a.star\n",
+			want: []string{"go-intro"},
+		},
+		{
+			name: "extensions only is not a tutorial",
+			doc:  "extensions:\n  rune-agent:\n    path: a\n",
+			want: nil,
+		},
+		{
+			name: "no tutorials key",
+			doc:  "settings:\n  theme: dark\n",
+			want: nil,
+		},
+		{
+			name: "empty doc",
+			doc:  "",
+			want: nil,
+		},
+		{
+			name: "tutorials present but empty mapping",
+			doc:  "tutorials: {}\n",
+			want: nil,
+		},
+		{
+			name: "tutorials scalar (non-mapping) yields nothing",
+			doc:  "tutorials: nonsense\n",
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc := mustParseYAML(t, tt.doc)
+			got := addedTutorialNames(doc)
+			sort.Strings(got)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConfigMergeEventAddedTutorialNames(t *testing.T) {
+	t.Parallel()
+	doc := mustParseYAML(t, "tutorials:\n  go-intro: go-intro.star\n")
+	e := ConfigMergeEvent{Diff: doc}
+	assert.Equal(t, []string{"go-intro"}, e.AddedTutorialNames())
+}

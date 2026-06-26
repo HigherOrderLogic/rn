@@ -75,6 +75,26 @@ func (r *tutorialRunner) clearActive() {
 	r.activeName = ""
 }
 
+// register adds a tutorial under name and reports whether it was added. It
+// returns false without overwriting when a tutorial is already registered
+// under name. It must be called on the event loop because the tutorials map
+// is read there by HandleCommand and Complete.
+func (r *tutorialRunner) register(name string, t idetutorial.Tutorial) bool {
+	if _, ok := r.tutorials[name]; ok {
+		return false
+	}
+	if r.tutorials == nil {
+		r.tutorials = make(map[string]idetutorial.Tutorial, 1)
+	}
+	r.tutorials[name] = t
+	return true
+}
+
+func (r *tutorialRunner) has(name string) bool {
+	_, ok := r.tutorials[name]
+	return ok
+}
+
 func (r *tutorialRunner) Resize(width, height int) {
 	r.width, r.height = width, height
 	if r.overlay != nil {

@@ -1803,6 +1803,7 @@ func TestWorkspaceConfig(t *testing.T) {
 			nopShutdownShaderConfig(), loadingShaderConfig{}, openShaderConfig{},
 			component.FrameCharSetDefault())
 		storage := localstorage.New(context.Background(), dir, docbson.Marshaler())
+		m.tutorialsInstalled = func([]string) (bool, error) { return false, nil }
 		err = m.workspaceManagerHandler.init(&uri, homeURI, manager,
 			notificationsConfig(), cfg, storage, dir,
 			func(term.Event) bool {
@@ -5028,6 +5029,7 @@ func newTestWorkspaceManagerHandlerWithManagerMu(
 	if publish == nil {
 		publish = func(term.Event) bool { return true }
 	}
+	m.tutorialsInstalled = func([]string) (bool, error) { return false, nil }
 	err = m.workspaceManagerHandler.init(uri, homeURI, manager,
 		notiConfig, cfg, storage, dir, publish, runner, mu, extensions,
 		func() (ideConfig, error) { return cfg, nil },

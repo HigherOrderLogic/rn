@@ -154,6 +154,11 @@ type workspaceManagerHandler struct {
 
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
 
+	// tutorialsInstalled is a required dependency wired by the IDE at
+	// construction; afterPackageConfigMerge calls it unconditionally and a nil
+	// value is a construction bug that must panic, not be guarded.
+	tutorialsInstalled func(names []string) (bool, error)
+
 	commandObserver *commandObserverRegistry
 
 	union               handler.FrameUnion
@@ -446,6 +451,9 @@ func (h *workspaceManagerHandler) init(
 ) (err error) {
 	ctx := context.Background()
 
+	if h.tutorialsInstalled == nil {
+		panic("workspaceManagerHandler.init: tutorialsInstalled is required")
+	}
 	h.storage = storage
 	h.ideStorage = storageapi.WithPartition(h.storage, "ide")
 	router, err := llmrouter.New(cfg.llmConfig(), sixDir, h.storage)
@@ -1077,7 +1085,11 @@ func (h *workspaceManagerHandler) startInstalledExtensions(ids []string) bool {
 // extension processes spawned by startInstalledExtensions inherit os.Environ()
 // at fork time; starting them first would deny them those variables. Extension
 // start failures are logged (as in initExtensions), so the returned error is
-// the stored hook's, and LiveApplied is OR'd across both paths.
+// the stored hook's, and LiveApplied is OR'd across both paths. Any tutorial
+// added under the `tutorials:` config key is live-registered (and the user
+// prompted) through tutorialsInstalled so a freshly-installed tutorial is
+// runnable without a restart; its error is joined onto the returned error so
+// idepkg can notify in one place.
 func (h *workspaceManagerHandler) afterPackageConfigMerge(
 	event idepkg.ConfigMergeEvent,
 ) (idepkg.ConfigMergeResult, error) {
@@ -1089,6 +1101,12 @@ func (h *workspaceManagerHandler) afterPackageConfigMerge(
 
 	startedExtension := h.startInstalledExtensions(event.AddedExtensionIDs())
 	result.LiveApplied = result.LiveApplied || startedExtension
+
+	if names := event.AddedTutorialNames(); len(names) > 0 {
+		registered, tutErr := h.tutorialsInstalled(names)
+		result.LiveApplied = result.LiveApplied || registered
+		err = errors.Join(err, tutErr)
+	}
 	return result, err
 }
 

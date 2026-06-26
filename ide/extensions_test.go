@@ -32,6 +32,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -261,6 +262,58 @@ func TestAfterPackageConfigMerge(t *testing.T) {
 		assert.True(t, result.LiveApplied)
 		require.Len(t, home.runCalls(), 1)
 	})
+
+	t.Run("tutorials added invoke tutorialsInstalled and still run hook", func(t *testing.T) {
+		t.Parallel()
+		var hookCalls int
+		h, _ := newHandler(t, func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error) {
+			hookCalls++
+			return idepkg.ConfigMergeResult{}, nil
+		})
+		var gotNames []string
+		h.tutorialsInstalled = func(names []string) (bool, error) {
+			gotNames = names
+			return true, nil
+		}
+		event := idepkg.ConfigMergeEvent{
+			Diff: mustYAMLDoc(t, "tutorials:\n  go-intro: go-intro.star\n"),
+		}
+		result, err := h.afterPackageConfigMerge(event)
+		require.NoError(t, err)
+		assert.True(t, result.LiveApplied)
+		assert.Equal(t, 1, hookCalls)
+		assert.Equal(t, []string{"go-intro"}, gotNames)
+	})
+
+	t.Run("no tutorials added does not invoke tutorialsInstalled", func(t *testing.T) {
+		t.Parallel()
+		h, _ := newHandler(t, nil)
+		var called bool
+		h.tutorialsInstalled = func([]string) (bool, error) {
+			called = true
+			return true, nil
+		}
+		event := idepkg.ConfigMergeEvent{
+			Diff: mustYAMLDoc(t, "extensions:\n  rune-agent:\n    path: rune-agent-bin\n"),
+		}
+		_, err := h.afterPackageConfigMerge(event)
+		require.NoError(t, err)
+		assert.False(t, called)
+	})
+
+	t.Run("tutorialsInstalled error is joined onto returned error", func(t *testing.T) {
+		t.Parallel()
+		h, _ := newHandler(t, nil)
+		h.tutorialsInstalled = func([]string) (bool, error) {
+			return false, errors.New("tutorial boom")
+		}
+		event := idepkg.ConfigMergeEvent{
+			Diff: mustYAMLDoc(t, "tutorials:\n  go-intro: go-intro.star\n"),
+		}
+		_, err := h.afterPackageConfigMerge(event)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "tutorial boom")
+	})
 }
 
 // TestPkgInstallStartsExtensionWithPackageEnv is the black-box regression for
@@ -350,6 +403,215 @@ func TestPkgInstallStartsExtensionWithPackageEnv(t *testing.T) {
 	assert.Equal(t, envVal, started.envVal,
 		"extension must be started after the package gui.env was applied so it "+
 			"inherits the package environment")
+}
+
+// TestPkgInstallRegistersTutorialLive is the black-box regression for the
+// install-time tutorial registration contract, mirroring
+// TestPkgInstallStartsExtensionWithPackageEnv for the extensions path. It
+// drives a real `pkg install <pkg>` through a real IDE against a real package
+// manager. The installed package's config.yaml adds a `tutorials:` entry whose
+// .star file ships on disk. Before this feature a freshly-installed tutorial
+// was invisible until restart because `tutorial start <name>` resolves only
+// from the live tutorialRunner.tutorials map; the install must now register it
+// live, so the tutorial is startable without a restart.
+func TestPkgInstallRegistersTutorialLive(t *testing.T) {
+	const (
+		pkgID    = "tutpkg"
+		tutName  = "go-intro"
+		tutorial = "def run():\n    floating_window(title=\"hi\", text=\"hello\")\n" +
+			"tutorial(entry=run)\n"
+	)
+
+	dir := t.TempDir()
+	tutPath := filepath.Join(dir, "go-intro.star")
+	require.NoError(t, os.WriteFile(tutPath, []byte(tutorial), 0o644))
+
+	configPath := filepath.Join(dir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("editor:\n  mode: modal\n"), 0o644))
+
+	wsFile := filepath.Join(dir, "seed.go")
+	require.NoError(t, os.WriteFile(wsFile, nil, 0o644))
+
+	pkgs := idepkgtest.MakePackages(release.Package{Name: pkgID, Latest: "1"})
+	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: pkgID, Version: "1"}})
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.SetMissProgressComplete(true)
+	rm.SetTarball(pkgID, makeTutorialPkgTarball(t, map[string]string{tutName: tutPath}))
+
+	mu := new(sync.Mutex)
+	i, err := New(dir, configPath, dir, newTestStorage(t, dir),
+		WithReleaseManager(rm),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(mu),
+		// A synchronous scheduler runs onTutorialsInstalled's registration
+		// and prompt closure inline on the install goroutine's scheduleFn
+		// call, so the test observes the live registration deterministically.
+		WithScheduleNextTick(func(fn func()) bool {
+			fn()
+			return true
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	_ = i.Ready()
+
+	uri, err := workspaceapi.CurrentUserHostURI(wsFile)
+	require.NoError(t, err)
+	mu.Lock()
+	require.NoError(t, i.Open(uri))
+	i.root.Resize(80, 24)
+	mu.Unlock()
+
+	require.False(t, tutorialRegistered(i, mu, tutName),
+		"tutorial must not be registered before install")
+
+	h := pkgshell.New(pkgshell.Config{
+		Manager:       i.workspaceHandler.pkgmanager.pkg,
+		UpdateChecker: i.workspaceHandler.pkgmanager.uc,
+	})
+	mu.Lock()
+	_, err = h.HandleCommand(context.Background(), repl.Command{
+		Name: pkgshell.CommandName,
+		Args: []string{"install", pkgID},
+	}, repl.NopProgressWriter())
+	mu.Unlock()
+	require.NoError(t, err)
+
+	merged, err := os.ReadFile(configPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(merged), tutName,
+		"install must merge the tutorials entry into the user config")
+
+	require.Eventually(t, func() bool {
+		return tutorialRegistered(i, mu, tutName)
+	}, 10*time.Second, 20*time.Millisecond,
+		"installing a package with a tutorials entry must register the tutorial live")
+}
+
+// TestPkgInstallMultipleTutorialsPromptsOnce asserts that when a single install
+// adds more than one tutorial, every tutorial is registered live but the user
+// is prompted exactly once (for the first tutorial). Prompting per tutorial
+// would stack overlapping floating windows on top of each other.
+func TestPkgInstallMultipleTutorialsPromptsOnce(t *testing.T) {
+	const pkgID = "multitutpkg"
+	tutNames := []string{"alpha-intro", "beta-intro"}
+	tutorialSrc := "def run():\n    floating_window(title=\"hi\", text=\"hello\")\n" +
+		"tutorial(entry=run)\n"
+
+	dir := t.TempDir()
+	tutorials := make(map[string]string, len(tutNames))
+	for _, name := range tutNames {
+		p := filepath.Join(dir, name+".star")
+		require.NoError(t, os.WriteFile(p, []byte(tutorialSrc), 0o644))
+		tutorials[name] = p
+	}
+
+	configPath := filepath.Join(dir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("editor:\n  mode: modal\n"), 0o644))
+
+	wsFile := filepath.Join(dir, "seed.go")
+	require.NoError(t, os.WriteFile(wsFile, nil, 0o644))
+
+	pkgs := idepkgtest.MakePackages(release.Package{Name: pkgID, Latest: "1"})
+	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: pkgID, Version: "1"}})
+	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+	rm.SetMissProgressComplete(true)
+	rm.SetTarball(pkgID, makeTutorialPkgTarball(t, tutorials))
+
+	mu := new(sync.Mutex)
+	i, err := New(dir, configPath, dir, newTestStorage(t, dir),
+		WithReleaseManager(rm),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(mu),
+		WithScheduleNextTick(func(fn func()) bool {
+			fn()
+			return true
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	_ = i.Ready()
+
+	uri, err := workspaceapi.CurrentUserHostURI(wsFile)
+	require.NoError(t, err)
+	mu.Lock()
+	require.NoError(t, i.Open(uri))
+	i.root.Resize(80, 24)
+	mu.Unlock()
+
+	require.Equal(t, 0, countFloatingWindows(i, mu),
+		"no prompt should be open before install")
+
+	h := pkgshell.New(pkgshell.Config{
+		Manager:       i.workspaceHandler.pkgmanager.pkg,
+		UpdateChecker: i.workspaceHandler.pkgmanager.uc,
+	})
+	mu.Lock()
+	_, err = h.HandleCommand(context.Background(), repl.Command{
+		Name: pkgshell.CommandName,
+		Args: []string{"install", pkgID},
+	}, repl.NopProgressWriter())
+	mu.Unlock()
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return tutorialRegistered(i, mu, tutNames[0]) &&
+			tutorialRegistered(i, mu, tutNames[1])
+	}, 10*time.Second, 20*time.Millisecond,
+		"every installed tutorial must be registered live")
+
+	assert.Equal(t, 1, countFloatingWindows(i, mu),
+		"installing multiple tutorials must open exactly one prompt, not one per tutorial")
+}
+
+func countFloatingWindows(i *IDE, mu sync.Locker) int {
+	mu.Lock()
+	defer mu.Unlock()
+	n := 0
+	i.Browser().IterateWindows(func(w browser.Window) {
+		if w.IsFloating() {
+			n++
+		}
+	})
+	return n
+}
+
+func tutorialRegistered(i *IDE, mu sync.Locker, name string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	return i.tutorial.has(name)
+}
+
+// makeTutorialPkgTarball builds a gzipped tar of a package whose config.yaml
+// adds a tutorials entry for each name->path in tutorials. Installing it
+// exercises the real config-merge and live tutorial-registration path.
+func makeTutorialPkgTarball(t *testing.T, tutorials map[string]string) []byte {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("tutorials:\n")
+	for name, tutPath := range tutorials {
+		b.WriteString("  " + name + ": " + tutPath + "\n")
+	}
+	configYAML := b.String()
+	files := map[string]string{
+		"config.yaml":    configYAML,
+		"lib/readme.txt": "# lib placeholder\n",
+	}
+	var buf bytes.Buffer
+	gzw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gzw)
+	for name, content := range files {
+		require.NoError(t, tw.WriteHeader(&tar.Header{
+			Name: name, Mode: 0o644, Size: int64(len(content)),
+		}))
+		_, err := tw.Write([]byte(content))
+		require.NoError(t, err)
+	}
+	require.NoError(t, tw.Close())
+	require.NoError(t, gzw.Close())
+	return buf.Bytes()
 }
 
 // recordingRunner is a fake extension.Runner that records the Run calls it
@@ -485,6 +747,7 @@ func newPkgInstallExtHandler(
 	m := new(testWorkspaceManagerHandler)
 	m.workspaceManagerHandler = new(workspaceManagerHandler)
 	m.packageConfigMergeHook = mergeHook
+	m.tutorialsInstalled = func([]string) (bool, error) { return false, nil }
 
 	mu := new(sync.Mutex)
 	interrupter := term.NopInterrupter()
@@ -494,8 +757,8 @@ func newPkgInstallExtHandler(
 		component.FrameCharSetDefault())
 
 	dir := t.TempDir()
-	
-manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
+
+	manager := workspace.NewManager(cfg.workspace(), inlineSchedule)
 	manager.RegisterScheme(workspace.FileScheme, workspace.NewFileScheme)
 
 	notiCfg := notificationsConfig()
