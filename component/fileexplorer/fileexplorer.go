@@ -1015,9 +1015,12 @@ func graftBaseChildrenFiltered(dst, base *node, claimed map[rune]bool) {
 }
 
 // rewriteBufferFromTree renders tree into the shared buffer and
-// rebuilds rowIDs. Any subscribers of the buffer (e.g. the text
-// editor) observe the edit via their OnDidEdit path; OUR own
-// OnDidEdit is short-circuited via c.internal.
+// rebuilds rowIDs. This is a programmatic refresh, not a user edit, so
+// it is dispatched via ReloadContents, which bypasses usage subscribers
+// — the editor's copy-on-delete (text.WithCopyDelete) must not copy the
+// replaced tree text into the clipboard. OUR own OnDidEdit (a root
+// Subscriber, which ReloadContents still notifies) is short-circuited
+// via c.internal.
 func (c *Component) rewriteBufferFromTree(tree *node) {
 	flat := flatten(tree)
 	rowIDs := make([]rune, 0, len(flat))
@@ -1030,7 +1033,7 @@ func (c *Component) rewriteBufferFromTree(tree *node) {
 		rowIDs = append(rowIDs, n.id)
 	}
 	c.internal = true
-	c.buf.ReplaceContext(context.Background(), b.String())
+	c.buf.ReloadContents(context.Background(), b.String())
 	c.applyIndentAttr(flat)
 	c.applyIconAttr(flat)
 	c.internal = false

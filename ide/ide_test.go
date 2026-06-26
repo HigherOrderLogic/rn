@@ -1052,6 +1052,101 @@ command:
 		"terminal did not receive pasted secret; screen was:\n%s", resultText)
 }
 
+// TestE2EFileExplorerRefreshDoesNotClobberClipboard reproduces the bug
+// where switching git branches (which changes files under the workspace
+// root and fires FS-watcher events) clobbers the user's system clipboard
+// with the file explorer's directory listing.
+//
+// The explorer reuses the standard editor, whose copy-on-delete
+// subscriber (text.WithCopyDelete) copies any deleted buffer content to
+// the default register. When an FS event drives refreshTree ->
+// Component.Refresh -> rewriteBufferFromTree, the old tree text is
+// deleted from the shared cell.Buffer and was being copied into the
+// default register. A programmatic refresh must not touch the clipboard;
+// only a real user delete should.
+func TestE2EFileExplorerRefreshDoesNotClobberClipboard(t *testing.T) {
+	rawDir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(rawDir)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "alpha.go"), []byte("package a\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "beta.go"), []byte("package b\n"), 0o644))
+
+	dataDir := t.TempDir()
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+clipboard: memory
+editor:
+  mode: modal
+command:
+  key: "<c-\\\\>"
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(80, 24)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	// Open the file explorer via the real :fexplorer command path.
+	mu.Lock()
+	ex := i.workspaceHandler.focusEx()
+	require.NoError(t, ex.fexplorer(context.Background()))
+	require.NotNil(t, ex.fileExplorerWin, "explorer window should be open")
+	explorer := ex.fileExplorerHandler
+	require.NotNil(t, explorer)
+	mu.Unlock()
+
+	// Prime the default register with a sentinel the user "copied"
+	// earlier. A programmatic refresh must leave this untouched.
+	const sentinel = "user-copied-sentinel"
+	mu.Lock()
+	require.NoError(t, ex.clip.Copy(
+		clipboard.DefaultRegisterID, clipboard.Data{Text: sentinel}))
+	mu.Unlock()
+
+	// Add a sibling file on disk and drive the explorer's real
+	// FS-event handler, exactly as the workspace watcher does when a
+	// branch switch changes the working tree.
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "gamma.go"), []byte("package g\n"), 0o644))
+	gammaURI, err := workspaceapi.ParseURI("file://" + filepath.Join(dir, "gamma.go"))
+	require.NoError(t, err)
+
+	mu.Lock()
+	explorer.onFSEvent(context.Background(),
+		textapi.Event{Type: textapi.EventTypeCreate, URI: gammaURI})
+	mu.Unlock()
+	i.WaitInflight()
+
+	mu.Lock()
+	data, err := ex.clip.Paste(clipboard.DefaultRegisterID)
+	mu.Unlock()
+	require.NoError(t, err)
+	require.Equal(t, sentinel, data.Text,
+		"file explorer FS-driven refresh must not clobber the clipboard; "+
+			"got:\n%s", data.Text)
+}
+
 type mockShader struct {
 	called bool
 	frames []int
