@@ -614,6 +614,9 @@ func (e *ex) tabprevious(_ context.Context, args ...string) error {
 	if e.invokeWindow() == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
 	}
+	if e.fileExplorerWin != nil && e.invokeWindow() == e.fileExplorerWin {
+		return nil
+	}
 	b.PreviousTab(e.invokeWindow())
 	return nil
 }
@@ -623,6 +626,9 @@ func (e *ex) tabnext(_ context.Context, args ...string) error {
 	if e.invokeWindow() == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
 	}
+	if e.fileExplorerWin != nil && e.invokeWindow() == e.fileExplorerWin {
+		return nil
+	}
 	b.NextTab(e.invokeWindow())
 	return nil
 }
@@ -630,6 +636,9 @@ func (e *ex) tabnext(_ context.Context, args ...string) error {
 func (e *ex) tabfocus(_ context.Context, args ...string) error {
 	if len(args) < 1 {
 		return errInvalidTab
+	}
+	if e.fileExplorerWin != nil && e.invokeWindow() == e.fileExplorerWin {
+		return nil
 	}
 	idxStr := args[0]
 	idx, err := strconv.Atoi(idxStr)
@@ -658,6 +667,10 @@ func (e *ex) tabclose(_ context.Context, args ...string) error {
 	win := e.invokeWindow()
 	if win == e.companionTerminalWin {
 		return e.toggleCompanionTerminal()
+	}
+	if e.fileExplorerWin != nil && win == e.fileExplorerWin {
+		e.closeFileExplorerWindow()
+		return nil
 	}
 	content, err := win.Content()
 	if err != nil {
@@ -1938,21 +1951,27 @@ func (e *ex) fexplorer(_ context.Context, args ...string) error {
 		}
 		_, _ = e.comp.SetFocus(e.fileExplorerWin)
 	} else {
-		prev := e.fileExplorerTarget
-		_ = e.fileExplorerWin.Close()
-		e.fileExplorerWin = nil
 		// Closing the explorer with unflushed buffer edits
 		// implicitly discards them. If an FS event arrived
 		// while the user was editing, replay it now so the
 		// next open shows the up-to-date tree.
-		if e.fileExplorerHandler != nil {
-			e.fileExplorerHandler.onWindowClosed()
-		}
-		if prev != nil && !prev.Closed() {
-			_, _ = e.comp.SetFocus(prev)
-		}
+		e.closeFileExplorerWindow()
 	}
 	return nil
+}
+
+func (e *ex) closeFileExplorerWindow() {
+	prev := e.fileExplorerTarget
+	if e.fileExplorerWin != nil {
+		_ = e.fileExplorerWin.Close()
+		e.fileExplorerWin = nil
+	}
+	if e.fileExplorerHandler != nil {
+		e.fileExplorerHandler.onWindowClosed()
+	}
+	if prev != nil && !prev.Closed() {
+		_, _ = e.comp.SetFocus(prev)
+	}
 }
 
 func (e *ex) terminalnewtab(_ context.Context, args ...string) error {

@@ -611,6 +611,86 @@ func TestFileExplorerRestoredAsTabNotDuplicated(t *testing.T) {
 	require.NotNil(t, b.fileExplorerWin)
 }
 
+// TestFileExplorerTabCloseClosesWindow verifies that :tabclose on the
+// focused file explorer window tears down the whole window (like
+// toggling it off) instead of swapping in a free tab / wallpaper.
+func TestFileExplorerTabCloseClosesWindow(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	defer b.Close()
+	b.Resize(30, 15)
+
+	prev := b.invokeWindow()
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.NotNil(t, b.fileExplorerWin)
+	require.Equal(t, b.fileExplorerWin, b.invokeWindow())
+
+	require.NoError(t, b.tabclose(context.Background()))
+	require.Nil(t, b.fileExplorerWin)
+	require.Equal(t, prev, b.invokeWindow(), "focus should return to the previous target")
+}
+
+// TestFileExplorerTabSwitchNoOp verifies that :tabnext, :tabprevious
+// and :tabfocus are silent no-ops while the file explorer window is
+// focused, so its raw content can never be swapped for a free tab.
+func TestFileExplorerTabSwitchNoOp(t *testing.T) {
+	uri, err := workspaceapi.ParseURI("memory:///")
+	require.NoError(t, err)
+	scheme, err := workspace.NewMemoryScheme(context.Background(), config.NopConfig(), uri)
+	require.NoError(t, err)
+
+	b := newExForTestingWithWorkspace(t, workspace.NewSchemeWorkspace(uri, scheme, inlineSchedule),
+		texttest.NopEditor(), vte.DefaultConfig(), nopPublishEvent,
+		clipboard.NewInMemory(), text.WithCommandKey(testCommandKey),
+		text.WithCommandOverlayConfig(testCommandOverlayConfig()))
+	defer b.Close()
+	b.Resize(30, 15)
+
+	require.NoError(t, b.fexplorer(context.Background()))
+	require.Equal(t, b.fileExplorerWin, b.invokeWindow())
+
+	contentIsExplorer := func() {
+		t.Helper()
+		content, err := b.fileExplorerWin.Content()
+		require.NoError(t, err)
+		_, ok := content.(*fileExplorerHandler)
+		require.True(t, ok, "explorer window content should stay the file explorer handler")
+	}
+
+	require.NoError(t, b.tabnext(context.Background()))
+	contentIsExplorer()
+	require.NoError(t, b.tabprevious(context.Background()))
+	contentIsExplorer()
+	require.NoError(t, b.tabfocus(context.Background(), "1"))
+	contentIsExplorer()
+
+	require.NotNil(t, b.fileExplorerWin, "explorer window should still be open")
+}
+
+// TestTabSwitchUnaffectedByExplorerGuard is a regression guard that the
+// new fexplorer special-casing in the tab commands does not break
+// normal tab switching in an unrelated window.
+func TestTabSwitchUnaffectedByExplorerGuard(t *testing.T) {
+	b := newExForTesting(t, texttest.NopEditor())
+	defer b.Close()
+	b.Resize(30, 15)
+
+	require.NoError(t, b.terminalnew(context.Background(), "first"))
+	require.NoError(t, b.terminalnewtab(context.Background(), "second"))
+	require.NotEmpty(t, b.comp.Browser().Tabs())
+
+	require.Nil(t, b.fileExplorerWin)
+	require.NoError(t, b.tabprevious(context.Background()))
+	require.NoError(t, b.tabnext(context.Background()))
+}
+
 // trackingWorkspaceRegistry is a text.WorkspaceCommandRegistry that
 // records every subscribe/unsubscribe and fails fast on duplicates —
 // mirroring the behaviour of the real per-workspace registry that
@@ -6557,10 +6637,10 @@ func (v *testVte) Snapshot() (vte.Snapshot, error) {
 		title = "terminal"
 	}
 	return vte.Snapshot{
-		Schema:  1,
-		Title:   title,
-		Width:   10,
-		Height:  10,
+		Schema: 1,
+		Title:  title,
+		Width:  10,
+		Height: 10,
 		ScrollOffset: term.Coordinates{
 			Y: 2,
 		},
