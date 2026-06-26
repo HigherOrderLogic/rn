@@ -142,6 +142,19 @@ files. Fill this one with a terminal.
 Open a terminal here: """ + keypress("terminalneworsplit") + """.
 """
 
+modal_surfaces_md = """\
+You picked **modal** editor mode, and in modal mode every input surface
+is modal, not just the editor. This includes the terminal, Rune's
+shell, and the file explorer.
+
+The cursor shape tells you which mode a surface is in: a block cursor
+means NORMAL mode, a bar cursor means INSERT mode.
+
+So when a terminal or shell is focused and you want to open the command
+prompt (`""" + ck + """`), first switch back to NORMAL mode with
+`<esc>`.
+"""
+
 split_direction_md = """\
 Splits stack in one direction until you flip it. Flip it now so the
 next split lands the other way.
@@ -352,6 +365,13 @@ def teach_terminal():
                     "is empty the terminal fills it in place."),
     )
     notify(level = success, message = "You opened a terminal.")
+
+
+def teach_modal_surfaces():
+    if mode != "modal":
+        return
+    floating_window(title = "Modal everywhere", text = modal_surfaces_md,
+                    dismiss_keys = [ck])
 
 
 def teach_split_direction():
@@ -678,6 +698,7 @@ def run():
     teach_layout()
     teach_split_window()
     teach_terminal()
+    teach_modal_surfaces()
     teach_split_direction()
     teach_terminal_split()
     teach_focus_window()
@@ -694,4 +715,4 @@ def run():
     teach_help()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "24", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "25", entry = run)

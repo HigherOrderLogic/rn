@@ -65,7 +65,34 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "24", tut.Version())
+	assert.Equal(t, "25", tut.Version())
+}
+
+// TestBasicsTutorialParsesModalMode asserts the embedded basics
+// tutorial also parses under modal editor mode, exercising the
+// modal-only branches (e.g. the modal-surfaces step).
+func TestBasicsTutorialParsesModalMode(t *testing.T) {
+	t.Parallel()
+
+	tut, err := starlarktutorial.New(
+		"basics", basicsTutorial,
+		nil,
+		nil,
+		nil,
+		nil,
+		term.Attributes{},
+		component.FrameCharSet{},
+		browser.PromptConfig{},
+		nil,
+		nil,
+		term.KeyComb{Ch: ':'},
+		"modal",
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, tut)
+	assert.Equal(t, "25", tut.Version())
 }
 
 // TestEmbeddedTutorialOptionsRegistersBasics asserts that the embedded
