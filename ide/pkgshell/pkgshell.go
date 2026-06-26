@@ -82,6 +82,12 @@ var commandManual = textapi.CommandManual{
 			Synopsis: "<package>",
 		},
 		{
+			Name: "describe",
+			Summary: "Show a package's notes and the notes for a release version " +
+				"in formatted markdown. If version is omitted, the latest version is used.",
+			Synopsis: "<package> [<version>]",
+		},
+		{
 			Name:    "update-all",
 			Summary: "Upgrades all installed packages to the latest version.",
 		},
@@ -128,7 +134,7 @@ func New(cfg Config) *Handler {
 }
 
 var subcommandNames = []string{
-	"install", "remove", "use", "current", "update-all", "update-check",
+	"install", "remove", "use", "current", "describe", "update-all", "update-check",
 }
 
 // HandleCommand satisfies repl.CommandHandler. The shell splits the
@@ -150,6 +156,8 @@ func (h *Handler) HandleCommand(
 		return h.handleUse(ctx, args)
 	case "current":
 		return h.handleCurrent(ctx, args)
+	case "describe":
+		return h.handleDescribe(ctx, args)
 	case "update-all":
 		return h.handleUpdateAll(ctx, pw)
 	case "update-check":
@@ -175,6 +183,8 @@ func (h *Handler) Complete(
 	rest := args[1:]
 	switch args[0] {
 	case "install":
+		return h.completePkgInstall(ctx, rest)
+	case "describe":
 		return h.completePkgInstall(ctx, rest)
 	case "remove", "use":
 		return h.completePkgInstalled(ctx, rest, true)

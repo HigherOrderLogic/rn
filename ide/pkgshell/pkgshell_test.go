@@ -69,14 +69,15 @@ func newHandlerForTest(t *testing.T) (*Handler, *idepkgtest.Notifications) {
 	pkgs := idepkgtest.MakePackages(
 		release.Package{
 			Name: "go", Latest: "1",
+			Notes:    "Go programming language.",
 			Metadata: map[string]string{languageMetadataKey: "true"},
 		},
-		release.Package{Name: "ripgrep", Latest: "1"},
+		release.Package{Name: "ripgrep", Latest: "1", Notes: "Fast grep."},
 	)
-	bundles := idepkgtest.MakeBundles([]release.Bundle{
-		{Package: "go", Version: "1"},
-		{Package: "ripgrep", Version: "1"},
-	})
+	bundles := idepkgtest.MakeBundles(
+		[]release.Bundle{{Package: "go", Version: "1", Notes: "Go release one."}},
+		[]release.Bundle{{Package: "ripgrep", Version: "1", Notes: "ripgrep release one."}},
+	)
 	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 	n := idepkgtest.NewNotifications(t)
 	mgr := newManager(t, n, rm)
@@ -406,4 +407,72 @@ func TestNewPanicsOnNilManager(t *testing.T) {
 		assert.NotNil(t, recover(), "expected panic for nil manager")
 	}()
 	_ = New(Config{Manager: nil})
+}
+
+func TestDescribeMarkdown(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+		wants   []string
+	}{
+		{
+			name:  "explicit version",
+			args:  []string{"ripgrep", "1"},
+			wants: []string{"# ripgrep", "**1**", "Fast grep.", "ripgrep release one."},
+		},
+		{
+			name:  "resolves latest",
+			args:  []string{"go"},
+			wants: []string{"# go", "**1**", "Go programming language.", "Go release one.", "language"},
+		},
+		{
+			name:    "missing package name",
+			args:    nil,
+			wantErr: "package name is missing",
+		},
+		{
+			name:    "unknown package",
+			args:    []string{"nope"},
+			wantErr: "not found",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h, _ := newHandlerForTest(t)
+			it, err := h.handleDescribe(context.Background(), tc.args)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				require.Nil(t, it)
+				return
+			}
+			require.NoError(t, err)
+			v, ok := it.Next(context.Background())
+			require.True(t, ok)
+			require.NotNil(t, v)
+		})
+	}
+}
+
+func TestDescribeMarkdownBuilder(t *testing.T) {
+	t.Parallel()
+	pkg := release.Package{
+		Name:     "go",
+		Notes:    "Go programming language.",
+		Metadata: map[string]string{languageMetadataKey: "true"},
+	}
+	md := describeMarkdown(pkg, "1", "Go release one.")
+	assert.Contains(t, md, "# go")
+	assert.Contains(t, md, "**1**")
+	assert.Contains(t, md, "## Package notes")
+	assert.Contains(t, md, "Go programming language.")
+	assert.Contains(t, md, "## Release 1 notes")
+	assert.Contains(t, md, "Go release one.")
+	assert.Contains(t, md, "language")
+
+	empty := describeMarkdown(release.Package{Name: "x"}, "2", "")
+	assert.Contains(t, empty, "_No package notes._")
+	assert.Contains(t, empty, "_No release notes._")
 }

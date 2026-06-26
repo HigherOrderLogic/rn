@@ -138,6 +138,56 @@ func (h *Handler) handleCurrent(
 		fmt.Sprintf("Version **%s** of package **%s** is in use", version, pkgID)), nil
 }
 
+func (h *Handler) handleDescribe(
+	ctx context.Context, args []string,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) == 0 {
+		return nil, errors.New("package name is missing")
+	}
+	pkgID := args[0]
+	pkg, err := h.mgr.DescribePackage(ctx, pkgID)
+	if err != nil {
+		return nil, err
+	}
+	version := release.Version(release.Latest)
+	if len(args) >= 2 {
+		version = release.Version(args[1])
+	}
+	if version == release.Latest {
+		version, err = h.getLatestVersion(ctx, pkgID)
+		if err != nil {
+			return nil, err
+		}
+	}
+	bundle, err := h.mgr.DescribeRelease(ctx, pkgID, string(version))
+	if err != nil {
+		return nil, err
+	}
+	return markdownOutput(describeMarkdown(pkg, version, bundle.Notes)), nil
+}
+
+func describeMarkdown(pkg release.Package, version release.Version, bundleNotes string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s\n\n", pkg.Name)
+	fmt.Fprintf(&b, "Latest version: **%s**\n\n", version)
+	if pkg.Metadata[languageMetadataKey] == "true" {
+		b.WriteString("_This is a language (runtime) package._\n\n")
+	}
+	b.WriteString("## Package notes\n\n")
+	if pkg.Notes != "" {
+		fmt.Fprintf(&b, "%s\n\n", pkg.Notes)
+	} else {
+		b.WriteString("_No package notes._\n\n")
+	}
+	fmt.Fprintf(&b, "## Release %s notes\n\n", version)
+	if bundleNotes != "" {
+		fmt.Fprintf(&b, "%s\n\n", bundleNotes)
+	} else {
+		b.WriteString("_No release notes._\n\n")
+	}
+	return b.String()
+}
+
 func (h *Handler) handleUpdateAll(
 	ctx context.Context, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
