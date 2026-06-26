@@ -295,8 +295,8 @@ conversation using your default provider.
 Press `<enter>` or `<space>` to continue.
 """
 
-wrap_up_md = """\
-That is the tour. A couple of things worth remembering:
+help_md = """\
+You're all set. A couple of things worth remembering:
 
 - If you find yourself wondering what commands you just typed, press
   `<meta-r>` to open the command prompt in history mode and re-run any
@@ -304,15 +304,11 @@ That is the tour. A couple of things worth remembering:
 - You can replay this tour any time by running the `tutorial start
   basics` command.
 
-Press `<enter>` or `<space>` to finish. Happy hacking!
-"""
-
-help_md = """\
-One more power tool. Whenever you wonder how something in Rune works or
+One more power tool: whenever you wonder how something in Rune works or
 need a hand with your configuration, run the `help` command. It is your
 built-in reference for commands, key bindings, and config.
 
-To try it now, """ + keypress("help") + """.
+Try it now: """ + keypress("help") + """. Happy hacking!
 """
 
 def teach_edit():
@@ -643,19 +639,15 @@ Press `<enter>` or `<space>` to continue.
 
 
 def teach_help():
-    floating_window(title = "One more power tool", text = help_md,
+    floating_window(title = "You're all set", text = help_md,
+                    alignment = "top",
                     dismiss_keys = dismiss_for("help"))
     wait_command(
-        title    = "One more power tool",
+        title    = "You're all set",
         command  = "help",
         on_error = "Run the `<cmd>help` command to open Rune's built-in reference.",
     )
     notify(level = success, message = "That is the help command.")
-
-
-def teach_wrap_up():
-    floating_window(title = "You're all set", text = wrap_up_md,
-                    dismiss_keys = [ck])
 
 
 def run():
@@ -701,7 +693,5 @@ def run():
 
     teach_help()
 
-    teach_wrap_up()
 
-
-tutorial(id = "basics", title = "Rune basics", version = "23", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "24", entry = run)
