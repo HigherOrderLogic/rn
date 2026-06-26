@@ -45,6 +45,7 @@ import (
 func (h *Handler) handleInstall(
 	ctx context.Context, args []string, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
+	_, args = stripLangFlag(args)
 	if len(args) == 0 {
 		return nil, errors.New("package name is missing")
 	}
@@ -224,14 +225,45 @@ func (h *Handler) handleUpdateCheck(
 	return markdownOutput(b.String()), nil
 }
 
+// languageMetadataKey marks a package as a language/runtime package when its
+// value is "true". The `--lang` flag filters `pkg install` completions to these
+// packages.
+const languageMetadataKey = "language"
+
+// langFlag is the autocomplete-only flag that scopes `pkg install` to language
+// packages.
+const langFlag = "--lang"
+
+// stripLangFlag reports whether args contains the --lang flag and returns args
+// with that flag removed so positional indices stay correct.
+func stripLangFlag(args []string) (bool, []string) {
+	lang := false
+	rest := make([]string, 0, len(args))
+	for _, a := range args {
+		if a == langFlag {
+			lang = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	return lang, rest
+}
+
 func (h *Handler) completePkgInstall(
 	ctx context.Context, args []string,
 ) (iterator.Iterator[string], error) {
+	if len(args) == 1 && strings.HasPrefix(args[0], "-") {
+		return iterator.FromSlice(filterNames([]string{langFlag}, args[0])), nil
+	}
+	lang, args := stripLangFlag(args)
 	if len(args) <= 1 {
 		it, err := h.mgr.ListPackages(ctx, nil)
 		if err != nil {
 			return nil, fmt.Errorf("list packages: %w", err)
 		}
+		it = blueiterator.Filter(it, func(in release.Package) bool {
+			return (in.Metadata[languageMetadataKey] == "true") == lang
+		})
 		return blueiterator.Map(it,
 			func(in release.Package) string { return in.Name }), nil
 	}

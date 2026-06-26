@@ -58,8 +58,9 @@ var commandManual = textapi.CommandManual{
 				"If version is omitted, the package is updated to the latest version. " +
 				"If the package contains executables, they are made available to " +
 				"terminal sessions via the PATH environment variable. " +
-				"`use` is not necessary after running this command.",
-			Synopsis: "<package> [<version>]",
+				"`use` is not necessary after running this command. " +
+				"`--lang` lists and installs language (runtime) packages.",
+			Synopsis: "[--lang] <package> [<version>]",
 		},
 		{
 			Name: "remove",

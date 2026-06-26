@@ -66,8 +66,17 @@ func (w *recordingProgressWriter) count() int {
 
 func newHandlerForTest(t *testing.T) (*Handler, *idepkgtest.Notifications) {
 	t.Helper()
-	pkgs := idepkgtest.MakePackages(release.Package{Name: "go", Latest: "1"})
-	bundles := idepkgtest.MakeBundles([]release.Bundle{{Package: "go", Version: "1"}})
+	pkgs := idepkgtest.MakePackages(
+		release.Package{
+			Name: "go", Latest: "1",
+			Metadata: map[string]string{languageMetadataKey: "true"},
+		},
+		release.Package{Name: "ripgrep", Latest: "1"},
+	)
+	bundles := idepkgtest.MakeBundles([]release.Bundle{
+		{Package: "go", Version: "1"},
+		{Package: "ripgrep", Version: "1"},
+	})
 	rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 	n := idepkgtest.NewNotifications(t)
 	mgr := newManager(t, n, rm)
@@ -340,7 +349,55 @@ func TestCompleteInstallDelegatesToPackages(t *testing.T) {
 	require.NoError(t, err)
 	names, err := iterator.ToSlice(context.Background(), it)
 	require.NoError(t, err)
+	assert.Contains(t, names, "ripgrep")
+	assert.NotContains(t, names, "go")
+}
+
+func TestCompleteInstallLangFiltersLanguagePackages(t *testing.T) {
+	t.Parallel()
+	h, _ := newHandlerForTest(t)
+	it, err := h.Complete(context.Background(), CommandName,
+		[]string{"install", "--lang", ""})
+	require.NoError(t, err)
+	names, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
 	assert.Contains(t, names, "go")
+	assert.NotContains(t, names, "ripgrep")
+}
+
+func TestCompleteInstallLangCompletesVersions(t *testing.T) {
+	t.Parallel()
+	h, _ := newHandlerForTest(t)
+	it, err := h.Complete(context.Background(), CommandName,
+		[]string{"install", "--lang", "go", ""})
+	require.NoError(t, err)
+	names, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Contains(t, names, "1")
+}
+
+func TestCompleteInstallSuggestsLangFlag(t *testing.T) {
+	t.Parallel()
+	h, _ := newHandlerForTest(t)
+	it, err := h.Complete(context.Background(), CommandName,
+		[]string{"install", "--"})
+	require.NoError(t, err)
+	names, err := iterator.ToSlice(context.Background(), it)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"--lang"}, names)
+}
+
+func TestInstallLangFlagStrippedFromPackageName(t *testing.T) {
+	t.Parallel()
+	h, n := newHandlerForTest(t)
+	install(t, h, n, repl.NopProgressWriter(), "--lang", "go")
+	cur, err := h.HandleCommand(context.Background(),
+		repl.Command{Name: CommandName, Args: []string{"current", "go"}},
+		repl.NopProgressWriter())
+	require.NoError(t, err)
+	v, ok := cur.Next(context.Background())
+	require.True(t, ok)
+	require.NotNil(t, v)
 }
 
 func TestNewPanicsOnNilManager(t *testing.T) {
