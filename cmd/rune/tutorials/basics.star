@@ -213,6 +213,14 @@ Move to a file with """ + dir_phrase + """ and press `<enter>`. It opens
 as a new tab in the window you came from.
 """
 
+tab_close_explorer_md = """\
+`fexplorer` is a toggle: the same key that opened the explorer closes
+it again. With your file open, you no longer need the tree taking up
+space.
+
+Toggle the explorer closed: """ + keypress("fexplorer") + """.
+"""
+
 tab_switch_md = """\
 That window now holds two tabs. `tabnext` / `tabprevious` cycle through
 them and wrap around; tabs are the `<alt>` layer.
@@ -297,6 +305,14 @@ That is the tour. A couple of things worth remembering:
   basics` command.
 
 Press `<enter>` or `<space>` to finish. Happy hacking!
+"""
+
+help_md = """\
+One more power tool. Whenever you wonder how something in Rune works or
+need a hand with your configuration, run the `help` command. It is your
+built-in reference for commands, key bindings, and config.
+
+To try it now, """ + keypress("help") + """.
 """
 
 def teach_edit():
@@ -441,6 +457,15 @@ def teach_tabs():
     )
     notify(level = success, message = "You opened a file in a new tab.")
 
+    floating_window(title = "Close the explorer", text = tab_close_explorer_md,
+                    dismiss_keys = dismiss_for("fexplorer"))
+    wait_command(
+        title    = "Close the explorer",
+        command  = "fexplorer",
+        on_error = "Toggle the file explorer closed with `<cmd>fexplorer`.",
+    )
+    notify(level = success, message = "File explorer closed.")
+
 
 def teach_switch_tabs():
     floating_window(title = "Switch tabs", text = tab_switch_md,
@@ -532,9 +557,9 @@ def teach_agent():
                    "- **Claude** — Claude family through your Claude " +
                    "Pro/Max subscription. Sign in with Claude (OAuth), " +
                    "no API key."),
-        options = ["OpenAI", "Anthropic", "Gemini", "Codex", "Claude", "Skip"],
+        options = ["OpenAI", "Anthropic", "Gemini", "Codex", "Claude"],
     )
-    if not pick.selected or pick.value == "Skip":
+    if not pick.selected:
         notify(level = info,
                message = ("Configure a provider any time with the " +
                           "`models providers` shell command."))
@@ -617,6 +642,17 @@ Press `<enter>` or `<space>` to continue.
     notify(level = success, message = "Rune Agent is ready.")
 
 
+def teach_help():
+    floating_window(title = "One more power tool", text = help_md,
+                    dismiss_keys = dismiss_for("help"))
+    wait_command(
+        title    = "One more power tool",
+        command  = "help",
+        on_error = "Run the `<cmd>help` command to open Rune's built-in reference.",
+    )
+    notify(level = success, message = "That is the help command.")
+
+
 def teach_wrap_up():
     floating_window(title = "You're all set", text = wrap_up_md,
                     dismiss_keys = [ck])
@@ -663,7 +699,9 @@ def run():
 
     teach_agent()
 
+    teach_help()
+
     teach_wrap_up()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "20", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "23", entry = run)
