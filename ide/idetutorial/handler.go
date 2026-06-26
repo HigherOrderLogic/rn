@@ -142,6 +142,12 @@ func (h *Handler) ObserveCommand(
 	return h.tut.ObserveCommand(typed, resolved, args, err)
 }
 
+// ObserveEvent forwards to the underlying tutorial. Returns exit=true
+// when the tutorial finishes as a result of the observation.
+func (h *Handler) ObserveEvent(eventType, uri string) bool {
+	return h.tut.ObserveEvent(eventType, uri)
+}
+
 // Reset forwards Reset to the underlying tutorial and reconciles any
 // active shader against [Tutorial.Shader].
 func (h *Handler) Reset() {

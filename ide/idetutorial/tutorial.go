@@ -54,6 +54,12 @@ type Tutorial interface {
 	// result of this observation.
 	ObserveCommand(typed, resolved string, args []string, err error) (exit bool)
 
+	// ObserveEvent reports an observed editor event to the tutorial.
+	// eventType is the lowercase event-type name (e.g. "open") and uri
+	// is the affected document URI. Returns exit=true when the tutorial
+	// finishes as a result of this observation.
+	ObserveEvent(eventType, uri string) (exit bool)
+
 	// Shader returns the background shader the tutorial wants installed
 	// over the IDE root, and ok=true when one is desired. ok=false means
 	// no shader should be installed. Returning a different Shader value

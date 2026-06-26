@@ -45,6 +45,7 @@ const (
 	reqWaitKey
 	reqWaitCommand
 	reqWaitShell
+	reqWaitEvent
 	reqConfirm
 	reqChoice
 )
@@ -62,6 +63,8 @@ func (k requestKind) String() string {
 		return "wait_command"
 	case reqWaitShell:
 		return "wait_shell"
+	case reqWaitEvent:
+		return "wait_event"
 	case reqConfirm:
 		return "confirm"
 	case reqChoice:
@@ -112,6 +115,9 @@ type request struct {
 	// wait_command.
 	command string
 	onError string
+
+	// wait_event: the awaited editor event-type name (e.g. "open").
+	event string
 
 	// wait_shell: the expected companion-shell argument tokens (e.g.
 	// ["pkg", "install", "rune-agent"]). Always non-empty — wait_shell

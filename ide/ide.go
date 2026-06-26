@@ -573,6 +573,13 @@ func (i *IDE) init(
 	i.tutorial.init(i.workspaceHandler, tutorials,
 		i.workspaceHandler.events.globalInterrupter())
 	commandObserver.subscribe(&i.tutorial)
+	_ = i.workspaceHandler.SubscribeEvents(
+		textapi.AllEvents(),
+		text.FuncEventHandler(func(_ context.Context, ev textapi.Event) bool {
+			i.tutorial.observeEvent(ev.Type.String(), ev.URI.String())
+			return false
+		}),
+	)
 	i.root.init(&i.tutorial, i, i.ideConfig.defaultAttr(), shutdownShaderCfg,
 		loadingShaderCfg, openShaderCfg, i.ideConfig.windowFrameCharset())
 	i.planLockdown = newPlanLockdownRunner(&i.root, nil)

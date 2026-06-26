@@ -209,9 +209,8 @@ The explorer is the workspace tree, and it is a live buffer: edit a
 name to rename, add a line to create, delete a line to remove, then
 save the buffer via `write` to apply. For now, just open a file.
 
-Press `<enter>` or `<space>` to continue, then move to a file with
-""" + dir_phrase + """ and press `<enter>`. It opens as a new tab in the
-window you came from.
+Move to a file with """ + dir_phrase + """ and press `<enter>`. It opens
+as a new tab in the window you came from.
 """
 
 tab_switch_md = """\
@@ -434,7 +433,13 @@ def teach_tabs():
     )
     notify(level = success, message = "File explorer open.")
 
-    floating_window(title = "Open a file", text = tab_open_file_md)
+    wait_event(
+        event    = "open",
+        title    = "Open a file",
+        text     = tab_open_file_md,
+        on_error = "Move to a file in the explorer and press `<enter>` to open it.",
+    )
+    notify(level = success, message = "You opened a file in a new tab.")
 
 
 def teach_switch_tabs():
@@ -661,4 +666,4 @@ def run():
     teach_wrap_up()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "19", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "20", entry = run)

@@ -63,6 +63,7 @@ func builtins(t *Tutorial) starlark.StringDict {
 		"wait_key":        starlark.NewBuiltin("wait_key", builtinWaitKey(t)),
 		"wait_command":    starlark.NewBuiltin("wait_command", builtinWaitCommand(t)),
 		"wait_shell":      starlark.NewBuiltin("wait_shell", builtinWaitShell(t)),
+		"wait_event":      starlark.NewBuiltin("wait_event", builtinWaitEvent(t)),
 		"confirm":         starlark.NewBuiltin("confirm", builtinConfirm(t)),
 		"choice":          starlark.NewBuiltin("choice", builtinChoice(t)),
 
@@ -311,6 +312,44 @@ func builtinConfirm(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
 			return nil, err
 		}
 		return starlark.Bool(res.confirmed), nil
+	}
+}
+
+// builtinWaitEvent arms a step that resolves only when the host
+// observes an editor event whose type name matches event. It never
+// resolves from keystrokes, so every key reaches the IDE root while
+// the hint stays up. The event name is not validated against a fixed
+// set: an unknown name simply never matches.
+func builtinWaitEvent(t *Tutorial) func(*starlark.Thread, *starlark.Builtin,
+	starlark.Tuple, []starlark.Tuple,
+) (starlark.Value, error) {
+	return func(_ *starlark.Thread, _ *starlark.Builtin,
+		args starlark.Tuple, kwargs []starlark.Tuple,
+	) (starlark.Value, error) {
+		var (
+			event   starlark.String
+			text    starlark.String
+			title   starlark.String
+			onError starlark.String
+		)
+		if err := starlark.UnpackArgs("wait_event", args, kwargs,
+			"event", &event,
+			"text?", &text,
+			"title?", &title,
+			"on_error?", &onError); err != nil {
+			return nil, err
+		}
+		req := &request{
+			kind:    reqWaitEvent,
+			event:   string(event),
+			text:    string(text),
+			title:   string(title),
+			onError: string(onError),
+		}
+		if _, err := t.publishRequest(req); err != nil {
+			return nil, err
+		}
+		return starlark.None, nil
 	}
 }
 

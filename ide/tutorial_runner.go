@@ -143,6 +143,15 @@ func (r *tutorialRunner) observeCommand(
 	}
 }
 
+func (r *tutorialRunner) observeEvent(eventType, uri string) {
+	if r.overlay == nil {
+		return
+	}
+	if r.overlay.ObserveEvent(eventType, uri) {
+		r.clearActive()
+	}
+}
+
 func (r *tutorialRunner) HandleCommand(_ context.Context, cmd textapi.Command) error {
 	if len(cmd.Args) == 0 {
 		return errors.New(

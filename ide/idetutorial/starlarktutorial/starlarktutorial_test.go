@@ -898,6 +898,61 @@ tutorial(entry=run)
 		"alias dispatch must reach wait_command via resolved name")
 }
 
+// TestWaitEventNeverResolvesFromKeys asserts that a wait_event step
+// never resolves and never swallows keystrokes: every key falls
+// through to the IDE root while the step stays armed.
+func TestWaitEventNeverResolvesFromKeys(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_event(event="open")
+    notify(level=success, message="opened")
+tutorial(entry=run)
+`
+	tut, _ := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "wait_event", activeKindFor(tut))
+
+	exit, handled := tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+	assert.False(t, exit)
+	assert.False(t, handled,
+		"wait_event must not swallow keys; they reach the IDE root")
+	assert.Equal(t, "wait_event", activeKindFor(tut),
+		"a keystroke must not resolve a wait_event step")
+
+	exit, handled = tut.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+	assert.False(t, exit)
+	assert.False(t, handled)
+	assert.Equal(t, "wait_event", activeKindFor(tut))
+}
+
+// TestWaitEventResolvesOnMatchingEvent asserts that ObserveEvent
+// resolves a wait_event step only when the observed event-type name
+// matches the armed name; a non-matching event keeps it armed.
+func TestWaitEventResolvesOnMatchingEvent(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_event(event="open")
+    notify(level=success, message="opened")
+tutorial(entry=run)
+`
+	tut, notis := newTutorial(t, src)
+	resetAndWait(t, tut, time.Second)
+	require.Equal(t, "wait_event", activeKindFor(tut))
+
+	exit := tut.ObserveEvent("close", "file:///x.go")
+	assert.False(t, exit, "a non-matching event must not resolve wait_event")
+	assert.Equal(t, "wait_event", activeKindFor(tut),
+		"a non-matching event must keep wait_event armed")
+	assert.Equal(t, 0, notis.len())
+
+	_ = tut.ObserveEvent("open", "file:///x.go")
+	waitFinished(t, tut, time.Second)
+	assert.True(t, notis.containsSubstring("opened"),
+		"the matching event must resolve wait_event and resume the script")
+}
+
 // TestConfirmYesReturnsTrue asserts that confirm returns True when
 // the user picks Yes (the highlighted option at index 0).
 func TestConfirmYesReturnsTrue(t *testing.T) {

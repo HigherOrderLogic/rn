@@ -469,6 +469,9 @@ func (t *Tutorial) Draw(w term.Writer) {
 	case reqWaitShell:
 		body := buildWaitShellHint(active, cmdKey)
 		drawHintBox(w, width, height, active.title, active.stepNum, body, fcs, attr)
+	case reqWaitEvent:
+		drawHintBox(w, width, height, active.title, active.stepNum,
+			active.text, fcs, attr)
 	case reqChoice, reqConfirm:
 		drawPromptOverlay(w, width, height, active, fcs, attr)
 	}
@@ -501,6 +504,8 @@ func (t *Tutorial) Handle(ev term.Event) (bool, bool) {
 		return t.handleWaitCommand(active, ev)
 	case reqWaitShell:
 		return t.handleWaitCommand(active, ev)
+	case reqWaitEvent:
+		return t.handleWaitEvent(active, ev)
 	case reqChoice, reqConfirm:
 		return t.handlePrompt(active, ev)
 	}
@@ -577,6 +582,13 @@ func (t *Tutorial) handleWaitCommand(_ *request, _ term.Event) (bool, bool) {
 	return false, false
 }
 
+// handleWaitEvent never resolves from keystrokes and never swallows:
+// the host's editor-event observer is the source of truth, so every
+// key falls through to the IDE root while the hint stays up.
+func (t *Tutorial) handleWaitEvent(_ *request, _ term.Event) (bool, bool) {
+	return false, false
+}
+
 // handlePrompt forwards ev to the active prompt overlay and finalises
 // the request on exit. Enter triggers OnSelect (which stamps
 // r.pendingResp/pendingSelected); Esc only sets the prompt's exit
@@ -648,6 +660,26 @@ func (t *Tutorial) ObserveCommand(
 		return false
 	}
 	t.resolve(active, response{cmdName: active.command, cmdArgs: args})
+	return t.exitState()
+}
+
+// ObserveEvent advances the state machine when the current step is
+// wait_event and the observed editor event's type name matches the
+// armed event name. uri is accepted for parity with the event payload
+// but is not matched (no scheme/URI filtering). Returns exit=true when
+// the tutorial finishes as a result of this observation.
+func (t *Tutorial) ObserveEvent(eventType, _ string) bool {
+	t.mu.Lock()
+	active := t.active
+	finished := t.finished
+	t.mu.Unlock()
+	if finished {
+		return true
+	}
+	if active == nil || active.kind != reqWaitEvent || active.event != eventType {
+		return false
+	}
+	t.resolve(active, response{})
 	return t.exitState()
 }
 

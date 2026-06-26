@@ -81,6 +81,9 @@ func (t *tutStub) Stop()                     { t.stopCount++ }
 func (t *tutStub) ObserveCommand(_, _ string, _ []string, _ error) bool {
 	return false
 }
+func (t *tutStub) ObserveEvent(_, _ string) bool {
+	return false
+}
 func (t *tutStub) Shader() (idetutorial.Shader, bool) {
 	return idetutorial.Shader{}, false
 }
@@ -429,6 +432,66 @@ tutorial(entry=run)
 	}
 	assert.Nil(t, r.overlay,
 		"successful dispatch + notify drains the overlay")
+}
+
+// TestTutorialRunnerObserveEventAdvancesWaitEvent asserts that an
+// observed editor event reaches the overlay's ObserveEvent and
+// advances the active wait_event step, then the runner clears the
+// overlay once the tutorial finishes. A non-matching event observed
+// first must keep the overlay armed.
+func TestTutorialRunnerObserveEventAdvancesWaitEvent(t *testing.T) {
+	t.Parallel()
+	src := `
+def run():
+    wait_event(event="open")
+    notify(level=info, message="advanced via event observer")
+tutorial(entry=run)
+`
+	tut, err := starlarktutorial.New(
+		"observe-event", src,
+		nil, nil, nil, nil,
+		term.Attributes{},
+		component.FrameCharSet{},
+		browser.PromptConfig{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"modeless", nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	r, _ := newTestRunner(
+		map[string]idetutorial.Tutorial{"observe-event": tut})
+	require.NoError(t, r.HandleCommand(context.Background(),
+		textapi.Command{Name: "tutorial", Args: []string{"start", "observe-event"}}))
+	require.NotNil(t, r.overlay)
+
+	r.observeEvent("close", "file:///x.go")
+	assert.NotNil(t, r.overlay,
+		"a non-matching event must keep the overlay mounted")
+
+	r.observeEvent("open", "file:///x.go")
+	deadline := time.After(time.Second)
+	for r.overlay != nil {
+		_, _ = r.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
+		select {
+		case <-deadline:
+			t.Fatal("runner did not clear overlay within 1s")
+		default:
+		}
+	}
+	assert.Nil(t, r.overlay,
+		"runner should clear overlay once the wait_event step resolves")
+}
+
+// TestTutorialRunnerObserveEventNoOverlay asserts that observeEvent is
+// a no-op when no tutorial overlay is mounted.
+func TestTutorialRunnerObserveEventNoOverlay(t *testing.T) {
+	t.Parallel()
+	r, _ := newTestRunner(map[string]idetutorial.Tutorial{})
+	require.Nil(t, r.overlay)
+	r.observeEvent("open", "file:///x.go")
+	assert.Nil(t, r.overlay)
 }
 
 // TestCommandObserverRegistryLateSubscribe asserts that a subscriber

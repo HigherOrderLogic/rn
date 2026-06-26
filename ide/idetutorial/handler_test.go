@@ -81,6 +81,8 @@ type fakeTutorial struct {
 	stopCount  int
 
 	observed []string
+
+	observedEvents []string
 }
 
 func (t *fakeTutorial) Resize(_, _ int) {}
@@ -113,6 +115,11 @@ func (t *fakeTutorial) ObserveCommand(
 	typed, _ string, _ []string, _ error,
 ) bool {
 	t.observed = append(t.observed, typed)
+	return false
+}
+
+func (t *fakeTutorial) ObserveEvent(eventType, _ string) bool {
+	t.observedEvents = append(t.observedEvents, eventType)
 	return false
 }
 
@@ -353,6 +360,16 @@ func TestHandlerObserveCommandForwardsToTutorial(t *testing.T) {
 
 	_ = h.ObserveCommand("e", "edit", []string{"f.go"}, nil)
 	assert.Equal(t, []string{"e"}, tut.observed)
+}
+
+func TestHandlerObserveEventForwardsToTutorial(t *testing.T) {
+	t.Parallel()
+	root := &fakeRoot{}
+	tut := &fakeTutorial{}
+	h := idetutorial.New(root, tut, nil)
+
+	_ = h.ObserveEvent("open", "file:///f.go")
+	assert.Equal(t, []string{"open"}, tut.observedEvents)
 }
 
 // TestHandlerCloseForwardsStopToTutorial asserts that Handler.Close
