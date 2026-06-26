@@ -65,7 +65,7 @@ func TestBasicsTutorialParses(t *testing.T) {
 
 	assert.Equal(t, "basics", tut.ID())
 	assert.Equal(t, "Rune basics", tut.Title())
-	assert.Equal(t, "15", tut.Version())
+	assert.Equal(t, "19", tut.Version())
 }
 
 // TestEmbeddedTutorialOptionsRegistersBasics asserts that the embedded

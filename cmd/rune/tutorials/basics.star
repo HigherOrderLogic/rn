@@ -26,18 +26,6 @@ else:
     dir_phrase = "the arrow keys"
     focus_example = "`<meta-left>`"
 
-# Tab switching is directional too: one key focuses the tab to the left
-# (tabprevious), the other the tab to the right (tabnext). Show the
-# user's real bound keys when they exist.
-_tab_left = key_for("tabprevious")
-_tab_right = key_for("tabnext")
-if _tab_left and _tab_right:
-    tab_dir_sentence = ("`" + _tab_left + "` focuses the tab to the left, " +
-                        "`" + _tab_right + "` the tab to the right.")
-else:
-    tab_dir_sentence = ("One direction focuses the tab to the left, the " +
-                        "other the tab to the right.")
-
 def keyhint(cmd, *args):
     k = key_for(cmd, *args)
     return (" Default key: `" + k + "`.") if k else ""
@@ -89,11 +77,6 @@ inside it. So slot 1 may be the project you're working on while
 slots 2-9 are still the home workspace, ready for whatever you
 need.
 
-This is handy when the current workspace is busy: jump to any
-empty slot and press `<meta-enter>` to drop a terminal at `~/`
-(that key runs the `terminalneworsplit` command). The slot fills
-with a terminal without disturbing your project.
-
 ## Commands and key bindings
 
 IDE-wide operations are exposed as **commands** that you invoke
@@ -142,49 +125,42 @@ they follow one small, standardized system.
   direction *focuses* a window; add `<shift>` and the same direction
   *moves* it. The rule holds for tabs and workspaces too.
 
-## Pointing a direction
-
-In your editor, direction is """ + dir_phrase + """. So """ + focus_example + """
-focuses the window in that direction, and adding `<shift>` moves it
-there instead.
-
-Once "`<meta>` = windows and workspaces, `<alt>` = tabs, `<shift>` =
-move" clicks, the bindings stop being something to memorize: they
-follow a standardized system you can derive.
-
 Press `<enter>` or `<space>` to continue.
 """
 
-windows_md = """\
-A **window** is a tile on screen. A fresh workspace has one window
-filling the editor area; you split it to get more, like a test beside
-its source or a terminal under an editor.
+split_window_md = """\
+A **window** is a tile on screen, and right now this workspace has just
+one.
 
-## Split
+Split the focused window into two: """ + keypress("windownew") + """.
+"""
 
-- `windownew` splits the focused window and moves into the new pane.
-  Add a direction (`windownew right`, `left`, `up`, or `down`) to
-  place it.""" + keyhint("windownew") + """
-- `windowdefaultsplit h` / `v` sets which way a bare `windownew`
-  splits.""" + keyhint("windowdefaultsplit", "h") + """
+terminal_md = """\
+The new pane is empty, and windows hold any kind of content, not just
+files. Fill this one with a terminal.
 
-## Move between windows
+Open a terminal here: """ + keypress("terminalneworsplit") + """.
+"""
 
-`<meta>` plus a direction focuses across splits; add `<shift>` to move
-the focused window that way.""" + keyhint("windowfocus", "left") + """
+split_direction_md = """\
+Splits stack in one direction until you flip it. Flip it now so the
+next split lands the other way.
 
-## Close
+Flip the split direction: """ + keypress("windowdefaultsplit", "h") + """.
+"""
 
-- `windowclose` closes the focused split. It will not close your last
-  window, since a workspace always keeps at least one.""" + keyhint("windowclose") + """
+terminal_split_md = """\
+The same key opens a terminal in a new split when the window already
+has content. Do it again and watch the split land along the direction
+you just set.
 
-Right now this workspace has one window. To split it into two,
-""" + keypress("windownew") + """.
+Open another terminal split: """ + keypress("terminalneworsplit") + """.
 """
 
 focus_window_md = """\
-You have two windows now. `<meta>` plus a direction moves focus across
-the splits, so you can hop between them without the mouse.
+The screen is split into several windows now. `<meta>` plus a direction
+moves focus across the splits, so you can hop between them without the
+mouse.
 
 - `windowfocus left` focuses the window to the left.""" + keyhint("windowfocus", "left") + """
 - `windowfocus right` focuses the window to the right.""" + keyhint("windowfocus", "right") + """
@@ -214,50 +190,36 @@ Toggle fullscreen now: """ + keypress("windowtogglemaximize") + """.
 """
 
 close_window_md = """\
-You have two windows now. `windowclose` closes the focused split and
-moves focus to the next window. It will not close your last window: a
-workspace always keeps at least one.""" + keyhint("windowclose") + """
+`windowclose` closes the focused split and moves focus to the next
+window. It will not close your last window: a workspace always keeps at
+least one.""" + keyhint("windowclose") + """
 
 To close the split you just made, """ + keypress("windowclose") + """.
 """
 
 tabs_md = """\
-A window does not own a file; it **shows content**, and the content it
-can show is a list of **tabs**: files, terminals, task output.
-Switching tabs swaps what the focused window shows without touching
-the layout. Tabs are the `<alt>` layer.
+A window shows one **tab** at a time: a file, a terminal, task output.
+You already have one open. Let's add another from the file explorer.
 
-## Open
+Open the file explorer: """ + keypress("fexplorer") + """.
+"""
 
-- `edit <file>` opens a file as a tab in the focused window.
+tab_open_file_md = """\
+The explorer is the workspace tree, and it is a live buffer: edit a
+name to rename, add a line to create, delete a line to remove, then
+save the buffer via `write` to apply. For now, just open a file.
 
-## Switch
+Press `<enter>` or `<space>` to continue, then move to a file with
+""" + dir_phrase + """ and press `<enter>`. It opens as a new tab in the
+window you came from.
+"""
 
-- `tabnext` / `tabprevious` cycle the window's tabs and wrap around.
-  """ + keyhint("tabnext") + keyhint("tabprevious") + """
-- """ + tab_dir_sentence + """
-- `tabfocus N` jumps straight to a position.
+tab_switch_md = """\
+That window now holds two tabs. `tabnext` / `tabprevious` cycle through
+them and wrap around; tabs are the `<alt>` layer.
 
-## Reorder and close
-
-- `tabmove left` / `right` (or `tabmove N`) reorders the current tab.
-  That is the `<shift>` = move rule again, on the `<alt>`
-  layer.""" + keyhint("tabmove", "left") + """
-- `tabclose` closes the focused tab; the next one takes its
-  place.""" + keyhint("tabclose") + """
-
-## Splits versus tabs
-
-Split into a new **window** to see two things at once; open a new
-**tab** to keep something in the *same* window, one at a time.
-
-## Try it
-
-This window has one tab so far, so first open a second one:
-""" + keypress("edit") + """ and pick another file. Then switch to the
-next tab (""" + keypress("tabnext") + """) and back to the previous one
-(""" + keypress("tabprevious") + """). The tutorial advances once you
-have switched in both directions.
+Switch to the next tab (""" + keypress("tabnext") + """), then back to
+the previous one (""" + keypress("tabprevious") + """).
 """
 
 close_tab_md = """\
@@ -269,106 +231,31 @@ To close the current tab, """ + keypress("tabclose") + """.
 
 terminals_md = """\
 Rune runs terminals as content, so they live in windows and tabs just
-like files.
-
-## Kinds of terminal
-
-- `terminalnew` opens an ephemeral terminal in the current window. It
-  closes automatically when the window's content is replaced, for
-  example by `tabnext`.""" + keyhint("terminalnew") + """
-- `terminalnewtab` opens a durable terminal in its own tab; it stays
-  until you close it.""" + keyhint("terminalnewtab") + """
-
-## The companion terminal
-
-Running `!` with no arguments opens the **companion terminal**: a
-single persistent terminal that preserves its session output across
-invocations, so you can summon it, hide it, and bring it back without
-losing scrollback.""" + keyhint("!") + """
-
-The same key toggles it: press it once to open the companion terminal,
-again to hide it.
+like files. Rune can also run one-shot programs on an ephemeral terminal,
+interactively.
 
 ## Running a program
 
 - `! <cmd>` runs a program in a floating window that shows its output,
   for example `! git log`.
-- `!!` runs a program the same way but without showing its output.
+- `!!` runs a program but hides its output. Use this when you only cares
+  whether it worked or not.
 
-First, open the companion terminal: """ + keypress("!") + """.
-"""
-
-terminals_hide_md = """\
-The companion terminal is open. Because `!` toggles it, the same key
-hides it again while keeping its session and scrollback alive for next
-time.
-
-Hide it now: """ + keypress("!") + """.
-"""
-
-terminals_run_md = """\
-`! <cmd>` runs a one-off program in a floating output window. Let's run
-`git log`.
-
-At the command prompt (`""" + ck + """`), type `! git log` and press
-Enter. Rune opens a floating window streaming its output.
+Let's run `git log`. At the command prompt (`""" + ck + """`), type
+`! git log` and press Enter. Rune opens a floating window streaming its
+output.
 """
 
 terminals_close_md = """\
-The `git log` output is sitting in a floating window. Close it the same
-way you close any tab.
+The `git log` output is sitting in a floating window. It is a window,
+not a tab, so close it with `windowclose`.
 
-Close it now: """ + keypress("tabclose") + """.
-"""
-
-terminals_done_md = """\
-That is the whole layout model: windows, tabs, and terminals, all
-driven by the same commands.
-
-Press `<enter>` or `<space>` to continue.
-"""
-
-fexplorer_md = """\
-Rune has a built-in **file explorer**: the workspace tree in a
-window docked on the left. The `fexplorer` command toggles
-it: it opens and focuses the explorer, or tucks it away again when
-the explorer is already focused.""" + keyhint("fexplorer") + """
-
-Open it now: """ + keypress("fexplorer") + """.
-"""
-
-fexplorer_tour_md = """\
-The explorer is focused. The tree is a regular text buffer, so you
-move through it the way you move in any editor, with """ + dir_phrase + """.
-
-## Opening things
-
-- `<enter>` on a directory expands or collapses it.
-- `<enter>` on a file opens it in the window you came from.
-
-## It is a live buffer
-
-You manage files by editing the tree like text:
-
-- Change a name to **rename** a file.
-- Add a line to **create** a file; end it with `/` to create a
-  directory.
-- Delete a line to **delete** a file.
-
-Nothing touches the disk until you save. Run `write` (the same
-command that saves a file) and Rune lists the pending operations
-(CREATE, MKDIR, RENAME, MOVE, DELETE) and asks for confirmation
-before applying them to the file system. Closing the explorer
-discards any edits you have not applied.
-
-Look around, expand a directory, open a file. When you're done,
-close the explorer the same way you opened it:
-""" + keypress("fexplorer") + """.
+Close it now: """ + keypress("windowclose") + """.
 """
 
 agent_install_md = """\
-The **Rune Agent** is an in-editor AI coding assistant. It ships as a
-package you install on demand, so the first step is to add it.
+The **Rune Agent** is a Rune native AI coding assistant. It ships as a
+package you install on demand, so the first step is to install it.
 
 First, open Rune's companion shell:
 
@@ -383,19 +270,6 @@ You're in the companion shell now. Install the agent package:
 
 1. Type `pkg install rune-agent`.
 2. Press Enter and wait for the install to finish.
-
-Press `<enter>` or `<space>` to continue.
-"""
-
-agent_reload_md = """\
-Extensions are loaded when a workspace opens. The agent is installed,
-but this workspace was already running before you added it, so it is
-not active yet. Reloading the workspace starts every installed
-extension fresh, which is also how you pick up a new version after
-updating one.
-
-""" + shell_esc_step + shell_prompt_step_num + """. Press `""" + ck + """` to open the command prompt.
-""" + shell_run_step_num + """. Run `workspacereload`.
 
 Press `<enter>` or `<space>` to continue.
 """
@@ -444,17 +318,55 @@ def teach_layout():
                     dismiss_keys = [ck])
 
 
-def teach_windows():
-    floating_window(title = "Manage windows", text = windows_md,
+def teach_split_window():
+    floating_window(title = "Split a window", text = split_window_md,
                     dismiss_keys = dismiss_for("windownew"))
     wait_command(
-        title    = "Manage windows",
+        title    = "Split a window",
         command  = "windownew",
         on_error = ("Split the active window into two. Add an optional " +
                     "direction (`<cmd>windownew right` / `left` / `up` / " +
                     "`down`) to choose where the new pane lands."),
     )
     notify(level = success, message = "You split the window.")
+
+
+def teach_terminal():
+    floating_window(title = "Open a terminal", text = terminal_md,
+                    dismiss_keys = dismiss_for("terminalneworsplit"))
+    wait_command(
+        title    = "Open a terminal",
+        command  = "terminalneworsplit",
+        on_error = ("Open a terminal in the focused window. When the window " +
+                    "is empty the terminal fills it in place."),
+    )
+    notify(level = success, message = "You opened a terminal.")
+
+
+def teach_split_direction():
+    floating_window(title = "Flip the split direction", text = split_direction_md,
+                    dismiss_keys = dismiss_for("windowdefaultsplit", "h"))
+    wait_command(
+        title    = "Flip the split direction",
+        command  = "windowdefaultsplit",
+        on_error = ("Flip the default split direction. Pass an orientation " +
+                    "to set it outright (`<cmd>windowdefaultsplit horizontal` " +
+                    "/ `vertical`)."),
+    )
+    notify(level = success, message = "You changed the split direction.")
+
+
+def teach_terminal_split():
+    floating_window(title = "Open a terminal split", text = terminal_split_md,
+                    dismiss_keys = dismiss_for("terminalneworsplit"))
+    wait_command(
+        title    = "Open a terminal split",
+        command  = "terminalneworsplit",
+        on_error = ("Split the focused window and open a terminal in the new " +
+                    "pane. Because the window already has content, it opens " +
+                    "a split instead of filling it in place."),
+    )
+    notify(level = success, message = "You opened a terminal split.")
 
 
 def teach_focus_window():
@@ -513,17 +425,30 @@ def teach_close_window():
 
 
 def teach_tabs():
-    floating_window(title = "Manage tabs", text = tabs_md,
+    floating_window(title = "Open another tab", text = tabs_md,
+                    dismiss_keys = dismiss_for("fexplorer"))
+    wait_command(
+        title    = "Open another tab",
+        command  = "fexplorer",
+        on_error = "Open the file explorer with `<cmd>fexplorer`.",
+    )
+    notify(level = success, message = "File explorer open.")
+
+    floating_window(title = "Open a file", text = tab_open_file_md)
+
+
+def teach_switch_tabs():
+    floating_window(title = "Switch tabs", text = tab_switch_md,
                     dismiss_keys = dismiss_for("tabnext"))
     wait_command(
-        title    = "Manage tabs",
+        title    = "Switch tabs",
         command  = "tabnext",
         on_error = ("Move to the next tab in this window. If the window " +
-                    "only has one tab, open a second file first with " +
-                    "`<cmd>edit`."),
+                    "only has one tab, open a second file from the " +
+                    "explorer first."),
     )
     wait_command(
-        title    = "Manage tabs",
+        title    = "Switch tabs",
         command  = "tabprevious",
         on_error = "Now move back to the previous tab.",
     )
@@ -542,65 +467,23 @@ def teach_close_tab():
 
 
 def teach_terminals():
-    floating_window(title = "Terminals", text = terminals_md,
-                    dismiss_keys = dismiss_for("!"))
-    wait_command(
-        title    = "Terminals",
-        command  = "!",
-        on_error = "Open the companion terminal (`<cmd>!` with no arguments).",
-    )
-    notify(level = success, message = "Companion terminal open.")
-
-    floating_window(title = "Hide the companion terminal", text = terminals_hide_md,
-                    dismiss_keys = dismiss_for("!"))
-    wait_command(
-        title    = "Hide the companion terminal",
-        command  = "!",
-        on_error = "Hide the companion terminal again (`<cmd>!`).",
-    )
-    notify(level = success, message = "Companion terminal hidden.")
-
-    floating_window(title = "Run a command", text = terminals_run_md,
+    floating_window(title = "Run a program", text = terminals_md,
                     dismiss_keys = [ck])
     wait_command(
-        title    = "Run a command",
+        title    = "Run a program",
         command  = "!",
         on_error = "At the command prompt, run `<cmd>! git log`.",
     )
     notify(level = success, message = "Program running in a window.")
 
     floating_window(title = "Close the output window", text = terminals_close_md,
-                    dismiss_keys = dismiss_for("tabclose"))
+                    dismiss_keys = dismiss_for("windowclose"))
     wait_command(
         title    = "Close the output window",
-        command  = "tabclose",
-        on_error = "Close the `git log` output window with `<cmd>tabclose`.",
+        command  = "windowclose",
+        on_error = "Close the `git log` output window with `<cmd>windowclose`.",
     )
     notify(level = success, message = "Output window closed.")
-
-    floating_window(title = "That's the layout model", text = terminals_done_md,
-                    dismiss_keys = [ck])
-
-
-def teach_file_explorer():
-    floating_window(title = "The file explorer", text = fexplorer_md,
-                    dismiss_keys = dismiss_for("fexplorer"))
-    wait_command(
-        title    = "The file explorer",
-        command  = "fexplorer",
-        on_error = "Open the file explorer with `<cmd>fexplorer`.",
-    )
-    notify(level = success, message = "File explorer open.")
-
-    floating_window(title = "Explore the tree", text = fexplorer_tour_md,
-                    dismiss_keys = dismiss_for("fexplorer"))
-    wait_command(
-        title    = "Explore the tree",
-        command  = "fexplorer",
-        on_error = ("Close the file explorer: focus it, then run " +
-                    "`<cmd>fexplorer` again."),
-    )
-    notify(level = success, message = "File explorer closed.")
 
 
 def teach_provider(provider, label, action_tokens, run_md, success_msg):
@@ -632,16 +515,6 @@ def teach_agent():
         on_error = "In the companion shell, run `pkg install rune-agent`.",
     )
     notify(level = success, message = "Rune Agent installed.")
-
-    floating_window(title = "Reload the workspace", text = agent_reload_md,
-                    dismiss_keys = dismiss_for("workspacereload"))
-    wait_command(
-        title    = "Reload the workspace",
-        command  = "workspacereload",
-        on_error = ("Run `<cmd>workspacereload` to restart the workspace " +
-                    "and load the agent extension."),
-    )
-    notify(level = success, message = "Workspace reloaded.")
 
     pick = choice(
         message = ("Which provider do you want to connect?\n\n" +
@@ -770,20 +643,22 @@ def run():
     teach_edit()
 
     teach_layout()
-    teach_windows()
+    teach_split_window()
+    teach_terminal()
+    teach_split_direction()
+    teach_terminal_split()
     teach_focus_window()
     teach_move_window()
     teach_fullscreen_window()
     teach_close_window()
     teach_tabs()
+    teach_switch_tabs()
     teach_close_tab()
     teach_terminals()
-
-    teach_file_explorer()
 
     teach_agent()
 
     teach_wrap_up()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "15", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "19", entry = run)

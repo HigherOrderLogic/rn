@@ -958,9 +958,7 @@ func (m *Manager) notifyConfigApplied(
 	level browserapi.NotificationLevel, pkgID string, result ConfigMergeResult,
 ) {
 	if result.LiveApplied {
-		_, _ = m.n.Notify(level, "applied %s configuration updates. "+
-			"Environment updates are now active for new local processes; "+
-			"reload the workspace to update already-running tools.", pkgID)
+		_, _ = m.n.Notify(level, "applied %s configuration updates. ", pkgID)
 		return
 	}
 	_, _ = m.n.Notify(level, "applied %s configuration updates. "+
