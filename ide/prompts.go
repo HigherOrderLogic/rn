@@ -451,6 +451,15 @@ func (e *ex) openReplaceTaskPrompt(t idetask.Task) error {
 // command was dispatched but no handler is registered for it (e.g. the
 // providing extension is not installed).
 func (e *ex) ShowFallbackPrompt(_ context.Context, command string, _ ...string) {
+	// The home/empty workspace deliberately starts no extensions, so the
+	// commands they provide are never registered there. Tell the user to
+	// open a workspace instead of offering to install the extension.
+	if e.home {
+		_, _ = e.comp.Notify(browserapi.LevelInfo,
+			"You are not on a workspace. Open a workspace first to use %q.",
+			command)
+		return
+	}
 	switch command {
 	case "agent", "?":
 		e.openInstallExtensionPrompt("rune-agent",
@@ -460,6 +469,20 @@ func (e *ex) ShowFallbackPrompt(_ context.Context, command string, _ ...string) 
 		e.openInstallExtensionPrompt("fuzzy-search",
 			"This command requires the **fuzzy-search** extension. "+
 				"Do you want to install it now?")
+	}
+}
+
+// markHome flags this ex as the home/empty workspace and routes every
+// rune-agent command through the fallback prompt. The home workspace starts
+// no extensions, so without these entries the chat* commands would surface a
+// raw "unknown command" error instead of the "open a workspace" message.
+func (e *ex) markHome() {
+	e.home = true
+	for _, cmd := range []string{
+		"chateffort", "chatmaxtokens", "chatskill", "chatmodel",
+		"chatclear", "chatcompact", "chatfork", "chatexport", "chatlog",
+	} {
+		e.config.CommandFallbacks[cmd] = e
 	}
 }
 

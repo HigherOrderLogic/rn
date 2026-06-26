@@ -539,6 +539,7 @@ func (h *workspaceManagerHandler) init(
 	if err = h.subscribeAllEvents(cfg, h.empty); err != nil {
 		return err
 	}
+	h.empty.markHome()
 
 	wsExec := workspaceshell.NewExecutor(
 		workspaceExecutorAdapter{e: h.homeWorkspace})
@@ -564,7 +565,11 @@ func (h *workspaceManagerHandler) init(
 		h.homeRunner = runner
 		h.homeLSPManager = lspManager
 		h.homeDAPManager = dapManager
-		go debug.CapturePanicReport(func() { h.initExtensions(runner, cfg) })
+		// Deliberately do not start extensions on the home/empty workspace:
+		// rune-agent (and other user extensions) recursively walk the entire
+		// workspace root for .gitignore files at startup, which is ruinously
+		// expensive when the root is the user's home directory. Extensions
+		// start when a real workspace is opened instead.
 	}
 
 	h.bar.Init()
@@ -1045,10 +1050,10 @@ func (h *workspaceManagerHandler) startInstalledExtensions(ids []string) bool {
 	}
 
 	h.mu.Lock()
-	runners := make([]extension.Runner, 0, h.workspaceCount+1)
-	if h.homeRunner != nil {
-		runners = append(runners, h.homeRunner)
-	}
+	// The home/empty workspace intentionally runs no extensions (see the
+	// home-runner setup in init), so a package install must not start them
+	// there either.
+	runners := make([]extension.Runner, 0, h.workspaceCount)
 	for _, hm := range h.workspaces {
 		if hm == nil {
 			continue

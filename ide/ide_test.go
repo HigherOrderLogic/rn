@@ -357,6 +357,46 @@ func TestOpen(t *testing.T) {
 	})
 }
 
+// TestHomeWorkspaceDoesNotStartExtensions is an end-to-end guard that a
+// configured extension is never started on the home/empty workspace. The home
+// workspace deliberately runs no extensions because they recursively walk the
+// workspace root for .gitignore files at startup, which is ruinously expensive
+// when the root is the user's home directory.
+func TestHomeWorkspaceDoesNotStartExtensions(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(
+		"editor:\n  mode: modal\n"+
+			"workspace:\n  home: "+dir+"\n"+
+			"extensions:\n  rune-agent:\n    path: rune-agent-bin\n"), 0o644))
+
+	recorder := &recordingRunner{}
+	mu := new(sync.Mutex)
+	i, err := New("", configPath, dir, newTestStorage(t, dir),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(recordingExtensionsRunner{runner: recorder}),
+		WithLocker(mu),
+		WithScheduleNextTick(func(fn func()) bool {
+			fn()
+			return true
+		}),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	_ = i.Ready()
+	i.WaitWorkspaces()
+
+	// The home runner is built and its extensions, if any, are started from a
+	// background goroutine; give that path time to run so a regression that
+	// reintroduces the start is caught rather than racing past the assertion.
+	time.Sleep(200 * time.Millisecond)
+
+	assert.Empty(t, recorder.runCalls(),
+		"no extension may be started on the home workspace")
+}
+
 // TestWonAliasIntegration is an end-to-end test that wires the IDE
 // through real configuration to verify the `won` alias from the user's
 // `~/.runedev/config.yaml`:

@@ -1342,6 +1342,46 @@ func TestShowFallbackPromptInstallsFuzzySearch(t *testing.T) {
 	}
 }
 
+// TestHomeFallbackPromptDoesNotInstall verifies that on the home/empty
+// workspace the rune-agent and fuzzy-search command fallbacks do not offer to
+// install an extension. The home workspace deliberately starts no extensions,
+// so the user is told to open a workspace instead of opening an install
+// prompt.
+func TestHomeFallbackPromptDoesNotInstall(t *testing.T) {
+	commands := []string{
+		"agent", "?",
+		"chateffort", "chatmaxtokens", "chatskill", "chatmodel",
+		"chatclear", "chatcompact", "chatfork", "chatexport", "chatlog",
+		"searchfile", "searchtext", "searchast",
+	}
+	for _, command := range commands {
+		t.Run(command, func(t *testing.T) {
+			workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-home")
+			require.NoError(t, err)
+			w := testWorkspaceWithURI{testLoader: &testLoader{}, uri: workspaceURI}
+			cfg := vte.DefaultConfig()
+			scheduler := newQueuedScheduler()
+			cfg.ScheduleNextTick = scheduler.ScheduleNextTick
+			svc := storagestub.NewInMemoryService()
+			b := newExForTestingWithStorage(t, w, svc, texttest.NopEditor(),
+				cfg, nopPublishEvent, clipboard.NewInMemory(),
+				text.WithCommandKey(testCommandKey),
+			)
+			b.mu = &sync.Mutex{}
+			b.scheduler = scheduler
+			defer b.Close()
+
+			b.markHome()
+			b.ShowFallbackPrompt(context.Background(), command)
+
+			assert.Equal(t, 0, b.comp.Browser().FloatingWindows(),
+				"home fallback must not open an install prompt")
+			assert.Nil(t, b.ex.companionShell,
+				"home fallback must not open the install shell")
+		})
+	}
+}
+
 // TestShowFallbackPromptNoDoesNothing verifies that selecting No on the
 // install prompt closes the prompt without opening the companion shell.
 func TestShowFallbackPromptNoDoesNothing(t *testing.T) {

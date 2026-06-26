@@ -66,7 +66,7 @@ import (
 func TestStartInstalledExtensions(t *testing.T) {
 	t.Parallel()
 
-	t.Run("starts on home and workspace runners", func(t *testing.T) {
+	t.Run("starts on workspace runners but not home", func(t *testing.T) {
 		t.Parallel()
 		cfg := configWithExtension(t, "rune-agent", "rune-agent-bin")
 		home := &recordingRunner{}
@@ -85,10 +85,8 @@ func TestStartInstalledExtensions(t *testing.T) {
 		started := h.startInstalledExtensions([]string{"rune-agent"})
 		assert.True(t, started)
 
-		homeCalls := home.runCalls()
-		require.Len(t, homeCalls, 1)
-		assert.Equal(t, "rune-agent", homeCalls[0].id)
-		assert.Equal(t, "rune-agent-bin", homeCalls[0].path)
+		assert.Empty(t, home.runCalls(),
+			"home runner must not start user extensions")
 
 		wsCalls := wsRunner.runCalls()
 		require.Len(t, wsCalls, 1)
@@ -129,18 +127,21 @@ func TestStartInstalledExtensions(t *testing.T) {
 	t.Run("already-running runner still counts as started", func(t *testing.T) {
 		t.Parallel()
 		cfg := configWithExtension(t, "rune-agent", "rune-agent-bin")
-		home := &recordingRunner{
+		wsRunner := &recordingRunner{
 			runErr: fmt.Errorf("extension %q: %w", "rune-agent",
 				extensionv2.ErrExtensionAlreadyRunning),
 		}
+		ws := &workspaceHandler{}
+		ws.Extensions.Store(extension.Runner(wsRunner))
 		h := &workspaceManagerHandler{
 			mu:           new(sync.Mutex),
-			homeRunner:   home,
 			reloadConfig: func() (ideConfig, error) { return cfg, nil },
 		}
+		h.workspaces[0] = ws
+		h.workspaceCount = 1
 		started := h.startInstalledExtensions([]string{"rune-agent"})
 		assert.True(t, started)
-		assert.Len(t, home.runCalls(), 1)
+		assert.Len(t, wsRunner.runCalls(), 1)
 	})
 }
 
@@ -176,20 +177,24 @@ func TestAfterPackageConfigMerge(t *testing.T) {
 	) {
 		t.Helper()
 		cfg := configWithExtension(t, "rune-agent", "rune-agent-bin")
-		home := &recordingRunner{}
+		wsRunner := &recordingRunner{}
+		ws := &workspaceHandler{}
+		ws.Extensions.Store(extension.Runner(wsRunner))
 		h := &workspaceManagerHandler{
 			mu:                     new(sync.Mutex),
-			homeRunner:             home,
+			homeRunner:             &recordingRunner{},
 			reloadConfig:           func() (ideConfig, error) { return cfg, nil },
 			packageConfigMergeHook: hook,
 		}
-		return h, home
+		h.workspaces[0] = ws
+		h.workspaceCount = 1
+		return h, wsRunner
 	}
 
 	t.Run("gui.env only invokes stored hook, no extension start", func(t *testing.T) {
 		t.Parallel()
 		var hookCalls int
-		h, home := newHandler(t, func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error) {
+		h, wsRunner := newHandler(t, func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error) {
 			hookCalls++
 			return idepkg.ConfigMergeResult{LiveApplied: true}, nil
 		})
@@ -199,13 +204,13 @@ func TestAfterPackageConfigMerge(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.LiveApplied)
 		assert.Equal(t, 1, hookCalls)
-		assert.Empty(t, home.runCalls())
+		assert.Empty(t, wsRunner.runCalls())
 	})
 
 	t.Run("extensions only starts extension and still invokes hook", func(t *testing.T) {
 		t.Parallel()
 		var hookCalls int
-		h, home := newHandler(t, func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error) {
+		h, wsRunner := newHandler(t, func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error) {
 			hookCalls++
 			return idepkg.ConfigMergeResult{}, nil
 		})
@@ -217,13 +222,13 @@ func TestAfterPackageConfigMerge(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result.LiveApplied)
 		assert.Equal(t, 1, hookCalls)
-		require.Len(t, home.runCalls(), 1)
-		assert.Equal(t, "rune-agent", home.runCalls()[0].id)
+		require.Len(t, wsRunner.runCalls(), 1)
+		assert.Equal(t, "rune-agent", wsRunner.runCalls()[0].id)
 	})
 
 	t.Run("both env and extensions live-apply", func(t *testing.T) {
 		t.Parallel()
-		h, home := newHandler(t, func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error) {
+		h, wsRunner := newHandler(t, func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error) {
 			return idepkg.ConfigMergeResult{LiveApplied: true}, nil
 		})
 		event := idepkg.ConfigMergeEvent{
@@ -233,7 +238,7 @@ func TestAfterPackageConfigMerge(t *testing.T) {
 		result, err := h.afterPackageConfigMerge(event)
 		require.NoError(t, err)
 		assert.True(t, result.LiveApplied)
-		require.Len(t, home.runCalls(), 1)
+		require.Len(t, wsRunner.runCalls(), 1)
 	})
 
 	t.Run("stored hook error propagates", func(t *testing.T) {
@@ -253,14 +258,14 @@ func TestAfterPackageConfigMerge(t *testing.T) {
 
 	t.Run("nil stored hook still starts extension", func(t *testing.T) {
 		t.Parallel()
-		h, home := newHandler(t, nil)
+		h, wsRunner := newHandler(t, nil)
 		event := idepkg.ConfigMergeEvent{
 			Diff: mustYAMLDoc(t, "extensions:\n  rune-agent:\n    path: rune-agent-bin\n"),
 		}
 		result, err := h.afterPackageConfigMerge(event)
 		require.NoError(t, err)
 		assert.True(t, result.LiveApplied)
-		require.Len(t, home.runCalls(), 1)
+		require.Len(t, wsRunner.runCalls(), 1)
 	})
 
 	t.Run("tutorials added invoke tutorialsInstalled and still run hook", func(t *testing.T) {
@@ -368,6 +373,13 @@ func TestPkgInstallStartsExtensionWithPackageEnv(t *testing.T) {
 	m := newPkgInstallExtHandler(t, configPath, rm,
 		recordingExtensionsRunner{runner: recorder}, envHook)
 	defer m.Close()
+
+	// User extensions never start on the home workspace, so open a real
+	// workspace for the freshly-installed extension to start on.
+	wsURI, err := workspaceapi.CurrentUserHostURI(dir)
+	require.NoError(t, err)
+	require.NoError(t, m.addWorkspace(wsURI, true, false, -1))
+	m.drainPendingWorkspaces()
 
 	h := pkgshell.New(pkgshell.Config{
 		Manager:       m.pkgmanager.pkg,
