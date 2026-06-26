@@ -890,6 +890,12 @@ func (e ConfigMergeEvent) TouchesPath(path ...string) bool {
 	return configDiffTouchesPath(e.Diff, path...)
 }
 
+// AddedExtensionIDs returns the ids added under the top-level "extensions"
+// key of the applied diff, or nil when the diff did not add any.
+func (e ConfigMergeEvent) AddedExtensionIDs() []string {
+	return addedExtensionIDs(e.Diff)
+}
+
 // ConfigMergeResult reports what a post-merge hook did. LiveApplied is true
 // when the hook applied changes to the running process such that a full
 // restart is not required for new work to observe them.

@@ -27,9 +27,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+	"mvdan.cc/sh/v3/syntax"
 )
 
 // loadOrCreateUserConfig reads a YAML file at path into a yaml.Node document.
@@ -170,6 +172,57 @@ func configDiffMappingAtPath(doc *yaml.Node, path ...string) *yaml.Node {
 // given nested key path.
 func configDiffTouchesPath(doc *yaml.Node, path ...string) bool {
 	return configDiffMappingAtPath(doc, path...) != nil
+}
+
+// addedExtensionIDs returns the keys added under the top-level "extensions"
+// mapping of an applied config diff. It returns nil when the diff does not
+// touch "extensions" or that key is not a (non-empty) mapping.
+func addedExtensionIDs(doc *yaml.Node) []string {
+	node := configDiffMappingAtPath(doc, "extensions")
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	var ids []string
+	for i := 0; i < len(node.Content)-1; i += 2 {
+		ids = append(ids, node.Content[i].Value)
+	}
+	return ids
+}
+
+// expandRuneVars expands only the variables for which lookup returns
+// ok; every other $VAR / ${VAR} reference is left verbatim in the
+// result. It parses s as a single shell word with mvdan/sh so brace
+// forms (${VAR}) are handled faithfully, and copies any source span it
+// does not replace unchanged. If parsing fails (these are config
+// templates, not arbitrary shell), s is returned unchanged.
+func expandRuneVars(s string, lookup func(name string) (string, bool)) string {
+	word, err := syntax.NewParser().Document(strings.NewReader(s))
+	if err != nil || word == nil {
+		return s
+	}
+	var b strings.Builder
+	pos := 0
+	syntax.Walk(word, func(node syntax.Node) bool {
+		pe, ok := node.(*syntax.ParamExp)
+		if !ok || pe.Param == nil {
+			return true
+		}
+		val, ok := lookup(pe.Param.Value)
+		if !ok {
+			return true
+		}
+		start := int(pe.Pos().Offset())
+		end := int(pe.End().Offset())
+		if start < pos || end > len(s) {
+			return true
+		}
+		b.WriteString(s[pos:start])
+		b.WriteString(val)
+		pos = end
+		return true
+	})
+	b.WriteString(s[pos:])
+	return b.String()
 }
 
 // expandNodeValues walks all scalar nodes in the tree and applies

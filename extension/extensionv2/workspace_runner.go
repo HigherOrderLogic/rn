@@ -56,6 +56,10 @@ import (
 
 var _ extension.Runner = (*workspaceRunner)(nil)
 
+// ErrExtensionAlreadyRunning is returned by Run when the extension with the
+// given id is already running, so callers can treat a re-run as a no-op.
+var ErrExtensionAlreadyRunning = errors.New("extension is already running")
+
 // Runner satisfies extension.Runner with a simple
 // protocol that initially exchanges metadata and secrets
 // over stdin/stdout and secures resources via TLS and
@@ -189,7 +193,7 @@ func (m *workspaceRunner) Run(id, cmdAndArgs string, config config.Config) error
 	m.mu.Lock()
 	if state := m.states[id]; state != nil && state.running {
 		m.mu.Unlock()
-		return fmt.Errorf("extension %q is already running", id)
+		return fmt.Errorf("extension %q: %w", id, ErrExtensionAlreadyRunning)
 	}
 	m.mu.Unlock()
 

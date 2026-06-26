@@ -62,6 +62,7 @@ import (
 	"unstable.build/go-tui/component/notifications"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension"
+	"unstable.build/go-tui/extension/extensionv2"
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	handlermarkdown "unstable.build/go-tui/handler/markdown"
@@ -954,22 +955,141 @@ func (h *workspaceManagerHandler) initExtensions(manager extension.Runner, cfg i
 	}
 
 	for id, p := range userExtensions {
-		path, _ := p.path()
-		pconfig, ok := p.config()
-		if !ok {
-			pconfig = config.MapConfig(make(map[string]any))
-		}
-		id := id
+		path, pconfig := extensionRunArgs(p)
 		go debug.CapturePanicReport(func() {
 			defer wg.Done()
-			err := manager.Run(id, path, pconfig)
-			if err != nil {
+			if err := startUserExtension(manager, id, path, pconfig); err != nil {
 				log.Errorf("failed to run extension with id %q: %v", id, err)
 			}
 		})
 	}
 
 	wg.Wait()
+}
+
+// extensionRunArgs resolves the executable path and config for a user
+// extension. It must run on the calling goroutine because extensionConfig.config
+// records parse errors into the shared ideConfig.errors map (see
+// extensionConfig.config), which is not safe to touch from the per-extension
+// goroutines that startUserExtension feeds.
+func extensionRunArgs(p extensionConfig) (string, config.Config) {
+	path, _ := p.path()
+	pconfig, ok := p.config()
+	if !ok {
+		pconfig = config.MapConfig(make(map[string]any))
+	}
+	return path, pconfig
+}
+
+// startUserExtension runs one user-configured extension on the given runner
+// with pre-resolved args (see extensionRunArgs). It returns nil when the
+// extension is already running so callers can treat a re-run as a no-op.
+func startUserExtension(
+	manager extension.Runner, id, path string, pconfig config.Config,
+) error {
+	if err := manager.Run(id, path, pconfig); err != nil &&
+		!errors.Is(err, extensionv2.ErrExtensionAlreadyRunning) {
+		return err
+	}
+	return nil
+}
+
+// startInstalledExtensions starts the given newly-added extensions on every
+// live workspace runner (home plus open workspaces). It is invoked after a
+// package install merges entries under the `extensions:` config key so the
+// tools become active without a restart. It returns whether at least one of
+// the ids matched a configured extension (and was thus started or already
+// running).
+//
+// This always runs off the host event loop: the package manager drives config
+// merges from background install goroutines (installGate.install spawns one;
+// the auto-install path is reached through LibDir consumers in idelsp/idedebug/
+// syntax workers). It therefore acquires h.mu — the shared IDE locker the event
+// loop holds — to read event-loop-owned runner state, then releases it before
+// spawning processes so the lock is never held across a fork. reloadConfig and
+// extensionRunArgs touch only freshly loaded, non-shared config state, so they
+// stay outside the lock.
+func (h *workspaceManagerHandler) startInstalledExtensions(ids []string) bool {
+	if len(ids) == 0 {
+		return false
+	}
+	cfg, err := h.reloadConfig()
+	if err != nil {
+		log.Errorf("failed to reload config to start installed extensions: %v", err)
+		return false
+	}
+	userExtensions := cfg.extensions()
+
+	type startArgs struct {
+		id      string
+		path    string
+		pconfig config.Config
+	}
+	var toStart []startArgs
+	for _, id := range ids {
+		if p, ok := userExtensions[id]; ok {
+			path, pconfig := extensionRunArgs(p)
+			toStart = append(toStart, startArgs{id: id, path: path, pconfig: pconfig})
+		}
+	}
+	if len(toStart) == 0 {
+		return false
+	}
+
+	h.mu.Lock()
+	runners := make([]extension.Runner, 0, h.workspaceCount+1)
+	if h.homeRunner != nil {
+		runners = append(runners, h.homeRunner)
+	}
+	for _, hm := range h.workspaces {
+		if hm == nil {
+			continue
+		}
+		if runner, ok := hm.Extensions.Load().(extension.Runner); ok && runner != nil {
+			runners = append(runners, runner)
+		}
+	}
+	h.mu.Unlock()
+
+	var wg sync.WaitGroup
+	for _, runner := range runners {
+		for _, a := range toStart {
+			runner, a := runner, a
+			wg.Add(1)
+			go debug.CapturePanicReport(func() {
+				defer wg.Done()
+				if err := startUserExtension(runner, a.id, a.path, a.pconfig); err != nil {
+					log.Errorf("failed to start installed extension with id %q: %v",
+						a.id, err)
+				}
+			})
+		}
+	}
+	wg.Wait()
+	return true
+}
+
+// afterPackageConfigMerge is the post-merge hook wired into the package
+// manager. It starts any extension added under the `extensions:` config key so
+// the package's tools work without a restart, and composes the externally
+// supplied gui.env hook so both live-apply paths run. The gui.env hook runs
+// first because it applies the package's environment via os.Setenv, and the
+// extension processes spawned by startInstalledExtensions inherit os.Environ()
+// at fork time; starting them first would deny them those variables. Extension
+// start failures are logged (as in initExtensions), so the returned error is
+// the stored hook's, and LiveApplied is OR'd across both paths.
+func (h *workspaceManagerHandler) afterPackageConfigMerge(
+	event idepkg.ConfigMergeEvent,
+) (idepkg.ConfigMergeResult, error) {
+	var result idepkg.ConfigMergeResult
+	var err error
+	if h.packageConfigMergeHook != nil {
+		result, err = h.packageConfigMergeHook(event)
+	}
+
+	startedExtension := h.startInstalledExtensions(event.AddedExtensionIDs())
+	result.LiveApplied = result.LiveApplied || startedExtension
+	return result, err
 }
 
 func (h *workspaceManagerHandler) textOpts(
@@ -2801,7 +2921,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	h.pkgmanager.init(notifications, releaseManager, wm,
 		h.ideStorage, h.homeWorkspace, h.sixDir, h.configPath, h.frameCharSet,
 		h, h, h.scheduleNextTick, parser,
-		editorMode, autoInstall, h.packageConfigMergeHook)
+		editorMode, autoInstall, h.afterPackageConfigMerge)
 }
 
 func (h *workspaceManagerHandler) openURI(file workspaceapi.URI, focus bool) error {

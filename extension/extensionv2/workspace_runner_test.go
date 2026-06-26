@@ -407,7 +407,8 @@ func TestWorkspaceRunnerRunRejectsDuplicateRunningID(t *testing.T) {
 
 	err = runner.Run("test-extension", "/bin/ext", config.NopConfig())
 	require.Error(t, err)
-	assert.Equal(t, `extension "test-extension" is already running`, err.Error())
+	assert.ErrorIs(t, err, ErrExtensionAlreadyRunning)
+	assert.Contains(t, err.Error(), `extension "test-extension"`)
 }
 
 func TestWorkspaceRunnerStopExtensionMarksStateStopped(t *testing.T) {

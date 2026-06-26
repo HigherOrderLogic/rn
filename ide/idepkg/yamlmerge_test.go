@@ -27,6 +27,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -829,4 +830,82 @@ func TestConfigDiffMappingAtPathNilAndEmpty(t *testing.T) {
 	assert.Nil(t, configDiffMappingAtPath(nil, "gui", "env"))
 	doc := mustParseYAML(t, "gui:\n  env:\n    FOO: bar\n")
 	assert.Nil(t, configDiffMappingAtPath(doc))
+}
+
+func TestAddedExtensionIDs(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		doc  string
+		want []string
+	}{
+		{
+			name: "single extension added",
+			doc:  "extensions:\n  rune-agent:\n    path: rune-agent\n",
+			want: []string{"rune-agent"},
+		},
+		{
+			name: "extension with path and nested config object",
+			doc: "extensions:\n" +
+				"  rune-agent:\n" +
+				"    path: rune-agent\n" +
+				"    config:\n" +
+				"      model: sonnet\n" +
+				"      provider:\n" +
+				"        name: anthropic\n" +
+				"        timeout: 30\n",
+			want: []string{"rune-agent"},
+		},
+		{
+			name: "multiple extensions added",
+			doc:  "extensions:\n  rune-agent:\n    path: a\n  go-lsp:\n    path: b\n",
+			want: []string{"go-lsp", "rune-agent"},
+		},
+		{
+			name: "extensions alongside other keys",
+			doc:  "gui:\n  env:\n    FOO: bar\nextensions:\n  rune-agent:\n    path: a\n",
+			want: []string{"rune-agent"},
+		},
+		{
+			name: "gui.env only is not an extension",
+			doc:  "gui:\n  env:\n    FOO: bar\n",
+			want: nil,
+		},
+		{
+			name: "no extensions key",
+			doc:  "settings:\n  theme: dark\n",
+			want: nil,
+		},
+		{
+			name: "empty doc",
+			doc:  "",
+			want: nil,
+		},
+		{
+			name: "extensions present but empty mapping",
+			doc:  "extensions: {}\n",
+			want: nil,
+		},
+		{
+			name: "extensions scalar (non-mapping) yields nothing",
+			doc:  "extensions: nonsense\n",
+			want: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			doc := mustParseYAML(t, tt.doc)
+			got := addedExtensionIDs(doc)
+			sort.Strings(got)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConfigMergeEventAddedExtensionIDs(t *testing.T) {
+	t.Parallel()
+	doc := mustParseYAML(t, "extensions:\n  rune-agent:\n    path: rune-agent\n")
+	e := ConfigMergeEvent{Diff: doc}
+	assert.Equal(t, []string{"rune-agent"}, e.AddedExtensionIDs())
 }
