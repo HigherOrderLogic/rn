@@ -131,14 +131,14 @@ GUI_THEMES = {
         "magenta": "#ffb1fe", "cyan": "#e5e6fe", "white": "#fffeff",
         "cursor": "#d6fcb9",
     },
-    "greig": {
-        "foreground": "#ffffff", "background": "#262335", "black": "#262335",
-        "maroon": "#fe4450", "green": "#72f1b8", "olive": "#f3e70f",
-        "navy": "#03edf9", "purple": "#ff7edb", "teal": "#03edf9",
-        "silver": "#9c84bf", "gray": "#614d85", "red": "#fe4450",
-        "lime": "#72f1b8", "yellow": "#fede5d", "blue": "#03edf9",
-        "magenta": "#ff7edb", "cyan": "#03edf9", "white": "#ffffff",
-        "cursor": "#fe4450",
+    "frost": {
+        "foreground": "#bbc2cf", "background": "#000000", "black": "#000000",
+        "maroon": "violet", "green": "#00FFAF", "olive": "gold",
+        "navy": "indigo", "purple": "slateblue", "teal": "#00AFFF",
+        "silver": "#666666", "gray": "#282c34", "red": "darkorchid",
+        "lime": "darkcyan", "yellow": "#ecbe7b", "blue": "#D7AFFF",
+        "magenta": "#c1e3fe", "cyan": "#46d9ff", "white": "#bbc2cf",
+        "cursor": "red",
     },
     "mullen": {
         "foreground": "#ccccce", "background": "#0d0d1b", "black": "#282828",
