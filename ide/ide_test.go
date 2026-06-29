@@ -1187,6 +1187,149 @@ command:
 			"got:\n%s", data.Text)
 }
 
+// TestE2EFileExplorerEnterOpensFileAfterReload reproduces the bug
+// where, after opening files and running :workspacereload, re-opening
+// the file explorer and pressing <enter> on a file does nothing.
+//
+// A reload discards the old ex and restores the previous session's
+// files into windows. The freshly re-opened explorer captures a
+// different window as its target, so opening an already-restored file
+// hit browser.Window.SetContent's ErrTabNotFree (the tab is already
+// rendered in its restored window). editFileURILocal swallowed that
+// error, so pressing <enter> silently did nothing. The fix focuses
+// the window that already owns the tab.
+func TestE2EFileExplorerEnterOpensFileAfterReload(t *testing.T) {
+	rawDir := t.TempDir()
+	dir, err := filepath.EvalSymlinks(rawDir)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "alpha.txt"), []byte("alpha\n"), 0o644))
+	require.NoError(t, os.WriteFile(
+		filepath.Join(dir, "beta.txt"), []byte("beta\n"), 0o644))
+
+	dataDir := t.TempDir()
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+editor:
+  mode: modal
+command:
+  key: "<c-\\\\>"
+workspace:
+  auto_restore: true
+`), 0o666))
+
+	mu := new(sync.Mutex)
+	scheduleNextTick := func(fn func()) bool {
+		go debug.CapturePanicReport(func() {
+			mu.Lock()
+			defer mu.Unlock()
+			fn()
+		})
+		return true
+	}
+
+	i, err := New(dir, configPath, dataDir, newTestStorage(t, dataDir),
+		WithLocker(mu),
+		WithScheduleNextTick(scheduleNextTick),
+		WithPublishEvent(func(term.Event) bool { return true }),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+
+	root := i.Ready()
+	mu.Lock()
+	root.Resize(120, 40)
+	mu.Unlock()
+	i.WaitWorkspaces()
+
+	sendKeys := func(t *testing.T, seq string) {
+		t.Helper()
+		keys, err := term.ParseKeys(seq)
+		require.NoError(t, err)
+		for _, k := range keys {
+			mu.Lock()
+			root.Handle(term.Event{
+				Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key,
+			})
+			mu.Unlock()
+			i.WaitInflight()
+		}
+	}
+
+	focusedURI := func() string {
+		mu.Lock()
+		defer mu.Unlock()
+		ex := i.workspaceHandler.focusEx()
+		win, _ := ex.comp.Focus()
+		if win == nil {
+			return ""
+		}
+		content, cerr := win.Content()
+		if cerr != nil || content == nil {
+			return ""
+		}
+		tab, ok := content.(*browser.Tab)
+		if !ok {
+			return ""
+		}
+		return tab.URI().String()
+	}
+
+	// Open alpha.txt on the left, split a second window on the right
+	// and open beta.txt there, then open the file explorer. The
+	// explorer's target becomes the right window, distinct from the
+	// window that holds alpha.txt.
+	sendKeys(t, "<c-\\\\>edit<space>"+filepath.Join(dir, "alpha.txt")+"<enter>")
+	sendKeys(t, "<c-\\\\>windownew<space>right<enter>")
+	sendKeys(t, "<c-\\\\>edit<space>"+filepath.Join(dir, "beta.txt")+"<enter>")
+	sendKeys(t, "<c-\\\\>fexplorer<enter>")
+
+	// Reload the workspace. It tears down the ex and restores the two
+	// files asynchronously.
+	sendKeys(t, "<c-\\\\>workspacereload<enter>")
+	i.WaitWorkspaces()
+	i.WaitInflight()
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		ex := i.workspaceHandler.focusEx()
+		var files int
+		if ex != nil {
+			for _, tab := range ex.comp.Browser().Tabs() {
+				if strings.HasSuffix(tab.URI().String(), ".txt") {
+					files++
+				}
+			}
+		}
+		mu.Unlock()
+		return files == 2
+	}, 30*time.Second, 50*time.Millisecond,
+		"workspace reload did not restore both files")
+
+	// Re-open the explorer. Its target window is not the window that
+	// holds alpha.txt, so opening alpha.txt must focus alpha.txt's
+	// existing window rather than silently doing nothing.
+	sendKeys(t, "<c-\\\\>fexplorer<enter>")
+
+	// The explorer renders the workspace tree; the cursor starts on
+	// the first entry. Walk down until alpha.txt is focused. Each
+	// <enter> on a directory expands/collapses it; on a file it opens
+	// it. With a small flat tree alpha.txt is reached within a few
+	// rows.
+	var opened bool
+	for range 8 {
+		sendKeys(t, "<enter>")
+		if strings.HasSuffix(focusedURI(), "/alpha.txt") {
+			opened = true
+			break
+		}
+		sendKeys(t, "<down>")
+	}
+	require.True(t, opened,
+		"pressing enter on alpha.txt in the file explorer after a "+
+			"workspacereload must focus the window showing alpha.txt; "+
+			"focusedURI=%q", focusedURI())
+}
+
 type mockShader struct {
 	called bool
 	frames []int
