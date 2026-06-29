@@ -504,8 +504,8 @@ const (
 // Vim-mode option labels double as map keys in optionToChoice; they
 // must stay byte-identical between the prompt and the callback.
 const (
-	optVimYes = "  Yes "
-	optVimNo  = "  No  "
+	optVimYes = "   Yes   "
+	optVimNo  = "   No    "
 )
 
 var (
@@ -562,14 +562,18 @@ func (b *bootstrapHandler) openWelcomePrompt() {
 }
 
 func (b *bootstrapHandler) openVimPrompt() {
-	msg := "## Vim mode\n" +
-		"Rune can run in vim mode everywhere: the terminal, the Rune console, " +
-		"input boxes, the file explorer, and every editor buffer. Modes, motions, " +
-		"operators and a macro system, consistent across the whole IDE.\n\n" +
-		"Prefer a familiar, standard editor feel instead? Pick **No** and Rune " +
-		"uses standard key bindings everywhere.\n\n" +
-		"This is not permanent; you can switch anytime by editing your config.\n\n" +
-		"Enable vim mode everywhere?"
+	msg := "## Choose your key bindings\n" +
+		"Rune ships with two built-in editors, so pick the one that feels like home.\n\n" +
+		"Know vim? Pick **Yes** and you get it **everywhere**, not just in editor " +
+		"buffers: the terminal, input boxes, and the file explorer all share the same " +
+		"modes, motions, operators, and macros. The same muscle memory across the " +
+		"whole IDE.\n\n" +
+		"Used to VS Code, Cursor, or a plain text editor? Pick **No** and Rune uses " +
+		"those familiar, standard key bindings everywhere instead.\n\n" +
+		"Either choice sets the default editor and key bindings for files, the file " +
+		"explorer, and every input across Rune. You can fine-tune it later in your " +
+		"config.\n\n" +
+		"**Enable vim mode?**"
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
