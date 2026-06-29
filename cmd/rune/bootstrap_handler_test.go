@@ -120,7 +120,7 @@ func TestBootstrapHandlerDelegates(t *testing.T) {
 func TestBootstrapHandlerSwapInner(t *testing.T) {
 	a := &fakeHandler{}
 	b := &fakeHandler{}
-	bh := &bootstrapHandler{inner: a, chosenEditor: editorExoModal}
+	bh := &bootstrapHandler{inner: a, chosenEditor: editorModal}
 	bh.inner = b
 
 	ev := term.Event{Type: term.EventKey}

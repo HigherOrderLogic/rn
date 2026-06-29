@@ -83,8 +83,6 @@ type bootstrapHandler struct {
 	lastResizeW       int
 	lastResizeH       int
 	chosenEditor      string
-	chosenFormat      string
-	chosenExoPreset   string
 	closingPreIDE     bool
 }
 
@@ -416,7 +414,7 @@ func (b *bootstrapHandler) performSwap() error {
 		return fmt.Errorf("write bootstrap override: %w", err)
 	}
 
-	b.configPath = filepath.Join(b.dataDir, configFilenameForFormat(b.chosenFormat))
+	b.configPath = filepath.Join(b.dataDir, configFilename)
 
 	b.mu.Unlock()
 	defer b.mu.Lock()
@@ -446,11 +444,11 @@ func (b *bootstrapHandler) performSwap() error {
 }
 
 func (b *bootstrapHandler) writeOverrideConfig() error {
-	body, err := renderOverride(b.chosenEditor, b.chosenFormat, b.chosenExoPreset)
+	body, err := renderOverride(b.chosenEditor)
 	if err != nil {
 		return fmt.Errorf("render override: %w", err)
 	}
-	path := filepath.Join(b.dataDir, configFilenameForFormat(b.chosenFormat))
+	path := filepath.Join(b.dataDir, configFilename)
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		return fmt.Errorf("write override config %q: %w", path, err)
 	}
@@ -498,32 +496,20 @@ func (b *bootstrapHandler) Close() error {
 }
 
 const (
-	editorModal       = "modal"
-	editorModeless    = "modeless"
-	editorExoModal    = "exo-modal"
-	editorExoModeless = "exo-modeless"
+	editorModal    = "modal"
+	editorModeless = "modeless"
 )
 
-// Editor-mode option labels double as map keys in optionToChoice; they
+// Vim-mode option labels double as map keys in optionToChoice; they
 // must stay byte-identical between the prompt and the callback.
 const (
-	optModal       = "  Modal                "
-	optModeless    = "  Modeless             "
-	optExoModal    = "  Exoeditor (modal)    "
-	optExoModeless = "  Exoeditor (modeless) "
+	optVimYes = "  Yes "
+	optVimNo  = "  No  "
 )
 
 var (
-	bootstrapEditorKeys = []term.KeyComb{
-		{Ch: 'm'}, {Ch: 'l'}, {Ch: 'b'}, {Ch: 'e'},
-	}
-
-	bootstrapFormatKeys = []term.KeyComb{
-		{Ch: 's'}, {Ch: 'y'},
-	}
-
-	bootstrapPresetKeys = []term.KeyComb{
-		{Ch: 'v'}, {Ch: 'n'}, {Ch: 'h'}, {Ch: 'k'}, {Ch: 'e'},
+	bootstrapVimKeys = []term.KeyComb{
+		{Ch: 'y'}, {Ch: 'n'},
 	}
 
 	bootstrapWelcomeKeys = []term.KeyComb{
@@ -544,15 +530,6 @@ var (
 )
 
 const (
-	optFormatStar = "  Starlark (.star) "
-	optFormatYAML = "  YAML (.yaml)     "
-
-	optPresetVim   = "  vim   "
-	optPresetNvim  = "  nvim  "
-	optPresetHelix = "  helix "
-	optPresetKak   = "  kak   "
-	optPresetEmacs = "  emacs "
-
 	optWelcomeGo = " Let's go "
 
 	optLoginSignIn = "  Sign in  "
@@ -576,88 +553,33 @@ func (b *bootstrapHandler) openWelcomePrompt() {
 		bootstrapWelcomeKeys,
 		sdkhandler.FuncPromptHandler(
 			guard.onSelect(func(_ int, _ string) {
-				b.openEditorPrompt()
+				b.openVimPrompt()
 			}),
 			guard.onClose(b.openWelcomePrompt),
 		),
 	)
 }
 
-func (b *bootstrapHandler) openEditorPrompt() {
-	msg := "## Editor mode\n" +
-		"Rune ships with three editor modes. Pick how you'd like to edit files. " +
-		"This is not permanent; you can switch anytime.\n" +
-		"- **Modal**: Rune's built-in vi implementation.\n" +
-		"Modes, motions, operators and a macro system.\n" +
-		"Pick this if you already think in modes.\n\n" +
-		"- **Modeless**: Rune's built-in standard editor.\n" +
-		"Pick this if you want a familiar IDE feel.\n\n" +
-		"- **Exoeditor**: external editor that runs in a Rune buffer.\n" +
-		"Rune owns tabs, windows, commands and language features; your external\n" +
-		"terminal-based editor (vim, nvim, helix, kak, emacs, etc.) owns the buffer and\n" +
-		"cursor. The fallback editor (modal or modeless) is used for in-memory buffers\n" +
-		"like Rune's file explorer."
+func (b *bootstrapHandler) openVimPrompt() {
+	msg := "## Vim mode\n" +
+		"Rune can run in vim mode everywhere: the terminal, the Rune console, " +
+		"input boxes, the file explorer, and every editor buffer. Modes, motions, " +
+		"operators and a macro system, consistent across the whole IDE.\n\n" +
+		"Prefer a familiar, standard editor feel instead? Pick **No** and Rune " +
+		"uses standard key bindings everywhere.\n\n" +
+		"This is not permanent; you can switch anytime by editing your config.\n\n" +
+		"Enable vim mode everywhere?"
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
-		[]string{optModal, optModeless, optExoModal, optExoModeless},
-		bootstrapEditorKeys,
+		[]string{optVimYes, optVimNo},
+		bootstrapVimKeys,
 		sdkhandler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
 				b.chosenEditor = optionToChoice(option)
-				b.openFormatPrompt()
-			}),
-			guard.onClose(b.openEditorPrompt),
-		),
-	)
-}
-
-func (b *bootstrapHandler) openFormatPrompt() {
-	msg := "## Configuration Format\n" +
-		"Rune takes two configuration formats.\n" +
-		"- **Starlark (.star)**: Python-like config with variables,\n" +
-		"functions, and conditionals. Pick this if you want to" +
-		"compose your configuration programmatically.\n\n" +
-		"- **YAML (.yaml)**: plain declarative key/value config.\n" +
-		"Pick this if you want the simplest possible file.\n\n" +
-		"Either format lives at `~/.rune/config.<ext>` and can be\n" +
-		"changed later by editing or replacing the file."
-	guard := b.promptGuard()
-	b.preIDE.Prompt(
-		msg,
-		[]string{optFormatStar, optFormatYAML},
-		bootstrapFormatKeys,
-		sdkhandler.FuncPromptHandler(
-			guard.onSelect(func(_ int, option string) {
-				b.chosenFormat = optionToFormat(option)
-				if b.chosenEditor == editorExoModal || b.chosenEditor == editorExoModeless {
-					b.openPresetPrompt()
-					return
-				}
 				_ = b.openLoginPrompt()
 			}),
-			guard.onClose(b.openFormatPrompt),
-		),
-	)
-}
-
-func (b *bootstrapHandler) openPresetPrompt() {
-	msg := "## Exoeditor choice\n" +
-		"You picked exo mode: Rune owns tabs, windows, and commands, while your\n" +
-		"external editor owns the buffer and cursor. Pick which editor that should be.\n\n" +
-		"The binary must be on your `PATH`. You can edit the exact command and other\n" +
-		"configuration properties in the generated config later."
-	guard := b.promptGuard()
-	b.preIDE.Prompt(
-		msg,
-		[]string{optPresetVim, optPresetNvim, optPresetHelix, optPresetKak, optPresetEmacs},
-		bootstrapPresetKeys,
-		sdkhandler.FuncPromptHandler(
-			guard.onSelect(func(_ int, option string) {
-				b.chosenExoPreset = optionToPreset(option)
-				_ = b.openLoginPrompt()
-			}),
-			guard.onClose(b.openPresetPrompt),
+			guard.onClose(b.openVimPrompt),
 		),
 	)
 }
@@ -1015,7 +937,7 @@ func shouldSwallowBootstrapEvent(ev term.Event) bool {
 		return true
 	}
 	// Quit / close keybindings from rune.star and
-	// override_modeless.star:
+	// override_modeless.yaml:
 	//   <m-q> quit
 	//   <m-w> windowclose, <a-w> tabclose, <c-w> tabclose
 	//   <m-s-w> / <s-m-w> windowclose (modeless overrides)
@@ -1035,40 +957,8 @@ func shouldSwallowBootstrapEvent(ev term.Event) bool {
 
 func optionToChoice(option string) string {
 	switch option {
-	case optModal:
-		return editorModal
-	case optModeless:
+	case optVimNo:
 		return editorModeless
-	case optExoModal:
-		return editorExoModal
-	case optExoModeless:
-		return editorExoModeless
 	}
 	return editorModal
-}
-
-func optionToFormat(option string) string {
-	switch option {
-	case optFormatStar:
-		return configFormatStar
-	case optFormatYAML:
-		return configFormatYAML
-	}
-	return configFormatYAML
-}
-
-func optionToPreset(option string) string {
-	switch option {
-	case optPresetVim:
-		return exoPresetVim
-	case optPresetNvim:
-		return exoPresetNvim
-	case optPresetHelix:
-		return exoPresetHelix
-	case optPresetKak:
-		return exoPresetKak
-	case optPresetEmacs:
-		return exoPresetEmacs
-	}
-	return exoPresetVim
 }

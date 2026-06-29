@@ -273,11 +273,29 @@ not a tab, so close it with `windowclose`.
 Close it now: """ + keypress("windowclose") + """.
 """
 
+console_intro_md = """\
+Next you'll meet the **Rune console**. It is not the command prompt
+you have been using, so first, the difference.
+
+The **command prompt** (`""" + ck + """`) is the one-line prompt you
+open, type one command into, and watch close again once it runs. Good
+for one-off actions like opening a file, splitting a window, or
+jumping to a definition.
+
+The **console** is a separate, durable tab with its own REPL. It is
+wired with commands that benefit from a persistent output window. For example
+checking the status of an extension, or installing a new package.
+
+The console is used to **set up** Rune, the prompt is used to **drive** it.
+
+Press `<enter>` or `<space>` to continue.
+"""
+
 agent_install_md = """\
-The **Rune Agent** is a Rune native AI coding assistant. It ships as a
+The **Rune Agent** is Rune's builtin AI coding assistant. It ships as a
 package you install on demand, so the first step is to install it.
 
-First, open Rune's companion console:
+First, open Rune's console:
 
 1. Press `""" + ck + """` to open the command prompt.
 2. Type `console` and press Enter.
@@ -286,7 +304,7 @@ Press `<enter>` or `<space>` to continue.
 """
 
 agent_pkg_install_md = """\
-You're in the companion console now. Install the agent package:
+You're in Rune's console now. Install the agent package:
 
 1. Type `pkg install rune-agent`.
 2. Press Enter and wait for the install to finish.
@@ -538,19 +556,21 @@ def teach_provider(provider, label, action_tokens, run_md, success_msg):
     wait_shell(
         title    = title,
         args     = ["models", "providers", provider] + action_tokens,
-        on_error = ("In the companion console, run `models providers " +
+        on_error = ("In Rune's console, run `models providers " +
                     provider + " " + " ".join(action_tokens) + "`."),
     )
     notify(level = success, message = success_msg)
 
 
 def teach_agent():
+    floating_window(title = "The Rune console", text = console_intro_md)
+
     floating_window(title = "Set up the Rune Agent", text = agent_install_md,
                     dismiss_keys = [ck])
     wait_command(
         title    = "Set up the Rune Agent",
         command  = "console",
-        on_error = ("Open Rune's companion console: run the `<cmd>console` " +
+        on_error = ("Open Rune's console: run the `<cmd>console` " +
                     "command."),
     )
 
@@ -558,7 +578,7 @@ def teach_agent():
     wait_shell(
         title    = "Install the agent package",
         args     = ["pkg", "install", "rune-agent"],
-        on_error = "In the companion console, run `pkg install rune-agent`.",
+        on_error = "In Rune's console, run `pkg install rune-agent`.",
     )
     notify(level = success, message = "Rune Agent installed.")
 
@@ -586,7 +606,7 @@ def teach_agent():
 Add your OpenAI credentials. The key is stored securely and never
 written to your config file.
 
-1. In the companion console, run `models providers openai add default`.
+1. In Rune's console, run `models providers openai add default`.
 2. Paste your API key at the redacted prompt.
 
 Press `<enter>` or `<space>` to continue.
@@ -598,7 +618,7 @@ Press `<enter>` or `<space>` to continue.
 Add your Anthropic credentials. The key is stored securely and never
 written to your config file.
 
-1. In the companion console, run `models providers anthropic add default`.
+1. In Rune's console, run `models providers anthropic add default`.
 2. Paste your API key at the redacted prompt.
 
 Press `<enter>` or `<space>` to continue.
@@ -610,7 +630,7 @@ Press `<enter>` or `<space>` to continue.
 Add your Gemini credentials. The key is stored securely and never
 written to your config file.
 
-1. In the companion console, run `models providers gemini add default`.
+1. In Rune's console, run `models providers gemini add default`.
 2. Paste your API key at the redacted prompt.
 
 Press `<enter>` or `<space>` to continue.
@@ -621,7 +641,7 @@ Press `<enter>` or `<space>` to continue.
         run_md = """\
 Codex authenticates through your browser — no API key to paste.
 
-1. In the companion console, run `models providers codex login`.
+1. In Rune's console, run `models providers codex login`.
 2. Finish the sign-in in your browser.
 
 Press `<enter>` or `<space>` to continue.
@@ -639,7 +659,7 @@ you have usage credits enabled, and otherwise pauses until the credit
 refreshes. The separate `anthropic` provider bills the same models by
 API key instead.
 
-1. In the companion console, run `models providers claude login`.
+1. In Rune's console, run `models providers claude login`.
 2. Finish the sign-in in your browser.
 
 Press `<enter>` or `<space>` to continue.
@@ -715,4 +735,4 @@ def run():
     teach_help()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "25", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "26", entry = run)

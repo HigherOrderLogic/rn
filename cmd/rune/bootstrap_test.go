@@ -44,10 +44,8 @@ func TestOptionToChoiceMapping(t *testing.T) {
 		option string
 		want   string
 	}{
-		{optModal, editorModal},
-		{optModeless, editorModeless},
-		{optExoModal, editorExoModal},
-		{optExoModeless, editorExoModeless},
+		{optVimYes, editorModal},
+		{optVimNo, editorModeless},
 		{"unknown", editorModal}, // default fallback
 	}
 	for _, tc := range cases {
@@ -57,103 +55,23 @@ func TestOptionToChoiceMapping(t *testing.T) {
 	}
 }
 
-func TestOverrideTemplateRendersExo(t *testing.T) {
-	cases := []struct {
-		name           string
-		editor         string
-		format         string
-		preset         string
-		wantContains   []string
-		wantNoContains []string
-	}{
-		{
-			name:   "exo modal yaml with helix",
-			editor: editorExoModal,
-			format: configFormatYAML,
-			preset: exoPresetHelix,
-			wantContains: []string{
-				"mode: exo",
-				"command: 'hx {file}:{line}:{col}'",
-				"fallback: modal",
-			},
-			// Comments may include escaped `{{.Command}}` literals
-			// pointing to the substitution semantics. We only
-			// require that the actual YAML values are substituted.
-			wantNoContains: nil,
-		},
-		{
-			name:   "exo modeless star with vim",
-			editor: editorExoModeless,
-			format: configFormatStar,
-			preset: exoPresetVim,
-			wantContains: []string{
-				`"mode": "exo"`,
-				`vim "+call cursor({line}, {col})" {file}`,
-				`"fallback": "modeless"`,
-			},
-			wantNoContains: nil,
-		},
-		{
-			// Regression: override_exo_modeless.yaml previously
-			// set `editor.mode: modeless` instead of `exo`, which
-			// disabled the exo pipeline despite the user picking
-			// exo in the bootstrap flow. The fallback is what
-			// must be modeless, not the mode.
-			name:   "exo modeless yaml with helix",
-			editor: editorExoModeless,
-			format: configFormatYAML,
-			preset: exoPresetHelix,
-			wantContains: []string{
-				"mode: exo",
-				"command: 'hx {file}:{line}:{col}'",
-				"fallback: modeless",
-			},
-			wantNoContains: []string{
-				// active block must not say mode: modeless
-				"mode: modeless",
-			},
-		},
-		{
-			// Same regression for the Starlark variant.
-			name:   "exo modeless star with nvim",
-			editor: editorExoModeless,
-			format: configFormatStar,
-			preset: exoPresetNvim,
-			wantContains: []string{
-				`"mode": "exo"`,
-				`nvim "+call cursor({line}, {col})" {file}`,
-				`"fallback": "modeless"`,
-			},
-			wantNoContains: []string{
-				`"mode": "modeless"`,
-			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := renderOverride(tc.editor, tc.format, tc.preset)
-			require.NoError(t, err)
-			for _, want := range tc.wantContains {
-				require.Contains(t, got, want)
-			}
-			for _, unwant := range tc.wantNoContains {
-				require.NotContains(t, got, unwant)
-			}
-		})
-	}
-}
+// TestRenderOverride pins that the vim-mode choice maps to the modal
+// override and the standard-editor choice maps to the modeless override
+// (which switches editor.mode to modeless), and that an unknown choice
+// is an error.
+func TestRenderOverride(t *testing.T) {
+	yes, err := renderOverride(editorModal)
+	require.NoError(t, err)
+	require.NotContains(t, yes, "mode: modeless",
+		"vim mode must not switch the editor into modeless")
 
-func TestOptionToFormatAndPresetMapping(t *testing.T) {
-	require.Equal(t, configFormatStar, optionToFormat(optFormatStar))
-	require.Equal(t, configFormatYAML, optionToFormat(optFormatYAML))
-	require.Equal(t, configFormatYAML, optionToFormat("unknown"))
+	no, err := renderOverride(editorModeless)
+	require.NoError(t, err)
+	require.Contains(t, no, "mode: modeless",
+		"declining vim mode must switch the editor into modeless")
 
-	require.Equal(t, exoPresetVim, optionToPreset(optPresetVim))
-	require.Equal(t, exoPresetNvim, optionToPreset(optPresetNvim))
-	require.Equal(t, exoPresetHelix, optionToPreset(optPresetHelix))
-	require.Equal(t, exoPresetKak, optionToPreset(optPresetKak))
-	require.Equal(t, exoPresetEmacs, optionToPreset(optPresetEmacs))
-	require.Equal(t, exoPresetVim, optionToPreset("unknown"))
+	_, err = renderOverride("bogus")
+	require.Error(t, err)
 }
 
 // TestGuardedPromptChainReopensOnUnadvancedClose proves that an Esc

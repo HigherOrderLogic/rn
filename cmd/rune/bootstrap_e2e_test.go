@@ -56,7 +56,7 @@ import (
 // TestBootstrapE2ESurfacesOAuthURLInWaitPrompt is the black-box e2e
 // test for the bootstrap login flow: it constructs the bootstrap
 // handler the way runGUI does, drives it through the Welcome →
-// Editor → Format → Sign-in prompts with real term.Events, and
+// Vim-mode → Sign-in prompts with real term.Events, and
 // asserts that once the apiclient publishes the OAuth URL on its
 // LoginSession.URL channel, that URL ends up rendered inside the
 // "Follow the instructions in your browser" wait prompt.
@@ -121,12 +121,12 @@ func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
 	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
 	wrapped.Resize(width, height)
 
-	// Welcome → Editor → Format → Sign-in. Each key matches the
-	// per-prompt binding tables in bootstrap_handler.go. The brief
-	// pauses give the publish-channel pumper a chance to drain the
-	// scheduled-tick callbacks that mount each successor prompt
-	// before the next key arrives.
-	for _, ch := range []rune{'g', 'm', 's', 'l'} {
+	// Welcome → Vim-mode → Sign-in. Each key matches the per-prompt
+	// binding tables in bootstrap_handler.go. The brief pauses give
+	// the publish-channel pumper a chance to drain the scheduled-tick
+	// callbacks that mount each successor prompt before the next key
+	// arrives.
+	for _, ch := range []rune{'g', 'y', 'l'} {
 		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -305,7 +305,7 @@ func (h *bootstrapE2ELocked) Selection() (string, bool) {
 //
 // The fix is to schedule the re-mount via scheduleNextTick so it
 // runs on a later event-loop iteration, after the original prompt
-// has fully closed. This test drives Welcome → Editor → Format →
+// has fully closed. This test drives Welcome → Vim-mode →
 // Sign-up via real keystrokes, observes the signup URL on the
 // OpenBrowser hook, and asserts the choice prompt is visible again
 // in the rendered frame.
@@ -354,9 +354,9 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
 	wrapped.Resize(width, height)
 
-	// Welcome → Editor → Format. 's' on the format prompt selects
-	// Starlark; control then advances to the login choice prompt.
-	for _, ch := range []rune{'g', 'm', 's'} {
+	// Welcome → Vim-mode. 'y' enables vim mode; control then
+	// advances to the login choice prompt.
+	for _, ch := range []rune{'g', 'y'} {
 		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -365,7 +365,7 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 		frame := handlertest.DrawHandler(wrapped, width, height)
 		return containsAll(frame, "Sign in", "Sign up")
 	}, 5*time.Second, 50*time.Millisecond,
-		"login choice prompt must be visible after the format prompt advances")
+		"login choice prompt must be visible after the vim-mode prompt advances")
 
 	wrapped.Handle(term.Event{Type: term.EventKey, Ch: 's'})
 
@@ -445,23 +445,23 @@ func TestBootstrapE2EEscReopensBootstrapPrompt(t *testing.T) {
 		"Esc on the welcome prompt must reopen it; an empty screen "+
 			"leaves the user with a dead installation")
 
-	// Advance to the editor prompt and make sure Esc reopens
+	// Advance to the vim-mode prompt and make sure Esc reopens
 	// mid-chain prompts too.
 	wrapped.Handle(term.Event{Type: term.EventKey, Ch: 'g'})
 
 	require.Eventually(t, func() bool {
 		frame := handlertest.DrawHandler(wrapped, width, height)
-		return strings.Contains(frame, "Editor mode")
+		return strings.Contains(frame, "Vim mode")
 	}, 5*time.Second, 50*time.Millisecond,
-		"editor prompt must be visible after the welcome prompt advances")
+		"vim-mode prompt must be visible after the welcome prompt advances")
 
 	wrapped.Handle(term.Event{Type: term.EventKey, Key: term.KeyEsc})
 
 	require.Eventually(t, func() bool {
 		frame := handlertest.DrawHandler(wrapped, width, height)
-		return strings.Contains(frame, "Editor mode")
+		return strings.Contains(frame, "Vim mode")
 	}, 5*time.Second, 50*time.Millisecond,
-		"Esc on the editor prompt must reopen it")
+		"Esc on the vim-mode prompt must reopen it")
 }
 
 func testE2EExtensionsRunner(
