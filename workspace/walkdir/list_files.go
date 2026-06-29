@@ -123,7 +123,15 @@ func ListFiles(
 	return iterator, nil
 }
 
-var defaultWorkers = runtime.NumCPU() * 8
+// defaultWorkers caps how many goroutines traverse the tree concurrently.
+// Directory traversal is syscall-bound (getdents/openat/stat), not CPU-bound:
+// past a modest number of workers the kernel's filesystem locks contend and
+// throughput collapses. Benchmarking ListFiles over a 3.7M-file tree showed a
+// clean U-curve — fastest around NumCPU/2, then steadily worse, with the old
+// NumCPU*8 default running ~3x slower than the sweet spot. NumCPU/2 (floored
+// at 2 so small machines still parallelize) scales with the host while staying
+// left of the collapse. See cmd/walkbench for the measurement.
+var defaultWorkers = max(runtime.NumCPU()/2, 2)
 
 func traverseDirWorker(
 	ctx context.Context, w Reader, wg *sync.WaitGroup,
