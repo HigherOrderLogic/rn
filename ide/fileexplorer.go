@@ -88,6 +88,11 @@ type fileExplorerHandler struct {
 	// explorer is closed via the toggle (replayed from
 	// onWindowClosed); the latter discards the pending edits.
 	pendingRefresh bool
+
+	// mouseDown tracks whether the left button is currently held so
+	// that drag events (MouseLeft repeated while held) are ignored;
+	// only the initial press opens or toggles a node.
+	mouseDown bool
 }
 
 func newFileExplorerHandler(
@@ -130,6 +135,25 @@ func (h *fileExplorerHandler) Handle(ev term.Event) (exit, handled bool) {
 				return false, true
 			}
 		}
+	}
+	// A left click opens/closes the node under the pointer (or opens
+	// the file) like <Enter>, instead of starting a text selection
+	// like the underlying editor would. Mouse events are not forwarded
+	// to the editor at all, so it never enters visual mode. Only the
+	// initial press acts; subsequent MouseLeft events while the button
+	// is held are drags and must be ignored so dragging across rows
+	// does not open every node it passes over.
+	if ev.Type == term.EventMouse && ev.Key == term.MouseLeft {
+		press := !h.mouseDown
+		h.mouseDown = true
+		if press && h.enterAtClick(ev.MouseY) {
+			h.syncWidth()
+		}
+		return false, true
+	}
+	if ev.Type == term.EventMouse && ev.Key == term.MouseRelease {
+		h.mouseDown = false
+		return false, true
 	}
 	exit, handled = h.span.Handle(ev)
 	if !handled {
@@ -320,7 +344,44 @@ func (h *fileExplorerHandler) closeEditor() error {
 }
 
 func (h *fileExplorerHandler) enterAtCursor() bool {
-	pos := h.ed.CursorAtScroll()
+	return h.enterAt(h.ed.CursorAtScroll())
+}
+
+// enterAtClick toggles or opens the node at the clicked window row.
+// The click's window Y is translated to a buffer scroll row using the
+// editor's current scroll offset (the delta between the cursor's scroll
+// and window coordinates), so it stays correct when the tree is
+// scrolled. The toggle/open acts on the computed row directly, so it
+// is unaffected by whether the editor cursor actually moves; clicks
+// past the last row resolve to no node and are a safe no-op in
+// ExpandNodeAt. Cursor placement bypasses the editor's mouse handler
+// so no visual-mode selection is started.
+func (h *fileExplorerHandler) enterAtClick(windowY int) bool {
+	winCur, _, _ := h.ed.Cursor()
+	scrollCur := h.ed.CursorAtScroll()
+	pos := term.Coordinates{Y: max(0, windowY+(scrollCur.Y-winCur.Y))}
+	// Moving the cursor with the editor's autoCenter on would recenter
+	// the viewport, jerking the tree out from under the pointer. The
+	// clicked row is already visible, so preserve the scroll offset
+	// across the cursor move and toggle.
+	offset := h.ed.SeekOffset()
+	h.ed.SetCursorAtScroll(pos)
+	handled := h.enterAt(pos)
+	h.restoreOffset(offset)
+	return handled
+}
+
+// restoreOffset seeks the editor back to a previously captured vertical
+// scroll offset, undoing any autoCenter-driven viewport movement from a
+// programmatic cursor placement.
+func (h *fileExplorerHandler) restoreOffset(offset int) {
+	for h.ed.SeekOffset() > offset && h.ed.SeekUp() {
+	}
+	for h.ed.SeekOffset() < offset && h.ed.SeekDown() {
+	}
+}
+
+func (h *fileExplorerHandler) enterAt(pos term.Coordinates) bool {
 	prev := pos
 	uri, open := h.comp.ExpandNodeAt(pos)
 	if open {

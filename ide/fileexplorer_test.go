@@ -189,6 +189,73 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			},
 		},
 		{
+			name: "click toggles directory expansion",
+			dirs: map[string][]explorerMockEntry{
+				"/project": {
+					{name: "src", isDir: true},
+				},
+				"/project/src": {
+					{name: "main.go", isDir: false},
+				},
+			},
+			width:  20,
+			height: 6,
+			sequence: []handlertest.SequenceTestCase{{
+				InputSequence: "",
+				Expected:      " ▐  src/            \n                    \n                    \n                    \n                    \n                    ",
+			}},
+			assert: func(t *testing.T, h *fileExplorerHandler, _ *testFileExplorerHost) {
+				click := func() {
+					_, handled := h.Handle(term.Event{
+						Type: term.EventMouse, Key: term.MouseLeft, MouseY: 0,
+					})
+					require.True(t, handled)
+					h.Handle(term.Event{
+						Type: term.EventMouse, Key: term.MouseRelease, MouseY: 0,
+					})
+				}
+				require.Equal(t, 1, h.ed.CellView().Rows())
+				click()
+				require.Equal(t, 2, h.ed.CellView().Rows(),
+					"click on a directory row must expand it")
+				click()
+				require.Equal(t, 1, h.ed.CellView().Rows(),
+					"clicking again must collapse it")
+			},
+		},
+		{
+			name: "click opens file at clicked row",
+			dirs: map[string][]explorerMockEntry{
+				"/project": {
+					{name: "src", isDir: true},
+					{name: "file.go", isDir: false},
+				},
+				"/project/src": {
+					{name: "main.go", isDir: false},
+				},
+			},
+			width:  20,
+			height: 6,
+			sequence: []handlertest.SequenceTestCase{{
+				InputSequence: "",
+				Expected:      " ▐  src/            \n o file.go          \n                    \n                    \n                    \n                    ",
+			}},
+			assert: func(t *testing.T, h *fileExplorerHandler, host *testFileExplorerHost) {
+				// Click the second row (the file), not the cursor's
+				// initial row, to prove the click targets the pointer
+				// position rather than the current cursor.
+				_, handled := h.Handle(term.Event{
+					Type: term.EventMouse, Key: term.MouseLeft, MouseY: 1,
+				})
+				require.True(t, handled)
+				require.Len(t, host.opened, 1)
+				require.Equal(t, "file:///project/file.go", host.opened[0].String())
+				if sel, ok := h.Selection(); ok {
+					require.Empty(t, sel, "click must not start a selection")
+				}
+			},
+		},
+		{
 			name: "dimensions include longest rendered row",
 			dirs: map[string][]explorerMockEntry{
 				"/project": {
@@ -218,6 +285,141 @@ func TestFileExplorerHandlerRenderAndInteraction(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestFileExplorerClickBelowTreeIsNoop asserts that clicking on an
+// empty row past the last tree entry resolves to no node and is a
+// safe no-op: nothing toggles, nothing opens, and no error fires.
+func TestFileExplorerClickBelowTreeIsNoop(t *testing.T) {
+	h, host := newTestFileExplorerHandler(t, map[string][]explorerMockEntry{
+		"/project": {
+			{name: "src", isDir: true},
+		},
+		"/project/src": {
+			{name: "main.go", isDir: false},
+		},
+	})
+	h.Resize(20, 6)
+	rowsBefore := h.ed.CellView().Rows()
+
+	_, handled := h.Handle(term.Event{
+		Type: term.EventMouse, Key: term.MouseLeft, MouseY: 4,
+	})
+	require.True(t, handled, "the click is still consumed")
+	require.Empty(t, host.opened, "no file must be opened below the tree")
+	require.Equal(t, rowsBefore, h.ed.CellView().Rows(),
+		"clicking below the last row must not toggle anything")
+	require.Empty(t, host.errs, "an empty-area click is not an error")
+}
+
+// TestFileExplorerClickDoesNotScroll asserts that clicking a visible
+// row in a scrolled tree opens/toggles that row without moving the
+// viewport. The editor runs with autoCenter on (as in production),
+// which would otherwise recenter the viewport on the click. Jerking
+// the scroll out from under the user on click is a poor experience.
+func TestFileExplorerClickDoesNotScroll(t *testing.T) {
+	files := make([]explorerMockEntry, 0, 40)
+	for i := range 40 {
+		files = append(files, explorerMockEntry{
+			name: fmt.Sprintf("file%02d.go", i), isDir: false,
+		})
+	}
+	h, host := newTestFileExplorerHandler(t, map[string][]explorerMockEntry{
+		"/project": files,
+	}, vi.WithAutoCenter(true))
+	h.Resize(20, 8)
+
+	for range 5 {
+		require.True(t, h.SeekDown(), "tree must be tall enough to scroll")
+	}
+	offsetBefore := h.SeekOffset()
+	require.Positive(t, offsetBefore, "precondition: tree is scrolled")
+
+	// Click a middle visible window row (not the row the cursor sits
+	// on); with autoCenter on, moving the cursor there would recenter
+	// the viewport unless the offset is preserved. The clicked file is
+	// row offsetBefore+clickRow.
+	const clickRow = 5
+	_, handled := h.Handle(term.Event{
+		Type: term.EventMouse, Key: term.MouseLeft, MouseY: clickRow,
+	})
+	require.True(t, handled)
+
+	require.Equal(t, offsetBefore, h.SeekOffset(),
+		"clicking a visible row must not move the viewport")
+	require.Len(t, host.opened, 1)
+	require.Equal(t,
+		fmt.Sprintf("file:///project/file%02d.go", offsetBefore+clickRow),
+		host.opened[0].String(),
+		"the clicked row must be the one opened")
+}
+
+// TestFileExplorerClickDirToggleDoesNotScroll asserts that clicking a
+// visible directory row in a scrolled tree expands it without moving
+// the viewport, even with the editor's autoCenter enabled (as in
+// production).
+func TestFileExplorerClickDirToggleDoesNotScroll(t *testing.T) {
+	dirs := map[string][]explorerMockEntry{"/project": {}}
+	for i := range 40 {
+		name := fmt.Sprintf("dir%02d", i)
+		dirs["/project"] = append(dirs["/project"],
+			explorerMockEntry{name: name, isDir: true})
+		dirs["/project/"+name] = []explorerMockEntry{
+			{name: "child.go", isDir: false},
+		}
+	}
+	h, _ := newTestFileExplorerHandler(t, dirs, vi.WithAutoCenter(true))
+	h.Resize(20, 8)
+
+	for range 5 {
+		require.True(t, h.SeekDown(), "tree must be tall enough to scroll")
+	}
+	offsetBefore := h.SeekOffset()
+	rowsBefore := h.ed.CellView().Rows()
+
+	_, handled := h.Handle(term.Event{
+		Type: term.EventMouse, Key: term.MouseLeft, MouseY: 5,
+	})
+	require.True(t, handled)
+
+	require.Greater(t, h.ed.CellView().Rows(), rowsBefore,
+		"clicking a directory row must expand it")
+	require.Equal(t, offsetBefore, h.SeekOffset(),
+		"expanding a visible directory must not move the viewport")
+}
+
+// TestFileExplorerDragOpensOnlyInitialPress asserts that dragging the
+// left button across rows (press, then MouseLeft moves while held)
+// acts only on the initial press. Otherwise a drag would open or
+// toggle every node it passes over.
+func TestFileExplorerDragOpensOnlyInitialPress(t *testing.T) {
+	h, host := newTestFileExplorerHandler(t, map[string][]explorerMockEntry{
+		"/project": {
+			{name: "a.go", isDir: false},
+			{name: "b.go", isDir: false},
+			{name: "c.go", isDir: false},
+			{name: "d.go", isDir: false},
+		},
+	})
+	h.Resize(20, 6)
+
+	// Press on row 0, then drag down across rows 1..3 without
+	// releasing (each is a MouseLeft while the button is held).
+	h.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseY: 0})
+	for y := 1; y <= 3; y++ {
+		h.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseY: y})
+	}
+	h.Handle(term.Event{Type: term.EventMouse, Key: term.MouseRelease, MouseY: 3})
+
+	require.Len(t, host.opened, 1,
+		"a drag must open only the row of the initial press")
+	require.Equal(t, "file:///project/a.go", host.opened[0].String())
+
+	// After release the next press is a fresh click again.
+	h.Handle(term.Event{Type: term.EventMouse, Key: term.MouseLeft, MouseY: 1})
+	require.Len(t, host.opened, 2,
+		"a new press after release must open again")
+	require.Equal(t, "file:///project/b.go", host.opened[1].String())
 }
 
 func TestFileExplorerHandlerEnterDelegatesWhileSearching(t *testing.T) {
@@ -824,18 +1026,18 @@ func expandExplorerRowContaining(t *testing.T, h *fileExplorerHandler, label str
 	require.Failf(t, "row not found", "no explorer row contains %q in:\n%s", label, h.buf.String())
 }
 
-func newTestFileExplorerHandler(t *testing.T, dirs map[string][]explorerMockEntry) (*fileExplorerHandler, *testFileExplorerHost) {
+func newTestFileExplorerHandler(t *testing.T, dirs map[string][]explorerMockEntry, opts ...vi.Option) (*fileExplorerHandler, *testFileExplorerHost) {
 	t.Helper()
 	buf := cell.NewBuffer()
 	comp, err := fileexplorercomp.New(buf, &explorerMockFS{dirs: dirs}, explorerRootURI(), fileexplorercomp.Config{
 		Icons: text.IconSet{Directory: '', Default: 'o'},
 	})
 	require.NoError(t, err)
-	ed := vi.Editor(
+	ed := vi.Editor(append([]vi.Option{
 		vi.WithStatusBarConfig(false, text.StatusBarConfig{}),
 		vi.WithAuxiliaryBar(false, text.AuxBarConfig{}),
 		vi.WithGitBar(false, text.IconsBarConfig{}),
-	)
+	}, opts...)...)
 	host := &testFileExplorerHost{focus: &testExplorerWindow{id: 1}}
 	uri, err := workspaceapi.ParseURI("memory:///fexplorer-test-2")
 	require.NoError(t, err)
