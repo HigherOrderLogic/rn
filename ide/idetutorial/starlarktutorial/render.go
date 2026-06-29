@@ -217,7 +217,7 @@ func waitCommandBoundKey(
 
 // buildWaitShellHint composes the markdown body for a wait_shell hint
 // window: it asks the user to run the expected command inside Rune's
-// companion shell. A swapped-in on_error message (request.text
+// console. A swapped-in on_error message (request.text
 // non-empty) wins and is rendered verbatim after the prompt opener.
 func buildWaitShellHint(r *request, cmdKey string) string {
 	if r == nil {
@@ -225,7 +225,7 @@ func buildWaitShellHint(r *request, cmdKey string) string {
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b,
-		"Waiting for you to run `%s` in Rune's companion shell:\n\n",
+		"Waiting for you to run `%s` in Rune's console:\n\n",
 		strings.Join(r.shellArgs, " "))
 	if r.text != "" {
 		b.WriteString(expandCmdTemplate(r.text, cmdKey))
