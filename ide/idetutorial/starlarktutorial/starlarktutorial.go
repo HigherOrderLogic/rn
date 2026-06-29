@@ -684,11 +684,11 @@ func (t *Tutorial) ObserveEvent(eventType, _ string) bool {
 }
 
 // shellCommandName is the typed/resolved command name under which the
-// IDE reports companion-shell REPL submissions to the command
-// observer. The shell wrapper prepends the REPL command name to the
+// IDE reports companion-console REPL submissions to the command
+// observer. The console wrapper prepends the REPL command name to the
 // observed args (e.g. ["pkg", "install", "rune-agent"]) so a
 // wait_shell step can match on argument tokens alone.
-const shellCommandName = "shell"
+const shellCommandName = "console"
 
 // observeShellCommand advances a reqWaitShell step. It only reacts to
 // companion-shell observations (typed/resolved == shellCommandName)

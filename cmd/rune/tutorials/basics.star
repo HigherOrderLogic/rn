@@ -39,11 +39,11 @@ def keypress(cmd, *args):
         return "press `" + k + "`"
     return "open the command prompt (`" + ck + "`) and run `" + cmd + "`"
 
-# In modal mode the shell's input line captures keys while you are in
+# In modal mode the console's input line captures keys while you are in
 # insert mode, so `:` types a literal colon instead of opening the
 # command prompt. The user must press <esc> to enter modal mode first.
 # These snippets are spliced into the agent steps that open the command
-# prompt while the companion shell is focused.
+# prompt while the companion console is focused.
 if mode == "modal":
     shell_esc_step = "1. Press `<esc>` to enter modal mode.\n"
     shell_prompt_step_num = "2"
@@ -145,12 +145,12 @@ Open a terminal here: """ + keypress("terminalneworsplit") + """.
 modal_surfaces_md = """\
 You picked **modal** editor mode, and in modal mode every input surface
 is modal, not just the editor. This includes the terminal, Rune's
-shell, and the file explorer.
+console, and the file explorer.
 
 The cursor shape tells you which mode a surface is in: a block cursor
 means NORMAL mode, a bar cursor means INSERT mode.
 
-So when a terminal or shell is focused and you want to open the command
+So when a terminal or console is focused and you want to open the command
 prompt (`""" + ck + """`), first switch back to NORMAL mode with
 `<esc>`.
 """
@@ -277,16 +277,16 @@ agent_install_md = """\
 The **Rune Agent** is a Rune native AI coding assistant. It ships as a
 package you install on demand, so the first step is to install it.
 
-First, open Rune's companion shell:
+First, open Rune's companion console:
 
 1. Press `""" + ck + """` to open the command prompt.
-2. Type `shell` and press Enter.
+2. Type `console` and press Enter.
 
 Press `<enter>` or `<space>` to continue.
 """
 
 agent_pkg_install_md = """\
-You're in the companion shell now. Install the agent package:
+You're in the companion console now. Install the agent package:
 
 1. Type `pkg install rune-agent`.
 2. Press Enter and wait for the install to finish.
@@ -538,7 +538,7 @@ def teach_provider(provider, label, action_tokens, run_md, success_msg):
     wait_shell(
         title    = title,
         args     = ["models", "providers", provider] + action_tokens,
-        on_error = ("In the companion shell, run `models providers " +
+        on_error = ("In the companion console, run `models providers " +
                     provider + " " + " ".join(action_tokens) + "`."),
     )
     notify(level = success, message = success_msg)
@@ -549,8 +549,8 @@ def teach_agent():
                     dismiss_keys = [ck])
     wait_command(
         title    = "Set up the Rune Agent",
-        command  = "shell",
-        on_error = ("Open Rune's companion shell: run the `<cmd>shell` " +
+        command  = "console",
+        on_error = ("Open Rune's companion console: run the `<cmd>console` " +
                     "command."),
     )
 
@@ -558,7 +558,7 @@ def teach_agent():
     wait_shell(
         title    = "Install the agent package",
         args     = ["pkg", "install", "rune-agent"],
-        on_error = "In the companion shell, run `pkg install rune-agent`.",
+        on_error = "In the companion console, run `pkg install rune-agent`.",
     )
     notify(level = success, message = "Rune Agent installed.")
 
@@ -578,7 +578,7 @@ def teach_agent():
     if not pick.selected:
         notify(level = info,
                message = ("Configure a provider any time with the " +
-                          "`models providers` shell command."))
+                          "`models providers` console command."))
         return
 
     if pick.value == "OpenAI":
@@ -586,7 +586,7 @@ def teach_agent():
 Add your OpenAI credentials. The key is stored securely and never
 written to your config file.
 
-1. In the companion shell, run `models providers openai add default`.
+1. In the companion console, run `models providers openai add default`.
 2. Paste your API key at the redacted prompt.
 
 Press `<enter>` or `<space>` to continue.
@@ -598,7 +598,7 @@ Press `<enter>` or `<space>` to continue.
 Add your Anthropic credentials. The key is stored securely and never
 written to your config file.
 
-1. In the companion shell, run `models providers anthropic add default`.
+1. In the companion console, run `models providers anthropic add default`.
 2. Paste your API key at the redacted prompt.
 
 Press `<enter>` or `<space>` to continue.
@@ -610,7 +610,7 @@ Press `<enter>` or `<space>` to continue.
 Add your Gemini credentials. The key is stored securely and never
 written to your config file.
 
-1. In the companion shell, run `models providers gemini add default`.
+1. In the companion console, run `models providers gemini add default`.
 2. Paste your API key at the redacted prompt.
 
 Press `<enter>` or `<space>` to continue.
@@ -621,7 +621,7 @@ Press `<enter>` or `<space>` to continue.
         run_md = """\
 Codex authenticates through your browser — no API key to paste.
 
-1. In the companion shell, run `models providers codex login`.
+1. In the companion console, run `models providers codex login`.
 2. Finish the sign-in in your browser.
 
 Press `<enter>` or `<space>` to continue.
@@ -639,7 +639,7 @@ you have usage credits enabled, and otherwise pauses until the credit
 refreshes. The separate `anthropic` provider bills the same models by
 API key instead.
 
-1. In the companion shell, run `models providers claude login`.
+1. In the companion console, run `models providers claude login`.
 2. Finish the sign-in in your browser.
 
 Press `<enter>` or `<space>` to continue.

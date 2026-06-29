@@ -376,7 +376,7 @@ func TestRuneStarAsDefaultConfig(t *testing.T) {
 	assert.False(t, cfg.editorAutoPair())
 	assert.False(t, cfg.editorAutoSave())
 	assert.Equal(t, "info", cfg.cfg["log_level"])
-	assert.Equal(t, 2000, cfg.shellMaxHistory())
+	assert.Equal(t, 2000, cfg.consoleMaxHistory())
 }
 
 // TestRuneStarModelsConfig verifies the shipped rune.star renders a
@@ -546,7 +546,7 @@ func TestLoadConfigStarUserOverlayPreservesEmbeddedRuneStar(t *testing.T) {
 	// Defaults from cmd/rune/rune.star survive the top-level rebind.
 	assert.Equal(t, "modal", cfg.editorMode())
 	assert.False(t, cfg.editorAutoPair())
-	assert.Equal(t, 2000, cfg.shellMaxHistory())
+	assert.Equal(t, 2000, cfg.consoleMaxHistory())
 }
 
 func TestLoadWorkspaceConfigStar(t *testing.T) {

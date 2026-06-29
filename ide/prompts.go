@@ -507,10 +507,10 @@ func (h *installExtensionPrompt) OnSelect(_ int, option string) {
 		_ = h.promptWindow.Close()
 	}
 	if option == yesOpt {
-		if err := h.ex.shellnewtab(context.Background(),
+		if err := h.ex.consolenewtab(context.Background(),
 			"pkg", "install", h.pkg); err != nil {
 			_, _ = h.ex.comp.Notify(browserapi.LevelError,
-				"failed to open shell: %v", err)
+				"failed to open console: %v", err)
 		}
 	}
 }

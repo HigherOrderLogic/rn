@@ -103,7 +103,7 @@ func (o *recordingArgsObserver) observeCommand(
 }
 
 // TestObservingREPLHandlerReportsShellCommand verifies that a successful
-// companion-shell submission is reported to the observer as the "shell"
+// companion-console submission is reported to the observer as the "console"
 // command with the REPL command name prepended to its arguments, that the
 // report is deferred until the output iterator completes, and that the
 // command is forwarded unchanged.
@@ -129,8 +129,8 @@ func TestObservingREPLHandlerReportsShellCommand(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, 1, obs.calls)
-	assert.Equal(t, "shell", obs.typed)
-	assert.Equal(t, "shell", obs.resolved)
+	assert.Equal(t, "console", obs.typed)
+	assert.Equal(t, "console", obs.resolved)
 	assert.Equal(t, []string{"pkg", "install", "rune-agent"}, obs.args)
 	assert.NoError(t, obs.err)
 
@@ -187,8 +187,8 @@ func TestObservingREPLHandlerForwardsError(t *testing.T) {
 	}
 
 	require.Equal(t, 1, obs.calls)
-	assert.Equal(t, "shell", obs.typed)
-	assert.Equal(t, "shell", obs.resolved)
+	assert.Equal(t, "console", obs.typed)
+	assert.Equal(t, "console", obs.resolved)
 	assert.Equal(t,
 		[]string{"models", "providers", "openai", "add", "default"}, obs.args)
 	assert.ErrorIs(t, obs.err, wantErr)

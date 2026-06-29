@@ -164,8 +164,8 @@ type ex struct {
 
 	companionTerminal    vtereservoir.VTE
 	companionTerminalWin browser.Window
-	companionShell       *ideshell.Handler
-	companionShellURI    workspaceapi.URI
+	companionConsole     *ideshell.Handler
+	companionConsoleURI  workspaceapi.URI
 
 	fileExplorerWin     browser.Window
 	fileExplorerTarget  browser.Window
@@ -174,7 +174,7 @@ type ex struct {
 	flusher             *flusher
 	debugCommands       bool
 	commandObserver     commandObserver
-	shellCfg            shellConfig
+	consoleCfg          consoleConfig
 	extReady            map[string]chan extReadyJob
 	extReadyCtx         context.Context
 	extReadyCancel      context.CancelFunc
@@ -208,7 +208,7 @@ func newEx(
 	commandObserver commandObserver,
 	debugCommands bool,
 	commandPromptCfg commandPromptConfig,
-	shellCfg shellConfig,
+	consoleCfg consoleConfig,
 	opts ...text.Option,
 ) (e *ex, err error) {
 	e = new(ex)
@@ -221,7 +221,7 @@ func newEx(
 	e.commandObserver = commandObserver
 	e.debugCommands = debugCommands
 	e.commandPromptCfg = commandPromptCfg
-	e.shellCfg = shellCfg
+	e.consoleCfg = consoleCfg
 	return
 }
 
@@ -2000,23 +2000,23 @@ func (e *ex) terminalnewtab(_ context.Context, args ...string) error {
 	return nil
 }
 
-func (e *ex) shellnewtab(_ context.Context, args ...string) error {
-	if e.companionShell == nil {
+func (e *ex) consolenewtab(_ context.Context, args ...string) error {
+	if e.companionConsole == nil {
 		workspaceURI, err := e.workspace.URI(".")
 		if err != nil {
 			return fmt.Errorf("workspace uri: %w", err)
 		}
-		shellCfg := ideshell.Config{
+		consoleCfg := ideshell.Config{
 			Storage:           e.storage,
 			HistoryDocumentID: shellHistoryDocumentID,
 			MaxHistory:        e.config.ShellMaxHistory,
 			Workspace:         workspaceURI,
-			Modal:             e.shellCfg.modal,
-			ModalStartInsert:  e.shellCfg.modalStartInsert,
+			Modal:             e.consoleCfg.modal,
+			ModalStartInsert:  e.consoleCfg.modalStartInsert,
 		}
 		h, registry := ideshell.New(
 			e.emulatorConfig.ScheduleNextTick, e, e.promptEditor,
-			shellCfg,
+			consoleCfg,
 		)
 		if e.wsExecutor != nil {
 			e.wsExecutor.RegisterProcessCommand(registry)
@@ -2046,24 +2046,24 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 			}
 		}
 
-		uri, err := workspaceapi.ParseURI("shell:///")
+		uri, err := workspaceapi.ParseURI("console:///")
 		if err == nil {
 			uri, err = workspaceapi.WithPath(uri, workspaceURI.Path())
 			if workspaceURI.Host() != "" {
 				uri, err = workspaceapi.ParseURI(
-					fmt.Sprintf("shell://%s%s", workspaceURI.Host(), workspaceURI.Path()),
+					fmt.Sprintf("console://%s%s", workspaceURI.Host(), workspaceURI.Path()),
 				)
 			}
 		}
 		if err != nil {
 			_ = h.Close()
-			return fmt.Errorf("parse shell uri: %w", err)
+			return fmt.Errorf("parse console uri: %w", err)
 		}
-		e.companionShell = h
-		e.companionShellURI = uri
+		e.companionConsole = h
+		e.companionConsoleURI = uri
 	}
 
-	t, err := e.comp.Tab(e.companionShellURI, e.config.Icons.Shell, "shell", e.companionShell)
+	t, err := e.comp.Tab(e.companionConsoleURI, e.config.Icons.Shell, "console", e.companionConsole)
 	if err != nil {
 		return fmt.Errorf("wm.Tab: %s", err)
 	}
@@ -2076,7 +2076,7 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 		if cerr == nil {
 			if curr, ok := content.(*browser.Tab); ok && curr == tab {
 				if line := strings.TrimSpace(strings.Join(args, " ")); line != "" {
-					e.companionShell.Submit(line)
+					e.companionConsole.Submit(line)
 				}
 				return nil
 			}
@@ -2085,12 +2085,12 @@ func (e *ex) shellnewtab(_ context.Context, args ...string) error {
 	}
 	tab.Subscribe((*tabSubscriber)(e))
 	if line := strings.TrimSpace(strings.Join(args, " ")); line != "" {
-		e.companionShell.Submit(line)
+		e.companionConsole.Submit(line)
 	}
 	return nil
 }
 
-func (e *ex) completeShell(ctx context.Context, cmd textapi.Command) (
+func (e *ex) completeConsole(ctx context.Context, cmd textapi.Command) (
 	iterator.Iterator[string], string, error,
 ) {
 	if len(cmd.Args) <= 1 {
@@ -2738,10 +2738,10 @@ func (e *ex) Close() (ret error) {
 		_ = e.companionTerminal.Close()
 		e.companionTerminal = nil
 	}
-	if e.companionShell != nil {
-		_ = e.companionShell.Close()
-		e.companionShell = nil
-		e.companionShellURI = workspaceapi.URI{}
+	if e.companionConsole != nil {
+		_ = e.companionConsole.Close()
+		e.companionConsole = nil
+		e.companionConsoleURI = workspaceapi.URI{}
 	}
 	if e.fileExplorerHandler != nil {
 		if err := e.fileExplorerHandler.closeEditor(); err != nil {
@@ -2824,9 +2824,9 @@ func (e *tabSubscriber) OnFocus(t *browser.Tab) {
 }
 
 func (e *tabSubscriber) OnFree(t *browser.Tab) {
-	if e.companionShell != nil && t.URI().String() == e.companionShellURI.String() {
-		e.companionShell = nil
-		e.companionShellURI = workspaceapi.URI{}
+	if e.companionConsole != nil && t.URI().String() == e.companionConsoleURI.String() {
+		e.companionConsole = nil
+		e.companionConsoleURI = workspaceapi.URI{}
 	}
 	onFocusChangeTab(t, false)
 }

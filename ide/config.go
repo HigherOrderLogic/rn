@@ -552,23 +552,23 @@ func (c ideConfig) commandMaxHistory() (ret int) {
 	return
 }
 
-func (c ideConfig) shell() (config.Config, bool) {
+func (c ideConfig) console() (config.Config, bool) {
 	if c.cfg == nil {
 		return nil, false
 	}
-	return c.getConfig(config.MapConfig(c.cfg), "shell")
+	return c.getConfig(config.MapConfig(c.cfg), "console")
 }
 
-func (c ideConfig) shellMaxHistory() (ret int) {
+func (c ideConfig) consoleMaxHistory() (ret int) {
 	ret = text.DefaultConfig().ShellMaxHistory
-	b, ok := c.shell()
+	b, ok := c.console()
 	if !ok {
 		return
 	}
 	max, err := b.GetInt("max_history")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["shell.max_history"] = err
+			c.errors["console.max_history"] = err
 		}
 		return
 	}
@@ -576,44 +576,44 @@ func (c ideConfig) shellMaxHistory() (ret int) {
 	return
 }
 
-func (c ideConfig) shellModalStartInsert() bool {
-	cfg, ok := c.shell()
+func (c ideConfig) consoleModalStartInsert() bool {
+	cfg, ok := c.console()
 	if !ok {
 		return true
 	}
 	enabled, err := cfg.GetBool("modal_start_insert")
 	if err != nil {
 		if err != config.ErrNotFound {
-			c.errors["shell.modal_start_insert"] = err
+			c.errors["console.modal_start_insert"] = err
 		}
 		return true
 	}
 	return enabled
 }
 
-// shellConfig bundles the resolved companion-shell settings that the ex
-// editor needs at shell-construction time. It is passed explicitly to
-// newEx rather than threaded through the SDK text.Config, which models
-// the editor component, not the shell prompt.
-type shellConfig struct {
+// consoleConfig bundles the resolved companion-console settings that the
+// ex editor needs at console-construction time. It is passed explicitly
+// to newEx rather than threaded through the SDK text.Config, which models
+// the editor component, not the console prompt.
+type consoleConfig struct {
 	// modal reports whether the resolved editor mode is modal (vi).
 	modal bool
-	// modalStartInsert opens the shell input in insert mode when modal.
+	// modalStartInsert opens the console input in insert mode when modal.
 	modalStartInsert bool
 }
 
-func (c ideConfig) shellCfg() shellConfig {
-	return shellConfig{
-		modal:            c.shellEditorModal(),
-		modalStartInsert: c.shellModalStartInsert(),
+func (c ideConfig) consoleCfg() consoleConfig {
+	return consoleConfig{
+		modal:            c.consoleEditorModal(),
+		modalStartInsert: c.consoleModalStartInsert(),
 	}
 }
 
-// shellEditorModal reports whether the companion shell's input line is
+// consoleEditorModal reports whether the companion console's input line is
 // backed by a modal (vi) editor. It mirrors newPromptEditor's mode
 // switch: exo cannot host the in-memory prompt surface, so it follows
 // its configured fallback, leaving only resolved-modal as modal here.
-func (c ideConfig) shellEditorModal() bool {
+func (c ideConfig) consoleEditorModal() bool {
 	return c.pkgEditorMode() == editorModeModal
 }
 
@@ -1581,8 +1581,8 @@ func (c ideConfig) icons() (ret text.IconSet) {
 	if _, ok := m["terminal"]; ok {
 		ret.Terminal = c.getSpecialIcon(m, "terminal")
 	}
-	if _, ok := m["shell"]; ok {
-		ret.Shell = c.getSpecialIcon(m, "shell")
+	if _, ok := m["console"]; ok {
+		ret.Shell = c.getSpecialIcon(m, "console")
 	}
 
 	for k, v := range m {
@@ -2096,81 +2096,6 @@ func (c ideConfig) editorAutoSave() bool {
 		return false
 	}
 	return enabled
-}
-
-func (c ideConfig) virtualEditorAttr() (ret term.Attributes) {
-	cfg, ok := c.virtual()
-	if !ok {
-		return
-	}
-	cfgAttr, err := config.GetAttributes(cfg, "attr")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["editor.virtual.attr"] = err
-		}
-		return
-	}
-	ret = cfgAttr
-	return
-}
-
-func (c ideConfig) virtualEditorSelectionAttr() (ret term.Attributes) {
-	ret = term.Attributes{Attrs: term.AttrReverse}
-	cfg, ok := c.virtual()
-	if !ok {
-		return
-	}
-	cfgAttr, err := config.GetAttributes(cfg, "selection_attr")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["editor.virtual.selection_attr"] = err
-		}
-		return
-	}
-	ret = cfgAttr
-	return
-}
-
-func (c ideConfig) virtualEditorShell() (ret string) {
-	ret = os.Getenv("SHELL")
-	if ret == "" {
-		ret = "sh"
-	}
-	if c.cfg == nil {
-		return
-	}
-	cfg, ok := c.virtual()
-	if !ok {
-		return
-	}
-	virtual, err := cfg.GetString("shell")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["editor.virtual.shell"] = err
-		}
-		return
-	}
-	ret = virtual
-	return
-}
-
-func (c ideConfig) virtualEditorEditor() (ret string) {
-	if c.cfg == nil {
-		return
-	}
-	cfg, ok := c.virtual()
-	if !ok {
-		return
-	}
-	virtual, err := cfg.GetString("editor")
-	if err != nil {
-		if err != config.ErrNotFound {
-			c.errors["editor.virtual.editor"] = err
-		}
-		return
-	}
-	ret = virtual
-	return
 }
 
 func (c ideConfig) modalResultAttr() (attr term.Attributes) {
@@ -3501,7 +3426,7 @@ func reloadConfig(
 }
 
 func loadWorkspaceConfig(
-	filename string, cwd workspace.Workspace, uri workspaceapi.URI, c *ideConfig,
+	filename string, cwd workspace.Workspace, _ workspaceapi.URI, c *ideConfig,
 ) (isConfigErr bool, err error) {
 	f, err := cwd.OpenFile(filename, os.O_RDONLY, 0)
 	if err != nil {

@@ -41,8 +41,8 @@ import (
 // are exercised here without linking the cmd/rune native libraries.
 const agentOnboardingSrc = `
 def run():
-    floating_window(text="open the shell")
-    wait_command(command="shell")
+    floating_window(text="open the console")
+    wait_command(command="console")
     floating_window(text="install the agent")
     wait_shell(args=["pkg", "install", "rune-agent"],
                on_error="run pkg install rune-agent")
@@ -80,20 +80,20 @@ func TestAgentOnboardingInstallGateReArmsOnWrongCommand(t *testing.T) {
 	waitNextActive(t, tut, "wait_command", time.Second)
 
 	// Open the companion shell, then advance to the install window.
-	tut.ObserveCommand("shell", "shell", nil, nil)
+	tut.ObserveCommand("console", "console", nil, nil)
 	waitNextActive(t, tut, "floating_window", time.Second)
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	waitNextActive(t, tut, "wait_shell", time.Second)
 
 	// A shell submission that is not the install command keeps the
 	// gate armed without resolving it.
-	exit := tut.ObserveCommand("shell", "shell", []string{"ls"}, nil)
+	exit := tut.ObserveCommand("console", "console", []string{"ls"}, nil)
 	assert.False(t, exit)
 	assert.Equal(t, "wait_shell", activeKindFor(tut),
 		"a non-install shell command must keep the install gate armed")
 
 	// The correct install command advances to the provider choice.
-	tut.ObserveCommand("shell", "shell",
+	tut.ObserveCommand("console", "console",
 		[]string{"pkg", "install", "rune-agent"}, nil)
 	waitNextActive(t, tut, "choice", time.Second)
 	assert.True(t, notis.containsSubstring("Rune Agent installed."))
@@ -104,7 +104,7 @@ func TestAgentOnboardingInstallGateReArmsOnWrongCommand(t *testing.T) {
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	waitNextActive(t, tut, "wait_shell", time.Second)
 
-	tut.ObserveCommand("shell", "shell",
+	tut.ObserveCommand("console", "console",
 		[]string{"models", "providers", "openai", "add", "default"}, nil)
 	waitNextActive(t, tut, "floating_window", time.Second)
 	assert.True(t, notis.containsSubstring("OpenAI connected."))
@@ -127,11 +127,11 @@ func TestAgentOnboardingSkipProviderExits(t *testing.T) {
 
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	waitNextActive(t, tut, "wait_command", time.Second)
-	tut.ObserveCommand("shell", "shell", nil, nil)
+	tut.ObserveCommand("console", "console", nil, nil)
 	waitNextActive(t, tut, "floating_window", time.Second)
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	waitNextActive(t, tut, "wait_shell", time.Second)
-	tut.ObserveCommand("shell", "shell",
+	tut.ObserveCommand("console", "console",
 		[]string{"pkg", "install", "rune-agent"}, nil)
 	waitNextActive(t, tut, "choice", time.Second)
 
@@ -155,11 +155,11 @@ func TestAgentOnboardingDismissedProviderExits(t *testing.T) {
 
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	waitNextActive(t, tut, "wait_command", time.Second)
-	tut.ObserveCommand("shell", "shell", nil, nil)
+	tut.ObserveCommand("console", "console", nil, nil)
 	waitNextActive(t, tut, "floating_window", time.Second)
 	_, _ = tut.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
 	waitNextActive(t, tut, "wait_shell", time.Second)
-	tut.ObserveCommand("shell", "shell",
+	tut.ObserveCommand("console", "console",
 		[]string{"pkg", "install", "rune-agent"}, nil)
 	waitNextActive(t, tut, "choice", time.Second)
 
@@ -171,8 +171,8 @@ func TestAgentOnboardingDismissedProviderExits(t *testing.T) {
 }
 
 // TestWaitShellRequiresArgs asserts that wait_shell is exclusively for
-// commands run inside the shell: calling it without args is a runtime
-// error (opening the shell is wait_command(command="shell")).
+// commands run inside the console: calling it without args is a runtime
+// error (opening the console is wait_command(command="console")).
 func TestWaitShellRequiresArgs(t *testing.T) {
 	t.Parallel()
 	src := `
@@ -215,7 +215,7 @@ tutorial(entry=run)
 		"a non-shell command must not resolve a wait_shell step")
 	assert.Equal(t, 0, notis.len())
 
-	tut.ObserveCommand("shell", "shell",
+	tut.ObserveCommand("console", "console",
 		[]string{"pkg", "install", "rune-agent"}, nil)
 	waitFinished(t, tut, time.Second)
 	assert.True(t, notis.containsSubstring("installed"))
@@ -237,12 +237,12 @@ tutorial(entry=run)
 	resetAndWait(t, tut, time.Second)
 
 	// Missing "rune-agent" keeps the step armed.
-	exit := tut.ObserveCommand("shell", "shell", []string{"pkg", "install"}, nil)
+	exit := tut.ObserveCommand("console", "console", []string{"pkg", "install"}, nil)
 	assert.False(t, exit)
 	assert.Equal(t, "wait_shell", activeKindFor(tut))
 
 	// Containment with extra tokens (e.g. a flag) still matches.
-	tut.ObserveCommand("shell", "shell",
+	tut.ObserveCommand("console", "console",
 		[]string{"pkg", "install", "rune-agent", "--force"}, nil)
 	waitFinished(t, tut, time.Second)
 	assert.True(t, notis.containsSubstring("installed rune-agent"),
@@ -266,7 +266,7 @@ tutorial(entry=run)
 	tut.Resize(80, 60)
 	resetAndWait(t, tut, time.Second)
 
-	exit := tut.ObserveCommand("shell", "shell",
+	exit := tut.ObserveCommand("console", "console",
 		[]string{"pkg", "install", "rune-agent"}, assert.AnError)
 	assert.False(t, exit)
 	assert.Equal(t, "wait_shell", activeKindFor(tut),

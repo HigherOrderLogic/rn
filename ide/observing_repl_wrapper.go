@@ -33,20 +33,20 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 )
 
-// observingREPLHandler decorates a companion-shell REPL handler so that
+// observingREPLHandler decorates a companion-console REPL handler so that
 // every submitted command is reported to the IDE commandObserver. The
-// submission is reported uniformly as a "shell" command — matching the
-// existing "shell" ex-command observation — with the REPL command name
-// prepended to its arguments. This lets tutorials observe companion-shell
+// submission is reported uniformly as a "console" command — matching the
+// existing "console" ex-command observation — with the REPL command name
+// prepended to its arguments. This lets tutorials observe companion-console
 // REPL submissions (e.g. "pkg install rune-agent") through the same
-// wait_command(command="shell") path used for ex commands.
+// wait_command(command="console") path used for ex commands.
 type observingREPLHandler struct {
 	underlying textapi.REPLHandler
 	observer   commandObserver
 	name       string
 	// schedule marshals the observer callback onto the event loop. The
-	// companion-shell REPL runs HandleCommand (and the returned
-	// iterator's Next/Close) on a transient shell goroutine, off the
+	// companion-console REPL runs HandleCommand (and the returned
+	// iterator's Next/Close) on a transient console goroutine, off the
 	// event loop, while the observer mutates event-loop-owned state
 	// (e.g. tutorialRunner.overlay). schedule is an invariant non-nil
 	// dependency supplied at construction.
@@ -72,7 +72,7 @@ func (w observingREPLHandler) HandleCommand(
 	args := append([]string{w.name}, cmd.Args...)
 	if err != nil {
 		w.schedule(func() {
-			w.observer.observeCommand("shell", "shell", args, err)
+			w.observer.observeCommand("console", "console", args, err)
 		})
 		return it, err
 	}
@@ -80,7 +80,7 @@ func (w observingREPLHandler) HandleCommand(
 		inner: it,
 		fire: func() {
 			w.schedule(func() {
-				w.observer.observeCommand("shell", "shell", args, nil)
+				w.observer.observeCommand("console", "console", args, nil)
 			})
 		},
 	}, nil

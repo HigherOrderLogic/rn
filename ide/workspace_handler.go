@@ -527,7 +527,7 @@ func (h *workspaceManagerHandler) init(
 		h.dispatchOnPreview, tm, homeParser,
 		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
-		cfg.shellCfg(),
+		cfg.consoleCfg(),
 		globalOpts...)
 	if err != nil {
 		return fmt.Errorf("new ex: %w", err)
@@ -1130,7 +1130,7 @@ func (h *workspaceManagerHandler) textOpts(
 		text.WithTabsClickCallback(h.tabsClickCallback),
 		text.WithCommandKey(cfg.commandKey()),
 		text.WithCommandMaxHistory(cfg.commandMaxHistory()),
-		text.WithShellMaxHistory(cfg.shellMaxHistory()),
+		text.WithShellMaxHistory(cfg.consoleMaxHistory()),
 		text.WithCommandHistoryKey(cfg.commandHistoryKey()),
 		text.WithFocusTabAttr(cfg.focusTabAttr(), cfg.focusTabIconAttr()),
 		text.WithNonFocusTabAttr(cfg.nonFocusTabAttr(), cfg.nonFocusTabIconAttr()),
@@ -1354,7 +1354,7 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		tm, parser,
 		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
-		cfg.shellCfg(),
+		cfg.consoleCfg(),
 		textOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("new ex: %w", err)
@@ -1724,7 +1724,7 @@ func (h *workspaceManagerHandler) buildExtensions(
 	}
 	if err := ex.comp.SubscribeCommand(dbgMan,
 		debugshell.NewPromptHandler(dbgHandler).
-			WithOpenShell(ex.shellnewtab)); err != nil {
+			WithOpenShell(ex.consolenewtab)); err != nil {
 		log.Errorf("subscribe debugger command prompt: %v", err)
 	}
 	cmdcfg := lspCommandsConfig(uri, cfg, notifications,

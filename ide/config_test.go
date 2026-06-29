@@ -246,7 +246,7 @@ browser:
     icons:
         default: x
         terminal: '&'
-        shell: '8'
+        console: '8'
         .go: $
         .py: 1 # ignored
     prompt:
@@ -432,11 +432,6 @@ func assertDefaultConfig(t *testing.T, cfg *ideConfig) {
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "fish")
-	assert.Equal(t, "", cfg.virtualEditorEditor())
-	assert.Equal(t, "fish", cfg.virtualEditorShell())
-	assert.Equal(t, term.Attributes{}, cfg.virtualEditorAttr())
-	assert.Equal(t, term.Attributes{Attrs: term.AttrReverse},
-		cfg.virtualEditorSelectionAttr())
 }
 
 func TestConfigDefault(t *testing.T) {
@@ -1021,13 +1016,6 @@ func TestConfigSetting(t *testing.T) {
 
 	assert.Equal(t, "modal", cfg.editorMode())
 	os.Setenv("SHELL", "")
-	assert.Equal(t, "vim", cfg.virtualEditorEditor())
-	assert.Equal(t, "bash", cfg.virtualEditorShell())
-	assert.Equal(t, term.Attributes{Fg: term.GetColor("#f0f0f0"), Bg: term.ColorRed},
-		cfg.virtualEditorAttr())
-	virtualEditorSelectionAttr := cfg.virtualEditorSelectionAttr()
-	assert.Equal(t, term.GetColor("#f3f3f3"), virtualEditorSelectionAttr.Fg)
-	assert.Equal(t, term.ColorGreen, virtualEditorSelectionAttr.Bg)
 
 	wantMappings := map[handler.Sequence][][]string{
 		{First: term.KeyComb{Ch: 'f'}}:                    {{"searchfile"}},
@@ -1143,7 +1131,7 @@ func TestShellMaxHistoryFromConfig(t *testing.T) {
 	defer os.Remove(f.Name())
 
 	_, err = f.WriteString(`config = {
-    "shell": {
+    "console": {
         "max_history": 7,
     },
 }`)
@@ -1155,7 +1143,7 @@ func TestShellMaxHistoryFromConfig(t *testing.T) {
 		defaultConfigSource{src: "config = {}"},
 		term.RingBell, term.ScheduleNextTick, "")
 	require.NoError(t, err)
-	assert.Equal(t, 7, cfg.shellMaxHistory())
+	assert.Equal(t, 7, cfg.consoleMaxHistory())
 }
 
 func TestShellModalStartInsertFromConfig(t *testing.T) {
@@ -1164,7 +1152,7 @@ func TestShellModalStartInsertFromConfig(t *testing.T) {
 	defer os.Remove(f.Name())
 
 	_, err = f.WriteString(`config = {
-    "shell": {
+    "console": {
         "modal_start_insert": False,
     },
 }`)
@@ -1176,7 +1164,7 @@ func TestShellModalStartInsertFromConfig(t *testing.T) {
 		defaultConfigSource{src: "config = {}"},
 		term.RingBell, term.ScheduleNextTick, "")
 	require.NoError(t, err)
-	assert.False(t, cfg.shellModalStartInsert())
+	assert.False(t, cfg.consoleModalStartInsert())
 }
 
 func TestShellModalStartInsertDefaultsTrue(t *testing.T) {
@@ -1185,7 +1173,7 @@ func TestShellModalStartInsertDefaultsTrue(t *testing.T) {
 	defer os.Remove(f.Name())
 
 	_, err = f.WriteString(`config = {
-    "shell": {
+    "console": {
         "max_history": 7,
     },
 }`)
@@ -1197,11 +1185,11 @@ func TestShellModalStartInsertDefaultsTrue(t *testing.T) {
 		defaultConfigSource{src: "config = {}"},
 		term.RingBell, term.ScheduleNextTick, "")
 	require.NoError(t, err)
-	assert.True(t, cfg.shellModalStartInsert())
+	assert.True(t, cfg.consoleModalStartInsert())
 }
 
-// TestShellEditorModalFromEditorMode asserts shellCfg().modal mirrors the
-// editor backing the shell prompt: modal is modal, modeless is not, and
+// TestShellEditorModalFromEditorMode asserts consoleCfg().modal mirrors the
+// editor backing the console prompt: modal is modal, modeless is not, and
 // exo follows its configured fallback.
 func TestShellEditorModalFromEditorMode(t *testing.T) {
 	for _, tc := range []struct {
@@ -1227,7 +1215,7 @@ func TestShellEditorModalFromEditorMode(t *testing.T) {
 				m["editor"] = tc.editor
 			}
 			cfg := &ideConfig{cfg: m, errors: map[string]error{}}
-			assert.Equal(t, tc.want, cfg.shellCfg().modal)
+			assert.Equal(t, tc.want, cfg.consoleCfg().modal)
 		})
 	}
 }

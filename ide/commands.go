@@ -369,17 +369,17 @@ var (
 			},
 			handler: (*ex).terminalnewtab,
 		},
-		"shell": {
+		"console": {
 			man: textapi.CommandManual{
-				Summary: "Open a new Rune shell in a durable tab and route commands through registered REPL handlers. " +
-					"If arguments are provided they are submitted as a command line on the shell prompt; " +
-					"any in-flight command in the existing shell is interrupted with <ctrl-c> first.",
+				Summary: "Open a new Rune console in a durable tab and route commands through registered REPL handlers. " +
+					"If arguments are provided they are submitted as a command line on the console prompt; " +
+					"any in-flight command in the existing console is interrupted with <ctrl-c> first.",
 				Synopsis: "[<command> [<args>...]]",
 			},
-			handler: (*ex).shellnewtab,
+			handler: (*ex).consolenewtab,
 			completer: func(e *ex, ctx context.Context, cmd textapi.Command,
 			) (iterator.Iterator[string], string, error) {
-				return e.completeShell(ctx, cmd)
+				return e.completeConsole(ctx, cmd)
 			},
 		},
 		"terminalnew": {

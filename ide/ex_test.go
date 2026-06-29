@@ -1181,9 +1181,9 @@ func TestShellCommandOpensTab(t *testing.T) {
 
 	cases := []handlertest.SequenceTestCase{
 		{
-			InputSequence: "<c-\\\\>shell<enter>help<enter>",
-			Expected: "┌━━━━━━━───────────┐\n" +
-				"│ shell           │\n" +
+			InputSequence: "<c-\\\\>console<enter>help<enter>",
+			Expected: "┌━━━━━━━━━─────────┐\n" +
+				"│ console         │\n" +
 				"├──────────────────┤\n" +
 				"│  available       │\n" +
 				"│  commands        │\n" +
@@ -1202,7 +1202,7 @@ func TestShellCommandOpensTab(t *testing.T) {
 	_, ok := tabs[0].Handler().(*ideshell.Handler)
 	assert.True(t, ok)
 	assert.Equal(t, text.DefaultConfig().Icons.Shell, b.config.Icons.Shell)
-	assert.Equal(t, "shell://"+workspaceURI.Path(), tabs[0].URI().String())
+	assert.Equal(t, "console://"+workspaceURI.Path(), tabs[0].URI().String())
 }
 
 func TestShellCommandComplete(t *testing.T) {
@@ -1254,7 +1254,7 @@ func TestShellCommandComplete(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			it, _, err := b.comp.CompleteCommand(t.Context(),
-				textapi.Command{Name: "shell", Args: tc.args})
+				textapi.Command{Name: "console", Args: tc.args})
 			require.NoError(t, err)
 			defer func() { _ = it.Close() }()
 
@@ -1376,14 +1376,14 @@ func TestHomeFallbackPromptDoesNotInstall(t *testing.T) {
 
 			assert.Equal(t, 0, b.comp.Browser().FloatingWindows(),
 				"home fallback must not open an install prompt")
-			assert.Nil(t, b.ex.companionShell,
-				"home fallback must not open the install shell")
+			assert.Nil(t, b.ex.companionConsole,
+				"home fallback must not open the install console")
 		})
 	}
 }
 
 // TestShowFallbackPromptNoDoesNothing verifies that selecting No on the
-// install prompt closes the prompt without opening the companion shell.
+// install prompt closes the prompt without opening the companion console.
 func TestShowFallbackPromptNoDoesNothing(t *testing.T) {
 	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/fallback-no")
 	require.NoError(t, err)
@@ -1407,13 +1407,13 @@ func TestShowFallbackPromptNoDoesNothing(t *testing.T) {
 	assert.False(t, exit)
 	assert.True(t, handled)
 	assert.Equal(t, 0, b.comp.Browser().FloatingWindows())
-	assert.Nil(t, b.ex.companionShell)
+	assert.Nil(t, b.ex.companionConsole)
 }
 
 // TestShellCommandPastesArgument verifies that arguments passed to the
-// `:shell` ex command are submitted to the shell prompt as a single
-// command line, both when the shell tab is created on first use and
-// when the existing companion shell tab is reused.
+// `console` ex command are submitted to the console prompt as a single
+// command line, both when the console tab is created on first use and
+// when the existing companion console tab is reused.
 func TestShellCommandPastesArgument(t *testing.T) {
 	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/shell-paste")
 	require.NoError(t, err)
@@ -1430,9 +1430,9 @@ func TestShellCommandPastesArgument(t *testing.T) {
 	b.scheduler = scheduler
 	defer b.Close()
 
-	// First call creates the companion shell tab and pastes the
+	// First call creates the companion console tab and pastes the
 	// command. The repl persists submitted commands to history.
-	require.NoError(t, b.shellnewtab(context.Background(), "help"))
+	require.NoError(t, b.consolenewtab(context.Background(), "help"))
 	var doc struct{ Items []string }
 	require.NoError(t, svc.Get(
 		context.Background(), shellHistoryDocumentID, &doc,
@@ -1442,7 +1442,7 @@ func TestShellCommandPastesArgument(t *testing.T) {
 
 	// Second call reuses the existing tab and submits a different
 	// command, which should also be persisted to history.
-	require.NoError(t, b.shellnewtab(
+	require.NoError(t, b.consolenewtab(
 		context.Background(), "help", "help",
 	))
 	require.NoError(t, svc.Get(
@@ -1452,7 +1452,7 @@ func TestShellCommandPastesArgument(t *testing.T) {
 
 	// Calling without arguments must not submit anything new.
 	prev := len(doc.Items)
-	require.NoError(t, b.shellnewtab(context.Background()))
+	require.NoError(t, b.consolenewtab(context.Background()))
 	require.NoError(t, svc.Get(
 		context.Background(), shellHistoryDocumentID, &doc,
 	))
@@ -1460,12 +1460,12 @@ func TestShellCommandPastesArgument(t *testing.T) {
 }
 
 // TestDebuggerCommandOpensShellWithDebugger verifies that running
-// `:debugger` with no arguments behaves like `:shell debugger`:
-// the companion shell tab is opened (or focused) and the literal
+// `:debugger` with no arguments behaves like `console debugger`:
+// the companion console tab is opened (or focused) and the literal
 // command "debugger" is submitted on its prompt. The integration
 // is wired in workspace_handler.go via
-// debugshell.PromptHandler.WithOpenShell(ex.shellnewtab), so
-// driving shellnewtab directly with "debugger" exercises the same
+// debugshell.PromptHandler.WithOpenShell(ex.consolenewtab), so
+// driving consolenewtab directly with "debugger" exercises the same
 // code path that the prompt handler will invoke.
 func TestDebuggerCommandOpensShellWithDebugger(t *testing.T) {
 	workspaceURI, err := workspaceapi.ParseURI("file:///tmp/debugger-noargs")
@@ -1483,9 +1483,9 @@ func TestDebuggerCommandOpensShellWithDebugger(t *testing.T) {
 	b.scheduler = scheduler
 	defer b.Close()
 
-	// First call: companion shell tab is created and "debugger"
+	// First call: companion console tab is created and "debugger"
 	// is submitted, which the repl persists to history.
-	require.NoError(t, b.shellnewtab(context.Background(), "debugger"))
+	require.NoError(t, b.consolenewtab(context.Background(), "debugger"))
 	var doc struct{ Items []string }
 	require.NoError(t, svc.Get(
 		context.Background(), shellHistoryDocumentID, &doc,
@@ -1493,15 +1493,15 @@ func TestDebuggerCommandOpensShellWithDebugger(t *testing.T) {
 	require.NotEmpty(t, doc.Items)
 	assert.Equal(t, "debugger", doc.Items[len(doc.Items)-1])
 
-	// The shell tab must be the companion ideshell handler.
+	// The console tab must be the companion ideshell handler.
 	tabs := b.comp.Tabs()
 	require.Len(t, tabs, 1)
 	_, ok := tabs[0].Handler().(*ideshell.Handler)
 	assert.True(t, ok)
 
-	// Second call reuses the existing companion shell tab and
+	// Second call reuses the existing companion console tab and
 	// re-submits "debugger" on its prompt.
-	require.NoError(t, b.shellnewtab(context.Background(), "debugger"))
+	require.NoError(t, b.consolenewtab(context.Background(), "debugger"))
 	require.NoError(t, svc.Get(
 		context.Background(), shellHistoryDocumentID, &doc,
 	))
@@ -1535,9 +1535,9 @@ func TestShellCommandPersistsHistory(t *testing.T) {
 	// care about the persistence side-effect on storageapi.Service.
 	handlertest.RunHandlerSequence(t, b, 20, 10, []handlertest.SequenceTestCase{
 		{
-			InputSequence: "<c-\\\\>shell<enter>help<enter>",
-			Expected: "┌━━━━━━━───────────┐\n" +
-				"│\ue691 shell           │\n" +
+			InputSequence: "<c-\\\\>console<enter>help<enter>",
+			Expected: "┌━━━━━━━━━─────────┐\n" +
+				"│\ue691 console         │\n" +
 				"├──────────────────┤\n" +
 				"│> help            │\n" +
 				"│• help — Show     │\n" +
@@ -1572,7 +1572,7 @@ func TestShellCommandPersistsHistory(t *testing.T) {
 	b2.scheduler = scheduler
 	defer b2.Close()
 
-	require.NoError(t, b2.shellnewtab(context.Background()))
+	require.NoError(t, b2.consolenewtab(context.Background()))
 	tabs := b2.comp.Tabs()
 	require.Len(t, tabs, 1)
 	_, ok := tabs[0].Handler().(*ideshell.Handler)
@@ -1605,7 +1605,7 @@ func TestShellCommandRespectsMaxHistory(t *testing.T) {
 
 	openShell := func() {
 		b.Handle(term.Event{Type: term.EventKey, Ch: '\\', Mod: term.ModCtrl})
-		for _, r := range "shell" {
+		for _, r := range "console" {
 			b.Handle(term.Event{Type: term.EventKey, Ch: r})
 		}
 		b.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
@@ -2310,8 +2310,8 @@ func (t testEx) Handle(ev term.Event) (bool, bool) {
 	unlock := t.lock()
 	quit, handle := t.ex.Handle(ev)
 	unlock()
-	if t.ex.companionShell != nil {
-		t.ex.companionShell.Wait()
+	if t.ex.companionConsole != nil {
+		t.ex.companionConsole.Wait()
 	}
 	t.ex.Wait()
 	// Wait for async flush completions to deliver their callbacks
