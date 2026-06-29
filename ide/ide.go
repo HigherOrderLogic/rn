@@ -188,7 +188,7 @@ func (i *IDE) Ready() tui.Handler {
 // tutorialInitShaderBuffer is an extra delay added on top of the init
 // shader duration before the tutorial is dispatched, so the prompt
 // mounts only after the shader has fully settled.
-const tutorialInitShaderBuffer = 2 * time.Second
+const tutorialInitShaderBuffer = 1000 * time.Millisecond
 
 func (i *IDE) maybeStartTutorial() {
 	name := i.options.startingTutorial
