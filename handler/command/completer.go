@@ -132,7 +132,7 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 			if err != nil {
 				return nil, "", err
 			}
-			return it, "", nil
+			return iterator.Map(it, ShellQuote), "", nil
 		}
 
 		var modifiedLast string
@@ -182,7 +182,7 @@ func walkDirCompleter(reader walkdir.Reader, dirOnly bool) Completer {
 				return workspaceapi.Join(cwd, val).Path()
 			})
 		}
-		return it, modifiedLast, nil
+		return iterator.Map(it, ShellQuote), modifiedLast, nil
 	})
 }
 

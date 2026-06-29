@@ -598,6 +598,135 @@ command:
 			"history; got %q. full result: %v", got[0], got)
 }
 
+// TestWorkspaceOpenCompletionDispatchesQuotedPath is an end-to-end guard
+// for the completion-quoting fix: completing workspaceopen on a directory
+// whose name contains characters the prompt tokenizer treats specially
+// (spaces and single/double quotes) must select a single, correctly
+// quoted entry that, on Enter, opens exactly one workspace at that literal
+// path rather than splitting the name into several args. Tabs are covered
+// at the tokenizer level in handler/command; they cannot form a workspace
+// URI (the path parser rejects control characters) so they are out of
+// scope here.
+//
+// The flow mirrors a real user: with HOME pointing at a directory that
+// holds a single adversarially named child, type `:workspaceopen `, press
+// Tab to accept the sole completion, then Enter to dispatch. Scoping the
+// completion to a one-entry HOME keeps the directory walk cheap and the
+// selection deterministic; syncCommandPrompt runs it on the test
+// goroutine so no settling races remain.
+func TestWorkspaceOpenCompletionDispatchesQuotedPath(t *testing.T) {
+	cases := []struct {
+		name    string
+		dirName string
+	}{
+		{"space", "my workspace"},
+		{"single quote", "won't stop"},
+		{"double quote", `say "hi"`},
+		{"quote and space", `o'brien dir`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dataDir := t.TempDir()
+
+			// HOME holds exactly one (adversarially named) child. The
+			// workspaceopen completer lists directories relative to HOME,
+			// so an empty argument yields a single, deterministic entry
+			// to accept with Tab without typing an absolute path (which
+			// would walk the filesystem root).
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			target := filepath.Join(home, tc.dirName)
+			require.NoError(t, os.MkdirAll(target, 0o700))
+
+			// Seed repoB as the initial workspace; the command prompt is
+			// only reachable once a real workspace is focused.
+			repoB := t.TempDir()
+			repoBFile := filepath.Join(repoB, "seed.txt")
+			require.NoError(t, os.WriteFile(repoBFile, nil, 0666))
+
+			configFile, _ := makeTestFiles(t)
+			mu := new(sync.Mutex)
+			scheduleNextTick, drain := newTestScheduler(mu)
+			i, err := New(repoB, configFile.Name(), dataDir,
+				newTestStorage(t, dataDir),
+				WithPublishEvent(nopPublishEvent),
+				WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+				WithLocker(mu),
+				WithScheduleNextTick(scheduleNextTick),
+			)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = i.Close() })
+			root := i.Ready()
+			mu.Lock()
+			root.Resize(80, 24)
+			mu.Unlock()
+			i.WaitWorkspaces()
+			drain()
+
+			repoBURI, err := workspaceapi.CurrentUserHostURI(repoBFile)
+			require.NoError(t, err)
+			mu.Lock()
+			require.NoError(t, i.Open(repoBURI))
+			mu.Unlock()
+			i.WaitWorkspaces()
+			drain()
+
+			wh := i.workspaceHandler
+
+			// Run completion on the test goroutine so Tab observes a
+			// settled list.
+			mu.Lock()
+			wh.focusEx().syncCommandPrompt = true
+			mu.Unlock()
+
+			// `:workspaceopen ` (command + space) lists HOME's children;
+			// with one entry the empty-argument completion is unambiguous.
+			keys, err := term.ParseKeys(":workspaceopen<space>")
+			require.NoError(t, err)
+			for _, k := range keys {
+				mu.Lock()
+				root.Handle(term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key})
+				mu.Unlock()
+			}
+			wh.focusEx().Wait()
+
+			// Tab accepts the sole completion (the quoted child path),
+			// Enter dispatches workspaceopen with it.
+			mu.Lock()
+			root.Handle(term.Event{Type: term.EventKey, Key: term.KeyTab})
+			mu.Unlock()
+			wh.focusEx().Wait()
+			mu.Lock()
+			root.Handle(term.Event{Type: term.EventKey, Key: term.KeyEnter})
+			mu.Unlock()
+			i.WaitWorkspaces()
+			drain()
+
+			wantURI, err := wh.homeWorkspace.URI(target)
+			require.NoError(t, err)
+			mu.Lock()
+			var found bool
+			var gotURIs []string
+			for _, w := range wh.workspaces {
+				if w == nil {
+					continue
+				}
+				gotURIs = append(gotURIs, w.uri.String())
+				if w.uri == wantURI {
+					found = true
+				}
+			}
+			mu.Unlock()
+			assert.True(t, found,
+				"expected a workspace opened at the literal path %q; "+
+					"a mis-quoted completion would have split the name into "+
+					"several arguments and opened the wrong path. want=%q got=%v",
+				target, wantURI.String(), gotURIs)
+		})
+	}
+}
+
 // TestE2EIssueImplementAliasChainOrdering reproduces the user-reported
 // `issue-implement` failure. The alias chains a nested alias (standing
 // in for `worktreenew`) followed by two `extensionready` steps:

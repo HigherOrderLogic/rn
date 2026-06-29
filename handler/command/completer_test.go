@@ -453,17 +453,17 @@ func TestFilePathCompleterEdgeCases(t *testing.T) {
 		{
 			name:       "backslash-escaped space",
 			args:       []string{"edit", `with\ space`},
-			wantSubset: []string{"with space/nested/file.txt"},
+			wantSubset: []string{"'with space/nested/file.txt'"},
 		},
 		{
 			name:       "single-quoted with space",
 			args:       []string{"edit", `'with space'`},
-			wantSubset: []string{"with space/nested/file.txt"},
+			wantSubset: []string{"'with space/nested/file.txt'"},
 		},
 		{
 			name:       "double-quoted with space",
 			args:       []string{"edit", `"with space"`},
-			wantSubset: []string{"with space/nested/file.txt"},
+			wantSubset: []string{"'with space/nested/file.txt'"},
 		},
 		{
 			name: "double-quoted unescapes inner quote",
@@ -604,6 +604,87 @@ func TestDirsCompleterFiltersHidden(t *testing.T) {
 	for _, name := range got {
 		assert.False(t, strings.HasPrefix(filepath.Base(name), "."),
 			"DirsCompleter should not return hidden entry %q", name)
+	}
+}
+
+// TestDirsCompleterQuotesPathsWithSpaces verifies that completion entries
+// containing a space are wrapped in single quotes so the prompt keeps
+// them as a single argument instead of splitting on the space.
+func TestDirsCompleterQuotesPathsWithSpaces(t *testing.T) {
+	t.Parallel()
+	fix := newCompleterFixture(t)
+	c := DirsCompleter(fix.reader)
+
+	it, _, err := c.Complete(context.Background(), []string{"workspaceopen"})
+	require.NoError(t, err)
+	got := collectAll(t, it)
+
+	require.Contains(t, got, "'with space'",
+		"a directory containing a space must be quoted as a single token; got %v", got)
+	require.NotContains(t, got, "with space",
+		"the raw unquoted path must not be emitted alongside the quoted one")
+
+	// Round-trip: splitting the emitted entry must yield exactly one
+	// token, and unquoting it must recover the original path.
+	parts := SplitCommandLine("'with space'")
+	require.Len(t, parts, 1,
+		"quoted completion entry must split into a single token")
+	assert.Equal(t, "with space", UnquoteToken(parts[0]))
+}
+
+// TestDirsCompleterQuotesAdversarialNames verifies that directory names
+// containing characters the command-prompt tokenizer treats specially —
+// tabs, single quotes, double quotes, backslashes, and combinations —
+// are emitted in a form that round-trips through the prompt: each entry
+// must split into exactly one token (SplitCommandLine) whose UnquoteToken
+// value is the original relative path. This is the end-to-end guarantee
+// behind quoting completer output: a single quote in the path must not
+// break tokenisation, and the prompt must unquote it back to the literal
+// path before dispatch.
+func TestDirsCompleterQuotesAdversarialNames(t *testing.T) {
+	t.Parallel()
+
+	// Directory base names exercising every Layer 1 metacharacter and
+	// the awkward mixed cases (a name with both ' and ", which forces
+	// ShellQuote off the single-quote fast path).
+	names := []string{
+		"tab\tdir",
+		"single'quote",
+		`double"quote`,
+		"back\\slash",
+		`both'and"quote`,
+		`quote'and space`,
+		`space and"dquote`,
+	}
+
+	root := t.TempDir()
+	for _, n := range names {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, n), 0o700))
+	}
+	c := DirsCompleter(newFSReader(root))
+
+	it, _, err := c.Complete(context.Background(), []string{"workspaceopen"})
+	require.NoError(t, err)
+	got := collectAll(t, it)
+
+	// Index emitted entries by their unquoted value so each adversarial
+	// name can be located regardless of which quoting form was chosen.
+	byUnquoted := make(map[string]string, len(got))
+	for _, entry := range got {
+		parts := SplitCommandLine(entry)
+		require.Len(t, parts, 1,
+			"completion entry %q must tokenise into exactly one argument", entry)
+		require.False(t, LastTokenIsIncomplete(entry),
+			"completion entry %q must be a closed token", entry)
+		byUnquoted[UnquoteToken(parts[0])] = entry
+	}
+
+	for _, n := range names {
+		entry, ok := byUnquoted[n]
+		require.True(t, ok,
+			"expected a completion entry that unquotes to %q; got %v", n, got)
+		assert.NotContains(t, got, n,
+			"the raw unquoted name %q must not be emitted alongside %q", n, entry)
 	}
 }
 
