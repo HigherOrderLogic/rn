@@ -62,7 +62,7 @@ const (
 	// burn output back to the live workspace cells via a cross-fade
 	// transition with [shader.Nop] so the new content emerges
 	// smoothly instead of snapping into place.
-	openShaderDuration = 2 * time.Second
+	openShaderDuration = 1500 * time.Millisecond
 
 	// openShaderFadeOutDuration is how long the trailing cross-fade
 	// from the burn output to the live cells lasts. Must be strictly
