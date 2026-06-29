@@ -46,6 +46,7 @@ RELEASE_FILES=$(wildcard release/*)
 	ox-api-docker-build-gcp ox-api-docker-push-gcp-staging \
 	ox-api-docker-build-gcp-prod ox-api-docker-push-gcp-prod \
 	rune-linux-cross-compile rune-app-amd64 rune-app-arm64 \
+	rune-prod-app-arm64 \
 	rune-dmg rune-dmg-amd64 rune-dmg-notarize rune-dmg-amd64-notarize rune-release-all \
 	rune-agent-pkg rune-agent-sign rune-agent-notarize \
 	rune-agent-prod-dist rune-agent-staging-dist \
@@ -428,6 +429,10 @@ rune-app-amd64:
 
 rune-app-arm64:
 	@$(MAKE) -C cmd/rune app-arm64
+
+# Like rune-app-arm64 but bakes the prod API endpoints into the binary.
+rune-prod-app-arm64:
+	@$(MAKE) -C cmd/rune app-arm64 RUNE_ENV=prod
 
 rune-app-delve:
 	@$(MAKE) -C cmd/rune app-delve
