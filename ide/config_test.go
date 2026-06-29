@@ -1188,6 +1188,49 @@ func TestShellModalStartInsertDefaultsTrue(t *testing.T) {
 	assert.True(t, cfg.consoleModalStartInsert())
 }
 
+func TestConsolePromptFromConfig(t *testing.T) {
+	f, err := os.CreateTemp("", "*.star")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`config = {
+    "console": {
+        "prompt": "rune> ",
+    },
+}`)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
+		term.RingBell, term.ScheduleNextTick, "")
+	require.NoError(t, err)
+	assert.Equal(t, "rune> ", cfg.consolePrompt())
+	assert.Equal(t, "rune> ", cfg.consoleCfg().prompt)
+}
+
+func TestConsolePromptDefaultsEmpty(t *testing.T) {
+	f, err := os.CreateTemp("", "*.star")
+	require.NoError(t, err)
+	defer os.Remove(f.Name())
+
+	_, err = f.WriteString(`config = {
+    "console": {
+        "max_history": 7,
+    },
+}`)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	var cfg ideConfig
+	err = loadConfig(&cfg, f.Name(), browser.NopWallpaper(),
+		defaultConfigSource{src: "config = {}"},
+		term.RingBell, term.ScheduleNextTick, "")
+	require.NoError(t, err)
+	assert.Empty(t, cfg.consolePrompt())
+}
+
 // TestShellEditorModalFromEditorMode asserts consoleCfg().modal mirrors the
 // editor backing the console prompt: modal is modal, modeless is not, and
 // exo follows its configured fallback.

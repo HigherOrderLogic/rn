@@ -600,13 +600,33 @@ type consoleConfig struct {
 	modal bool
 	// modalStartInsert opens the console input in insert mode when modal.
 	modalStartInsert bool
+	// prompt is the input-line prefix shown in the companion console.
+	// Empty falls back to the console's built-in default.
+	prompt string
 }
 
 func (c ideConfig) consoleCfg() consoleConfig {
 	return consoleConfig{
 		modal:            c.consoleEditorModal(),
 		modalStartInsert: c.consoleModalStartInsert(),
+		prompt:           c.consolePrompt(),
 	}
+}
+
+func (c ideConfig) consolePrompt() (ret string) {
+	cfg, ok := c.console()
+	if !ok {
+		return
+	}
+	prompt, err := cfg.GetString("prompt")
+	if err != nil {
+		if err != config.ErrNotFound {
+			c.errors["console.prompt"] = err
+		}
+		return
+	}
+	ret = prompt
+	return
 }
 
 // consoleEditorModal reports whether the companion console's input line is

@@ -186,6 +186,9 @@ config = {
         # editor is modal (vi). Set to False to start in normal mode.
         # Ignored in modeless mode, which has no normal mode.
         "modal_start_insert": True,
+        # Prefix shown on the companion console's input line. Defaults
+        # to "> " when empty.
+        "prompt": "rune> ",
     },
     # Toggle workspace transition animations.
     #

@@ -2013,6 +2013,7 @@ func (e *ex) consolenewtab(_ context.Context, args ...string) error {
 			Workspace:         workspaceURI,
 			Modal:             e.consoleCfg.modal,
 			ModalStartInsert:  e.consoleCfg.modalStartInsert,
+			Prompt:            e.consoleCfg.prompt,
 		}
 		h, registry := ideshell.New(
 			e.emulatorConfig.ScheduleNextTick, e, e.promptEditor,
