@@ -190,6 +190,13 @@ func (i *IDE) Ready() tui.Handler {
 // mounts only after the shader has fully settled.
 const tutorialInitShaderBuffer = 1000 * time.Millisecond
 
+// homePromptInitShaderBuffer is the extra delay added on top of the init
+// shader duration before the home-workspace command prompt is
+// pre-opened. It is shorter than tutorialInitShaderBuffer because the
+// pre-open is a lightweight convenience that should appear promptly once
+// the shader settles.
+const homePromptInitShaderBuffer = 250 * time.Millisecond
+
 func (i *IDE) maybeStartTutorial() {
 	name := i.options.startingTutorial
 	if name == "" {
@@ -244,8 +251,9 @@ func (i *IDE) maybeOpenHomePrompt() {
 			ex := i.workspaceHandler.focusEx()
 			// The pre-open is a convenience, not a takeover: if the user
 			// already opened the command prompt themselves before this
-			// deferred dispatch ran, leave their prompt untouched.
-			if ex.cmd != nil {
+			// deferred dispatch ran — even if they have since dismissed
+			// it — leave them in control and skip the pre-open.
+			if ex.promptOpened {
 				return
 			}
 			ex.Dispatch("echo", "{prompt}workspaceopen<space>")
@@ -254,7 +262,7 @@ func (i *IDE) maybeOpenHomePrompt() {
 	// Defer behind the init shader the same way maybeStartTutorial does so
 	// the shader does not animate on top of the freshly-mounted prompt.
 	if i.options.initShaderFn != nil && i.options.initShaderDuration > 0 {
-		i.options.afterFunc(i.options.initShaderDuration+tutorialInitShaderBuffer, func() {
+		i.options.afterFunc(i.options.initShaderDuration+homePromptInitShaderBuffer, func() {
 			debug.CapturePanicReport(dispatch)
 		})
 		return

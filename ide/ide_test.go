@@ -2209,6 +2209,69 @@ func TestIDEHomePromptOpensOnReady(t *testing.T) {
 			"the pre-open must not replace the prompt the user opened")
 	})
 
+	t.Run("user-opened-then-closed prompt cancels the pre-open", func(t *testing.T) {
+		configFile, _ := makeTestFiles(t)
+		dataDir := t.TempDir()
+
+		mu := new(sync.Mutex)
+		scheduleNextTick, drain := newTestScheduler(mu)
+
+		i, err := New("", configFile.Name(), dataDir,
+			newTestStorage(t, dataDir),
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(mu),
+			WithScheduleNextTick(scheduleNextTick),
+			WithInitShader(
+				func(_ term.Attributes, _ component.FrameCharSet) shader.Shader {
+					return new(mockShader)
+				},
+				30, 1*time.Second,
+			),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = i.Close() })
+
+		var afterCb func()
+		i.options.afterFunc = func(_ time.Duration, fn func()) *time.Timer {
+			afterCb = fn
+			return nil
+		}
+
+		root := i.Ready()
+		mu.Lock()
+		root.Resize(80, 24)
+		mu.Unlock()
+		i.WaitWorkspaces()
+		drain()
+
+		require.True(t, i.workspaceHandler.focusEx().home,
+			"expected the home workspace to be focused")
+		require.NotNil(t, afterCb,
+			"the pre-open must be deferred behind the init shader")
+
+		// The user opens the command prompt themselves and then closes
+		// it again, all before the deferred pre-open fires.
+		mu.Lock()
+		ex := i.workspaceHandler.focusEx()
+		ex.openCommandPrompt()
+		require.NotNil(t, ex.cmd, "the user-opened prompt must be active")
+		ex.cmd = nil
+		mu.Unlock()
+
+		// Fire the deferred timer and drain the scheduled dispatch. The
+		// pre-open must not resurrect a prompt the user already
+		// dismissed.
+		afterCb()
+		drain()
+
+		mu.Lock()
+		cmd := i.workspaceHandler.focusEx().cmd
+		mu.Unlock()
+		assert.Nil(t, cmd,
+			"the pre-open must not reopen a prompt after the user closed theirs")
+	})
+
 	t.Run("starting tutorial skips prompt", func(t *testing.T) {
 		configFile, _ := makeTestFiles(t)
 		dataDir := t.TempDir()

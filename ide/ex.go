@@ -143,6 +143,11 @@ type ex struct {
 	reissueEvent             term.Event
 	cmd                      *command.Prompt
 	syncCommandPrompt        bool
+	// promptOpened records that a command prompt has been opened on
+	// this ex at least once. The home-workspace pre-open consults it
+	// so it stays out of the way even after the user opened and then
+	// dismissed their own prompt.
+	promptOpened bool
 	// promptEditor backs both the command prompt's modal edit mode
 	// and the companion shell's input line. It is a required
 	// dependency (see newEx) so neither consumer has to guard nil.
@@ -2573,6 +2578,7 @@ func (e *ex) newCommandPrompt(reset func(*command.Prompt)) {
 			Alignment: component.AlignmentHorizontallyCentered,
 		})
 	e.cmd = cmd
+	e.promptOpened = true
 	if e.commandPromptCfg.shader.enabled {
 		e.startPromptShader()
 	}
