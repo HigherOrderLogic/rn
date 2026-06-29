@@ -181,6 +181,7 @@ func (i *IDE) Config() config.Config {
 func (i *IDE) Ready() tui.Handler {
 	i.initRunning()
 	i.maybeStartTutorial()
+	i.maybeOpenHomePrompt()
 	return i.planLockdown
 }
 
@@ -204,6 +205,54 @@ func (i *IDE) maybeStartTutorial() {
 	}
 	// Defer the tutorial until the init shader finishes so the shader
 	// does not animate on top of the freshly-mounted tutorial prompt.
+	if i.options.initShaderFn != nil && i.options.initShaderDuration > 0 {
+		i.options.afterFunc(i.options.initShaderDuration+tutorialInitShaderBuffer, func() {
+			debug.CapturePanicReport(dispatch)
+		})
+		return
+	}
+	dispatch()
+}
+
+// maybeOpenHomePrompt pre-opens the command prompt with the
+// workspaceopen command when the user lands on the home workspace and no
+// first-run tutorial is configured. The home workspace is not a real
+// workspace, so this lets returning users immediately fuzzy-search and
+// re-open a previously opened workspace from command history.
+func (i *IDE) maybeOpenHomePrompt() {
+	if i.options.disableHomePrompt {
+		return
+	}
+	// The tutorial owns the prompt during first-run onboarding; avoid a
+	// double-prompt by deferring to it when it will start.
+	if name := i.options.startingTutorial; name != "" {
+		if _, ok := i.tutorial.tutorials[name]; ok {
+			return
+		}
+	}
+	// A workspace requested at launch installs asynchronously, so the
+	// home workspace may still be focused at Ready; skip in that case so
+	// the prompt does not open over the workspace that is loading in.
+	if i.workspaceHandler.startupWorkspace {
+		return
+	}
+	if !i.workspaceHandler.focusEx().home {
+		return
+	}
+	dispatch := func() {
+		i.options.scheduleFn(func() {
+			ex := i.workspaceHandler.focusEx()
+			// The pre-open is a convenience, not a takeover: if the user
+			// already opened the command prompt themselves before this
+			// deferred dispatch ran, leave their prompt untouched.
+			if ex.cmd != nil {
+				return
+			}
+			ex.Dispatch("echo", "{prompt}workspaceopen<space>")
+		})
+	}
+	// Defer behind the init shader the same way maybeStartTutorial does so
+	// the shader does not animate on top of the freshly-mounted prompt.
 	if i.options.initShaderFn != nil && i.options.initShaderDuration > 0 {
 		i.options.afterFunc(i.options.initShaderDuration+tutorialInitShaderBuffer, func() {
 			debug.CapturePanicReport(dispatch)

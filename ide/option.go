@@ -243,6 +243,16 @@ func WithZdotDir(dir string) Option {
 	}
 }
 
+// WithoutHomePrompt disables pre-opening the command prompt with the
+// workspaceopen command when the IDE lands on the home workspace. The
+// bootstrap pre-config shell uses this so its onboarding prompts are not
+// covered by the home prompt.
+func WithoutHomePrompt() Option {
+	return func(opts *options) {
+		opts.disableHomePrompt = true
+	}
+}
+
 // WithInitShader configures the IDE to initialize with the
 // given Shader animation.
 func WithInitShader(
@@ -454,6 +464,8 @@ type options struct {
 	startingTutorial       string
 
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
+
+	disableHomePrompt bool
 }
 
 func defaultOptions() options {

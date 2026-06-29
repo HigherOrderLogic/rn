@@ -1864,8 +1864,15 @@ func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 			i.WaitWorkspaces()
 
 			if !tc.wantScheduled {
-				assert.Empty(t, scheduled,
-					"no tutorial dispatch should be scheduled")
+				// With no valid tutorial the IDE lands on the home
+				// workspace, so maybeOpenHomePrompt now schedules the
+				// home prompt instead. Running it must not start a
+				// tutorial.
+				for _, fn := range scheduled {
+					mu.Lock()
+					fn()
+					mu.Unlock()
+				}
 				assert.Nil(t, i.tutorial.overlay,
 					"no tutorial overlay should be active")
 				return
@@ -1892,6 +1899,216 @@ func TestIDEStartingTutorialDispatchesOnReady(t *testing.T) {
 			assert.Equal(t, tc.wantActive, i.tutorial.activeName)
 		})
 	}
+}
+
+// TestIDEHomePromptOpensOnReady verifies that landing on the home
+// workspace with no first-run tutorial pre-opens the command prompt with
+// the workspaceopen command, and that the prompt is not pre-opened when a
+// tutorial is configured or a real workspace is focused.
+func TestIDEHomePromptOpensOnReady(t *testing.T) {
+	t.Run("home workspace opens prompt", func(t *testing.T) {
+		configFile, _ := makeTestFiles(t)
+		dataDir := t.TempDir()
+
+		mu := new(sync.Mutex)
+		scheduleNextTick, drain := newTestScheduler(mu)
+
+		i, err := New("", configFile.Name(), dataDir,
+			newTestStorage(t, dataDir),
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(mu),
+			WithScheduleNextTick(scheduleNextTick),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = i.Close() })
+
+		root := i.Ready()
+		mu.Lock()
+		root.Resize(80, 24)
+		mu.Unlock()
+		i.WaitWorkspaces()
+		drain()
+
+		require.True(t, i.workspaceHandler.focusEx().home,
+			"expected the home workspace to be focused")
+		mu.Lock()
+		cmd := i.workspaceHandler.focusEx().cmd
+		mu.Unlock()
+		assert.NotNil(t, cmd,
+			"the command prompt should be open after the dispatch")
+	})
+
+	t.Run("user-opened prompt cancels the pre-open", func(t *testing.T) {
+		configFile, _ := makeTestFiles(t)
+		dataDir := t.TempDir()
+
+		mu := new(sync.Mutex)
+		scheduleNextTick, drain := newTestScheduler(mu)
+
+		i, err := New("", configFile.Name(), dataDir,
+			newTestStorage(t, dataDir),
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(mu),
+			WithScheduleNextTick(scheduleNextTick),
+			WithInitShader(
+				func(_ term.Attributes, _ component.FrameCharSet) shader.Shader {
+					return new(mockShader)
+				},
+				30, 1*time.Second,
+			),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = i.Close() })
+
+		// Capture the deferred init-shader timer so the test can fire it
+		// after the user has opened their own prompt.
+		var afterCb func()
+		i.options.afterFunc = func(_ time.Duration, fn func()) *time.Timer {
+			afterCb = fn
+			return nil
+		}
+
+		root := i.Ready()
+		mu.Lock()
+		root.Resize(80, 24)
+		mu.Unlock()
+		i.WaitWorkspaces()
+		drain()
+
+		require.True(t, i.workspaceHandler.focusEx().home,
+			"expected the home workspace to be focused")
+		require.NotNil(t, afterCb,
+			"the pre-open must be deferred behind the init shader")
+
+		// The user opens the command prompt themselves before the
+		// deferred pre-open fires.
+		mu.Lock()
+		i.workspaceHandler.focusEx().openCommandPrompt()
+		userCmd := i.workspaceHandler.focusEx().cmd
+		mu.Unlock()
+		require.NotNil(t, userCmd,
+			"the user-opened prompt must be active")
+
+		// Fire the deferred timer and drain the scheduled dispatch.
+		afterCb()
+		drain()
+
+		mu.Lock()
+		cmd := i.workspaceHandler.focusEx().cmd
+		mu.Unlock()
+		assert.Same(t, userCmd, cmd,
+			"the pre-open must not replace the prompt the user opened")
+	})
+
+	t.Run("starting tutorial skips prompt", func(t *testing.T) {
+		configFile, _ := makeTestFiles(t)
+		dataDir := t.TempDir()
+
+		mu := new(sync.Mutex)
+		scheduleNextTick, drain := newTestScheduler(mu)
+
+		i, err := New("", configFile.Name(), dataDir,
+			newTestStorage(t, dataDir),
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(mu),
+			WithScheduleNextTick(scheduleNextTick),
+			WithStarlarkTutorial("basics", minimalStarTutorial),
+			WithStartingTutorial("basics"),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = i.Close() })
+
+		root := i.Ready()
+		mu.Lock()
+		root.Resize(80, 24)
+		mu.Unlock()
+		i.WaitWorkspaces()
+		drain()
+
+		mu.Lock()
+		overlay := i.tutorial.overlay
+		cmd := i.workspaceHandler.focusEx().cmd
+		mu.Unlock()
+		assert.NotNil(t, overlay,
+			"the scheduled dispatch should start the tutorial, not the prompt")
+		assert.Nil(t, cmd,
+			"the home prompt must not be pre-opened when a tutorial runs")
+	})
+
+	t.Run("real workspace skips prompt", func(t *testing.T) {
+		configFile, _ := makeTestFiles(t)
+		dataDir := t.TempDir()
+		repo := t.TempDir()
+		require.NoError(t, os.WriteFile(
+			filepath.Join(repo, "seed.txt"), nil, 0666))
+
+		mu := new(sync.Mutex)
+		scheduleNextTick, drain := newTestScheduler(mu)
+
+		i, err := New(repo, configFile.Name(), dataDir,
+			newTestStorage(t, dataDir),
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(mu),
+			WithScheduleNextTick(scheduleNextTick),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = i.Close() })
+
+		root := i.Ready()
+		mu.Lock()
+		root.Resize(80, 24)
+		mu.Unlock()
+		i.WaitWorkspaces()
+		drain()
+
+		mu.Lock()
+		isHome := i.workspaceHandler.focusEx().home
+		cmd := i.workspaceHandler.focusEx().cmd
+		mu.Unlock()
+		require.False(t, isHome,
+			"expected a real workspace to be focused, not home")
+		assert.Nil(t, cmd,
+			"the home prompt must not be pre-opened off the home workspace")
+	})
+
+	t.Run("WithoutHomePrompt skips prompt", func(t *testing.T) {
+		configFile, _ := makeTestFiles(t)
+		dataDir := t.TempDir()
+
+		mu := new(sync.Mutex)
+		scheduleNextTick, drain := newTestScheduler(mu)
+
+		i, err := New("", configFile.Name(), dataDir,
+			newTestStorage(t, dataDir),
+			WithPublishEvent(nopPublishEvent),
+			WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+			WithLocker(mu),
+			WithScheduleNextTick(scheduleNextTick),
+			WithoutHomePrompt(),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = i.Close() })
+
+		root := i.Ready()
+		mu.Lock()
+		root.Resize(80, 24)
+		mu.Unlock()
+		i.WaitWorkspaces()
+		drain()
+
+		mu.Lock()
+		isHome := i.workspaceHandler.focusEx().home
+		cmd := i.workspaceHandler.focusEx().cmd
+		mu.Unlock()
+		require.True(t, isHome,
+			"expected the home workspace to be focused")
+		assert.Nil(t, cmd,
+			"WithoutHomePrompt must suppress the home prompt")
+	})
 }
 
 // TestCloseDoesNotCloseBorrowedStorage verifies that closing an IDE does

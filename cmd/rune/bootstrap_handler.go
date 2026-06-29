@@ -166,6 +166,7 @@ func (b *bootstrapHandler) buildPreIDE() (*ide.IDE, error) {
 		ide.WithScheduleNextTick(b.scheduleNextTick),
 		ide.WithZdotDir(b.zdotDir),
 		ide.WithTabsClickCallback(b.handleTabsClick),
+		ide.WithoutHomePrompt(),
 	}
 	preIDE, err := ide.New("", b.configPath, b.dataDir, b.storage, opts...)
 	if err != nil {

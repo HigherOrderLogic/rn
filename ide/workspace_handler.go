@@ -152,6 +152,12 @@ type workspaceManagerHandler struct {
 	streamingOpen           bool
 	reloadConfig            func() (ideConfig, error)
 
+	// startupWorkspace records whether a workspace was requested at
+	// launch (non-empty cwd). It lets the IDE decide on Ready whether
+	// the user is intentionally landing on the home workspace, before
+	// the async cwd workspace install has completed.
+	startupWorkspace bool
+
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
 
 	// tutorialsInstalled is a required dependency wired by the IDE at
@@ -622,6 +628,7 @@ func (h *workspaceManagerHandler) init(
 		return nil
 	}
 
+	h.startupWorkspace = true
 	err = h.addWorkspace(*cwd, true, !cfg.autoRestore(), -1)
 	if err != nil {
 		return fmt.Errorf("add default workspace: %w", err)
