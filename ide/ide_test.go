@@ -520,6 +520,84 @@ command:
 			"got %q. full result: %v", got[0], got)
 }
 
+// TestWorkspaceOpenCompletionSurfacesHistory verifies that the built-in
+// `workspaceopen` completer surfaces previously opened workspaces from
+// command history (history first), in addition to directory completion.
+// This replaces the dropped `wopen` alias: opening a workspace via
+// `:workspaceopen <path>` records it in history, and completing
+// `workspaceopen` then offers that path back as the first match.
+func TestWorkspaceOpenCompletionSurfacesHistory(t *testing.T) {
+	dataDir := t.TempDir()
+	repoA := t.TempDir()
+	repoB := t.TempDir()
+
+	configPath := filepath.Join(dataDir, "rune.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(`
+editor:
+  mode: modal
+command:
+  show_manual: false
+  key: ":"
+`), 0666))
+
+	// Seed repoB so it can be the initial workspace; the command prompt
+	// is only reachable once a real workspace is focused.
+	repoBFile := filepath.Join(repoB, "seed.txt")
+	require.NoError(t, os.WriteFile(repoBFile, nil, 0666))
+
+	mu := new(sync.Mutex)
+	i, err := New(repoB, configPath, dataDir, newTestStorage(t, dataDir),
+		WithPublishEvent(nopPublishEvent),
+		WithExtensionsRunner(FuncExtensionsRunner(testRunnerFn)),
+		WithLocker(mu),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = i.Close() })
+	root := i.Ready()
+
+	repoBURI, err := workspaceapi.CurrentUserHostURI(repoBFile)
+	require.NoError(t, err)
+	mu.Lock()
+	require.NoError(t, i.Open(repoBURI))
+	mu.Unlock()
+
+	wh := i.workspaceHandler
+
+	// Open repoA via the built-in workspaceopen, driving keyboard input
+	// through the IDE root handler so the command Prompt records the
+	// entered command line into history on Enter.
+	invocation := ":workspaceopen<space>" + repoA + "<enter>"
+	keys, err := term.ParseKeys(invocation)
+	require.NoError(t, err)
+	root.Resize(80, 24)
+	for _, k := range keys {
+		mu.Lock()
+		root.Handle(term.Event{Type: term.EventKey, Ch: k.Ch, Mod: k.Mod, Key: k.Key})
+		mu.Unlock()
+	}
+	wh.focusEx().Wait()
+
+	// Completing `workspaceopen ` (command + space, empty last arg) must
+	// surface the prior path from history as the first result.
+	ex := wh.exHandler(wh.focusHandler())
+	require.NotNil(t, ex, "expected a focused ex handler after dispatch")
+	mu.Lock()
+	it, _, err := ex.comp.CompleteCommand(t.Context(),
+		textapi.Command{Name: "workspaceopen", Args: []string{""}})
+	mu.Unlock()
+	require.NoError(t, err)
+	defer func() { _ = it.Close() }()
+
+	got, err := iterator.ToSlice(t.Context(), it)
+	require.NoError(t, err)
+	require.NotEmpty(t, got,
+		"workspaceopen completion must surface at least the prior "+
+			"`workspaceopen %s` history entry, got nothing", repoA)
+	assert.Equal(t, repoA, got[0],
+		"first completion must be the prior workspaceopen argument from "+
+			"history; got %q. full result: %v", got[0], got)
+}
+
 // TestE2EIssueImplementAliasChainOrdering reproduces the user-reported
 // `issue-implement` failure. The alias chains a nested alias (standing
 // in for `worktreenew`) followed by two `extensionready` steps:

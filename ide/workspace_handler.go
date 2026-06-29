@@ -66,6 +66,7 @@ import (
 	"unstable.build/go-tui/handler"
 	"unstable.build/go-tui/handler/command"
 	handlermarkdown "unstable.build/go-tui/handler/markdown"
+	"unstable.build/go-tui/handler/search"
 	"unstable.build/go-tui/ide/ideauthorizer"
 	"unstable.build/go-tui/ide/idecursor"
 	"unstable.build/go-tui/ide/idedebug"
@@ -166,6 +167,11 @@ type workspaceManagerHandler struct {
 	tutorialsInstalled func(names []string) (bool, error)
 
 	commandObserver *commandObserverRegistry
+
+	// commandHistory exposes the command prompt's persisted history so
+	// the built-in workspaceopen completer can surface previously opened
+	// workspaces alongside directory completion.
+	commandHistory command.HistoryAccessor
 
 	union               handler.FrameUnion
 	bar                 handler.Tabs
@@ -462,6 +468,8 @@ func (h *workspaceManagerHandler) init(
 	}
 	h.storage = storage
 	h.ideStorage = storageapi.WithPartition(h.storage, "ide")
+	h.commandHistory = search.NewHistory(
+		h.ideStorage, commandHistoryDocumentID, cfg.commandMaxHistory())
 	router, err := llmrouter.New(cfg.llmConfig(), sixDir, h.storage)
 	if err != nil {
 		return fmt.Errorf("init llm router: %w", err)
@@ -2615,7 +2623,16 @@ func (h *workspaceManagerHandler) completeCommand(
 ) (iterator.Iterator[string], string, error) {
 	switch cmd.Name {
 	case cmdAddWorkspace:
-		return command.DirsCompleter(h.empty.workspace).Complete(ctx, cmd.Args)
+		// History first so re-opening a previously opened workspace is a
+		// single pick; directory completion follows. DirsCompleter only
+		// inspects the trailing token, so passing the command name as
+		// args[0] (required by HistoryCompleter to strip the prefix) is
+		// safe for both.
+		argv := append([]string{cmd.Name}, cmd.Args...)
+		return command.MultiCompleter(
+			command.HistoryCompleter(h.commandHistory),
+			command.DirsCompleter(h.empty.workspace),
+		).Complete(ctx, argv)
 	case cmdMoveWorkspace:
 		if len(cmd.Args) <= 1 {
 			options := []string{"left", "right", "1", "2",

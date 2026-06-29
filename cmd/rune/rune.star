@@ -550,13 +550,6 @@ config = {
                 ],
                 "completer": "! $SHELL -c 'git worktree list | tail -n +2 | cut -d\" \" -f1 | xargs -n1 basename'",
             },
-            "wopen": {
-                "command": "workspaceopen $1",
-                "completer": [
-                    "{history}",
-                    "{dirs}",
-                ],
-            },
             "docs":           "workspaceopen docs:///",
             "help": [
                 "workspaceopen docs:///",
