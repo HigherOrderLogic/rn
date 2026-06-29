@@ -13,6 +13,7 @@
 editor:
   mode: modeless
   auto_pair: true
+  auto_save: true
   modeless:
     attr: {fg: default, bg: default}
     bar_attr: {fg: default, bg: default}
