@@ -136,7 +136,7 @@ var (
 		},
 		ReasoningStringConfig: component.StringConfig{
 			Alignment:            component.AlignmentLeft,
-			Attributes:           term.Attributes{Fg: term.ColorGray},
+			Attributes:           term.Attributes{Fg: term.GetColor("dimgray")},
 			BackgroundAttributes: term.Attributes{},
 		},
 		ReasoningSpanConfig: component.SpanConfig{
