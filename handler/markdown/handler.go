@@ -198,6 +198,14 @@ func (h *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return false, true
 	}
 
+	// The less-style character shortcuts below are bare keypresses.
+	// A Ctrl/Alt/Meta modifier means the user is invoking a host
+	// keybinding (e.g. <meta-n>); let it fall through unhandled so the
+	// IDE can dispatch the bound command instead of scrolling.
+	if ev.Mod&(term.ModCtrl|term.ModAlt|term.ModMeta) != 0 {
+		return false, false
+	}
+
 	switch ev.Ch {
 	case 'q':
 		return true, true

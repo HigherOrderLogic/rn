@@ -561,6 +561,7 @@ config = {
             "<shift-tab>":    "fexplorer",
             "<m-r>":          "history",
             "<m-,>":          "config",
+            "<m-/>":          "cheatsheet",
             "<m-q>":          "quit",
             "<m-=>":          "guifontsize increase",
             "<m-->":          "guifontsize decrease",

@@ -1921,17 +1921,6 @@ func (c ideConfig) modeless() (config.Config, bool) {
 	return c.getConfig(b, "modeless")
 }
 
-func (c ideConfig) virtual() (config.Config, bool) {
-	if c.cfg == nil {
-		return nil, false
-	}
-	b, ok := c.editor()
-	if !ok {
-		return nil, false
-	}
-	return c.getConfig(b, "virtual")
-}
-
 // exo returns the `editor.exo` configuration block, if any.
 func (c ideConfig) exo() (config.Config, bool) {
 	if c.cfg == nil {

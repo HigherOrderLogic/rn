@@ -546,7 +546,10 @@ func (b *bootstrapHandler) openBootstrapFlow() {
 
 func (b *bootstrapHandler) openWelcomePrompt() {
 	msg := "## Welcome to Rune\n\n" +
-		"Glad you're here. Let's get everything set up."
+		"Glad you're here. Let's get everything set up.\n\n" +
+		"Learning a new editor is hard, and it can feel daunting at first. We've all been there. " +
+		"These first steps are designed to make that process easier, and we promise that once Rune starts to click, " +
+		"the payoff will be huge."
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,

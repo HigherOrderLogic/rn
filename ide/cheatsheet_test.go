@@ -1,0 +1,254 @@
+// Unstable Build LLC ("COMPANY") CONFIDENTIAL
+//
+// Unpublished Copyright (c) 2017-2026 Unstable Build, All Rights Reserved.
+//
+// NOTICE: All information contained herein is, and remains the property of COMPANY.
+// The intellectual and technical concepts contained herein are proprietary to
+// COMPANY and may be covered by U.S. and Foreign Patents, patents in process,
+// and are protected by trade secret or copyright law. Dissemination of this information
+// or reproduction of this material is strictly forbidden unless prior written permission
+// is obtained from COMPANY. Access to the source code contained herein is hereby
+// forbidden to anyone except current COMPANY employees, managers or contractors who
+// have executed Confidentiality and Non-disclosure agreements explicitly covering such access.
+//
+// The copyright notice above does not evidence any actual or intended publication or
+// disclosure of this source code, which includes information that is confidential and/or
+// proprietary, and is a trade secret, of COMPANY. ANY REPRODUCTION, MODIFICATION,
+// DISTRIBUTION, PUBLIC  PERFORMANCE, OR PUBLIC DISPLAY OF OR THROUGH USE OF THIS SOURCE CODE
+// WITHOUT  THE EXPRESS WRITTEN CONSENT OF COMPANY IS STRICTLY PROHIBITED, AND IN
+// VIOLATION OF APPLICABLE LAWS AND INTERNATIONAL TREATIES. THE RECEIPT OR POSSESSION OF
+// THIS SOURCE CODE AND/OR RELATED INFORMATION DOES NOT CONVEY OR IMPLY ANY RIGHTS TO
+// REPRODUCE, DISCLOSE OR DISTRIBUTE ITS CONTENTS, OR TO MANUFACTURE, USE, OR SELL
+// ANYTHING THAT IT MAY DESCRIBE, IN WHOLE OR IN PART.
+
+package ide
+
+import (
+	"net/url"
+	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/text"
+)
+
+func cheatsheetTestConfig() text.Config {
+	cfg := text.DefaultConfig()
+	cfg.CommandKeyBindings = map[term.KeyComb][][]string{
+		{Ch: 'h', Mod: term.ModMeta}: {{"windowfocus", "left"}},
+		{Ch: 'n', Mod: term.ModMeta}: {{"windownew"}},
+		{Ch: 'd', Mod: term.ModAlt}:  {{"lsp", "definition"}},
+	}
+	return cfg
+}
+
+// TestCheatsheetResolvesBoundKeys verifies the key column holds the
+// user's resolved chords for bound commands.
+func TestCheatsheetResolvesBoundKeys(t *testing.T) {
+	md, err := renderCheatsheet(cheatsheetTestConfig(), true, "modal", false)
+	require.NoError(t, err)
+
+	assert.Contains(t, md, "| `<meta-h>` | Focus the window in a direction")
+	assert.Contains(t, md, "| `<meta-n>` | Open a new window with the default split orientation |")
+	assert.Contains(t, md, "| `<alt-d>` | Go to definition |")
+
+	assert.True(t, strings.HasPrefix(md, "# Rune cheatsheet"),
+		"the license template comment must not render into the output")
+}
+
+// TestCheatsheetUnboundCommandsFallBack verifies commands with no bound
+// key render with the command-prompt sequence and still appear.
+func TestCheatsheetUnboundCommandsFallBack(t *testing.T) {
+	md, err := renderCheatsheet(cheatsheetTestConfig(), true, "modal", false)
+	require.NoError(t, err)
+
+	assert.Contains(t, md, "| `: docs` | Open the documentation |")
+	assert.Contains(t, md, "| `: help` | Open the docs workspace and ask the help agent |")
+	assert.Contains(t, md, "| `: edit` | Open a file for editing |")
+}
+
+// TestCheatsheetUnboundCommandFallbackKeepsArgs verifies that an unbound
+// command with arguments renders the full command line in the key column,
+// not just the bare command name.
+func TestCheatsheetUnboundCommandFallbackKeepsArgs(t *testing.T) {
+	md, err := renderCheatsheet(cheatsheetTestConfig(), true, "modal", false)
+	require.NoError(t, err)
+
+	assert.Contains(t, md, "| `: tutorial start basics` | Start the basics tutorial |")
+	assert.NotContains(t, md, "| `: tutorial` | Start the basics tutorial |")
+}
+
+// TestCheatsheetModalTips verifies the prompt-navigation rows switch on
+// editor mode: modal shows the vi-style chords, modeless shows arrows.
+func TestCheatsheetModalTips(t *testing.T) {
+	cfg := cheatsheetTestConfig()
+
+	modal, err := renderCheatsheet(cfg, true, "modal", false)
+	require.NoError(t, err)
+	assert.Contains(t, modal, "`<ctrl-j>` / `<ctrl-k>`")
+	assert.NotContains(t, modal, "| `<up>` / `<down>` | Move through the results |")
+
+	modeless, err := renderCheatsheet(cfg, false, "modeless", false)
+	require.NoError(t, err)
+	assert.NotContains(t, modeless, "`<ctrl-j>` / `<ctrl-k>`")
+	assert.Contains(t, modeless, "| `<up>` / `<down>` | Move through the results |")
+}
+
+// TestCheatsheetAutoSaveGatesWriteRow verifies the manual write row is
+// shown only when auto-save is off.
+func TestCheatsheetAutoSaveGatesWriteRow(t *testing.T) {
+	cfg := cheatsheetTestConfig()
+
+	off, err := renderCheatsheet(cfg, true, "modal", false)
+	require.NoError(t, err)
+	assert.Contains(t, off, "Flush file changes to disk")
+
+	on, err := renderCheatsheet(cfg, true, "modal", true)
+	require.NoError(t, err)
+	assert.NotContains(t, on, "Flush file changes to disk")
+}
+
+// TestCheatsheetEditorSection verifies the Editor section names the active
+// editor and links to its docs guide, mentioning exo only in exo mode.
+func TestCheatsheetEditorSection(t *testing.T) {
+	cfg := cheatsheetTestConfig()
+
+	modal, err := renderCheatsheet(cfg, true, "modal", false)
+	require.NoError(t, err)
+	assert.Contains(t, modal, "**modal** editor")
+	assert.Contains(t, modal, "https://docs.rune.build/learn/modal-editor")
+	assert.NotContains(t, modal, "exo")
+
+	modeless, err := renderCheatsheet(cfg, false, "modeless", false)
+	require.NoError(t, err)
+	assert.Contains(t, modeless, "**modeless** editor")
+	assert.Contains(t, modeless, "https://docs.rune.build/learn/modeless-editor")
+	assert.NotContains(t, modeless, "exo")
+
+	exo, err := renderCheatsheet(cfg, true, "exo", false)
+	require.NoError(t, err)
+	assert.Contains(t, exo, "**exo** editor")
+	assert.Contains(t, exo, "https://docs.rune.build/learn/exoeditor")
+}
+
+// TestCheatsheetWorkspacesPrecedeWindows asserts the Workspaces section is
+// rendered before the Windows section, reflecting the layout hierarchy.
+func TestCheatsheetWorkspacesPrecedeWindows(t *testing.T) {
+	md, err := renderCheatsheet(cheatsheetTestConfig(), true, "modal", false)
+	require.NoError(t, err)
+
+	wsIdx := strings.Index(md, "## Workspaces")
+	winIdx := strings.Index(md, "## Windows")
+	require.NotEqual(t, -1, wsIdx)
+	require.NotEqual(t, -1, winIdx)
+	assert.Less(t, wsIdx, winIdx, "Workspaces section must come before Windows")
+}
+
+// TestCheatsheetSearchSection asserts the Search section lists the
+// workspace search commands sourced from the docs search guide.
+func TestCheatsheetSearchSection(t *testing.T) {
+	md, err := renderCheatsheet(cheatsheetTestConfig(), true, "modal", false)
+	require.NoError(t, err)
+
+	assert.Contains(t, md, "## Search")
+	assert.Contains(t, md, "Fuzzy-find a file by name")
+	assert.Contains(t, md, "Search file contents across the workspace")
+	assert.Contains(t, md, "Jump to a function or method in the current file")
+}
+
+// TestCheatsheetJumpToastRows asserts the three jumptoast rows resolve to
+// the user's `echo {prompt}jumptoast ...` prefill bindings by matching the
+// per-kind capture, since the command name alone is unbound.
+func TestCheatsheetJumpToastRows(t *testing.T) {
+	cfg := text.DefaultConfig()
+	cfg.CommandKeyBindings = map[term.KeyComb][][]string{
+		{Ch: 'f', Mod: term.ModAlt}: {{"echo", "{prompt}jumptoast<space>locals.scm<space>local.definition.method|local.definition.function<space>"}},
+		{Ch: 'v', Mod: term.ModAlt}: {{"echo", "{prompt}jumptoast<space>locals.scm<space>local.definition.var<space>"}},
+		{Ch: 's', Mod: term.ModAlt}: {{"echo", "{prompt}jumptoast<space>locals.scm<space>local.definition.type<space>"}},
+	}
+	md, err := renderCheatsheet(cfg, true, "modal", false)
+	require.NoError(t, err)
+
+	assert.Contains(t, md, "| `<alt-f>` | Jump to a function or method in the current file |")
+	assert.Contains(t, md, "| `<alt-v>` | Jump to a variable in the current file |")
+	assert.Contains(t, md, "| `<alt-s>` | Jump to a type in the current file |")
+}
+
+// TestCheatsheetJumpToastFallback asserts the jumptoast rows fall back to
+// the command-prompt sequence when no binding is present.
+func TestCheatsheetJumpToastFallback(t *testing.T) {
+	md, err := renderCheatsheet(text.DefaultConfig(), true, "modal", false)
+	require.NoError(t, err)
+
+	assert.Contains(t, md, "| `: jumptoast` | Jump to a function or method in the current file |")
+}
+
+// TestOpenCheatsheetLink verifies http(s) links open in the browser and are
+// reported handled, while other schemes are left to the default handler.
+func TestOpenCheatsheetLink(t *testing.T) {
+	prev := browseURL
+	t.Cleanup(func() { browseURL = prev })
+
+	var opened []string
+	browseURL = func(urls ...*url.URL) error {
+		for _, u := range urls {
+			opened = append(opened, u.String())
+		}
+		return nil
+	}
+
+	for _, scheme := range []string{"http", "https"} {
+		u := &url.URL{Scheme: scheme, Host: "docs.rune.build", Path: "/learn/modal-editor"}
+		assert.True(t, openCheatsheetLink(u), "%s link must be handled", scheme)
+	}
+	assert.Equal(t, []string{
+		"http://docs.rune.build/learn/modal-editor",
+		"https://docs.rune.build/learn/modal-editor",
+	}, opened)
+
+	opened = nil
+	for _, scheme := range []string{"", "mailto", "file", "#anchor"} {
+		u := &url.URL{Scheme: scheme, Path: "x"}
+		assert.False(t, openCheatsheetLink(u), "%q link must fall through", scheme)
+	}
+	assert.Empty(t, opened, "non-http links must not open a browser")
+}
+
+// TestOpenCheatsheetLinkToleratesError verifies a browser failure is
+// swallowed and the link is still reported handled.
+func TestOpenCheatsheetLinkToleratesError(t *testing.T) {
+	prev := browseURL
+	t.Cleanup(func() { browseURL = prev })
+	browseURL = func(...*url.URL) error { return assert.AnError }
+
+	u := &url.URL{Scheme: "https", Host: "docs.rune.build"}
+	assert.True(t, openCheatsheetLink(u))
+}
+
+// TestCheatsheetFirstWriterWins verifies that when a command is bound to
+// multiple chords the cheatsheet keeps a single deterministic key and
+// the template executes without error.
+func TestCheatsheetFirstWriterWins(t *testing.T) {
+	cfg := text.DefaultConfig()
+	cfg.CommandKeyBindings = map[term.KeyComb][][]string{
+		{Ch: 'n', Mod: term.ModMeta}: {{"windownew"}},
+		{Ch: 'm', Mod: term.ModMeta}: {{"windownew"}},
+	}
+	md, err := renderCheatsheet(cfg, true, "modal", false)
+	require.NoError(t, err)
+
+	count := strings.Count(md, "| Open a new window with the default split orientation |")
+	assert.Equal(t, 1, count)
+	newLines := 0
+	for line := range strings.SplitSeq(md, "\n") {
+		if strings.Contains(line, "Open a new window") {
+			newLines++
+			assert.True(t,
+				strings.Contains(line, "<meta-n>") || strings.Contains(line, "<meta-m>"),
+				"row must use one of the bound chords: %s", line)
+		}
+	}
+	assert.Equal(t, 1, newLines)
+}

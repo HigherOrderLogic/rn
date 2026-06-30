@@ -326,18 +326,20 @@ conversation using your default provider.
 Press `<enter>` or `<space>` to continue.
 """
 
+cheatsheet_md = """\
+There's a `cheatsheet` command that condenses all of this tutorial's
+learnings and more into a single cheat sheet you can pull up any time.
+
+Open it now: """ + keypress("cheatsheet") + """.
+"""
+
 help_md = """\
-You're all set. A couple of things worth remembering:
+You're almost done. A few tips worth remembering:
 
-- If you find yourself wondering what commands you just typed, press
-  `<meta-r>` to open the command prompt in history mode and re-run any
-  previously dispatched command.
-- You can replay this tour any time by running the `tutorial start
-  basics` command.
-
-One more power tool: whenever you wonder how something in Rune works or
-need a hand with your configuration, run the `help` command. It is your
-built-in reference for commands, key bindings, and config.
+- If you find yourself wondering what commands you typed on a previous session, press
+  `<meta-r>` to open the command prompt in history mode and search through your command history.
+- There's a `help` command that opens the documentation on a separate workspace
+  and fires a help agent that you can ask questions.
 
 Try it now: """ + keypress("help") + """. Happy hacking!
 """
@@ -436,6 +438,7 @@ def teach_focus_window():
 
 def teach_move_window():
     floating_window(title = "Move a window", text = move_window_md,
+                    alignment = "top",
                     dismiss_keys = dismiss_for("windowmove", "left"))
     wait_command(
         title    = "Move a window",
@@ -678,14 +681,26 @@ Press `<enter>` or `<space>` to continue.
     notify(level = success, message = "Rune Agent is ready.")
 
 
+def teach_cheatsheet():
+    floating_window(title = "Your cheatsheet", text = cheatsheet_md,
+                    alignment = "top",
+                    dismiss_keys = dismiss_for("cheatsheet"))
+    wait_command(
+        title    = "Your cheatsheet",
+        command  = "cheatsheet",
+        on_error = "Run the `<cmd>cheatsheet` command to open your cheatsheet.",
+    )
+    notify(level = success, message = "That is your cheatsheet.")
+
+
 def teach_help():
-    floating_window(title = "You're all set", text = help_md,
+    floating_window(title = "One last thing", text = help_md,
                     alignment = "top",
                     dismiss_keys = dismiss_for("help"))
     wait_command(
-        title    = "You're all set",
+        title    = "One last thing",
         command  = "help",
-        on_error = "Run the `<cmd>help` command to open Rune's built-in reference.",
+        on_error = "Run the `<cmd>help` command to open the docs and ask the help agent.",
     )
     notify(level = success, message = "That is the help command.")
 
@@ -732,7 +747,9 @@ def run():
 
     teach_agent()
 
+    teach_cheatsheet()
+
     teach_help()
 
 
-tutorial(id = "basics", title = "Rune basics", version = "26", entry = run)
+tutorial(id = "basics", title = "Rune basics", version = "27", entry = run)

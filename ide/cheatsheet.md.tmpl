@@ -1,0 +1,146 @@
+# Rune cheatsheet
+
+Anything that is not typing into a buffer is a command. Open the command
+prompt with `{{.CommandKey}}`, type a command name, and press `<enter>` to
+run it. This sheet leads with the key and names the command it runs.
+
+To close this cheatsheet press `<meta-w>`.
+
+## Getting started
+
+| Key | Action |
+| --- | --- |
+| `{{.CommandKey}}` | Open the command prompt |
+{{- if .Modal}}
+| `<ctrl-j>` / `<ctrl-k>` | Move down / up through the results |
+{{- else}}
+| `<up>` / `<down>` | Move through the results |
+{{- end}}
+| `<enter>` | Run the selected command |
+| `<esc>` / `<ctrl-c>` | Dismiss the command prompt |
+| `<tab>` | Complete the current command name |
+
+## Basics
+
+| Key | Action |
+| --- | --- |
+| `{{key "workspaceopen"}}` | Open a workspace |
+| `{{key "edit"}}` | Open a file for editing |
+{{- if not .AutoSave}}
+| `{{key "write"}}` | Flush file changes to disk |
+{{- end}}
+| `{{key "terminalneworsplit"}}` | Open a new terminal in an empty split or create a new one |
+| `{{key "fexplorer"}}` | Toggle the file explorer |
+| `{{key "console"}}` | Open the console to manage packages and the IDE |
+| `{{key "cheatsheet"}}` | Open this cheatsheet |
+| `{{key "help"}}` | Open the docs workspace and ask the help agent |
+
+## Workspaces
+
+| Key | Action |
+| --- | --- |
+| `{{key "workspacefocus" "1"}}` | Focus workspace 1 through 9 |
+| `{{key "workspacemove" "1"}}` | Move the focused workspace to slot 1 through 9 |
+
+## Windows
+
+| Key | Action |
+| --- | --- |
+| `{{key "windowfocus" "left"}}` | Focus the window in a direction{{if .Modal}} (`hjkl`){{else}} (arrows){{end}} |
+| `{{key "windowmove" "left"}}` | Move the window in a direction |
+| `{{key "windownew"}}` | Open a new window with the default split orientation |
+| `{{key "windowclose"}}` | Close the focused window |
+| `{{key "windowtogglemaximize"}}` | Toggle maximizing the focused window |
+| `{{key "windowdefaultsplit" "h"}}` | Set the default split to horizontal (next split goes below) |
+| `{{key "windowdefaultsplit" "v"}}` | Set the default split to vertical (next split goes to the right) |
+| `{{key "windowresize"}}` | Resize the focused window |
+| `{{key "terminalneworsplit"}}` | Open or split into a terminal |
+| `{{key "tabnew"}}` | Open a new tab |
+
+## Tabs
+
+| Key | Action |
+| --- | --- |
+| `{{key "tabnext"}}` | Focus the next tab |
+| `{{key "tabprevious"}}` | Focus the previous tab |
+| `{{key "tabfocus" "1"}}` | Focus tab 1 through 9 |
+| `{{key "tabmove" "left"}}` | Move the current tab in a direction |
+| `{{key "tabclose"}}` | Close the current tab |
+| `{{key "windowconverttab"}}` | Convert the focused window into a tab |
+
+To keep this temporary cheatsheet floating window as a permanent tab, run
+`{{key "windowconverttab"}}`.
+
+## Editor
+
+{{if eq .EditorMode "modeless" -}}
+You are using the built-in **modeless** editor: keys always type into the
+buffer and editing commands are triggered with modifier chords, so there is
+no separate command mode to switch into.
+
+Learn more in the [modeless editor guide](https://docs.rune.build/learn/modeless-editor).
+{{- else if eq .EditorMode "exo" -}}
+You are using an **exo** editor: Rune hands editing off to your own external
+editor (for example Vim or Neovim) while keeping its windows, tabs, and
+commands around it.
+
+Learn more in the [exo editor guide](https://docs.rune.build/learn/exoeditor).
+{{- else -}}
+You are using the built-in **modal** editor: like vi, you switch between a
+normal mode for navigation and commands and an insert mode for typing into
+the buffer.
+
+Learn more in the [modal editor guide](https://docs.rune.build/learn/modal-editor).
+{{- end}}
+
+## Code intelligence
+
+| Key | Action |
+| --- | --- |
+| `{{key "lsp" "definition"}}` | Go to definition |
+| `{{key "lsp" "references"}}` | Find references |
+| `{{key "lsp" "implementation"}}` | Go to implementation |
+| `{{key "lsp" "hover"}}` | Show documentation |
+| `{{key "lsp" "rename"}}` | Rename the symbol |
+| `{{key "lsp" "format"}}` | Format the buffer |
+| `{{key "lsp" "complete"}}` | Trigger completion |
+| `{{key "lspnextdiagnostic"}}` | Jump to the next diagnostic |
+| `{{key "lspprevdiagnostic"}}` | Jump to the previous diagnostic |
+| `{{key "gitnextchange"}}` | Jump to the next git change |
+| `{{key "gitprevchange"}}` | Jump to the previous git change |
+| `{{key "cursorhistory"}}` | Browse cursor history |
+| `{{key "cursorhistory" "prev"}}` | Jump back to the previous cursor position |
+| `{{key "cursorhistory" "next"}}` | Jump forward to the next cursor position |
+
+## Search
+
+| Key | Action |
+| --- | --- |
+| `{{key "searchfile"}}` | Fuzzy-find a file by name |
+| `{{key "searchtext"}}` | Search file contents across the workspace |
+| `{{key "searchfunc"}}` | Find a function definition across the workspace |
+| `{{key "searchvar"}}` | Find a variable definition across the workspace |
+| `{{key "searchtype"}}` | Find a type definition across the workspace |
+| `{{jumpkey "function"}}` | Jump to a function or method in the current file |
+| `{{jumpkey "var"}}` | Jump to a variable in the current file |
+| `{{jumpkey "type"}}` | Jump to a type in the current file |
+| `{{key "locationpicker"}}` | Turn a command's output into a jump list |
+
+## Files, editing and misc
+
+| Key | Action |
+| --- | --- |
+| `{{key "fexplorer"}}` | Toggle the file explorer |
+| `{{key "history"}}` | Show previously executed commands |
+| `{{key "config"}}` | Open the configuration |
+| `{{key "clipboardcopy"}}` | Copy to the clipboard |
+| `{{key "clipboardpaste"}}` | Paste from the clipboard |
+| `{{key "quit"}}` | Quit Rune |
+
+## Other useful commands
+
+| Key | Action |
+| --- | --- |
+| `{{key "docs"}}` | Open the documentation |
+| `{{key "agent"}}` | Open a Rune agent session in the current workspace |
+| `{{key "tutorial" "start" "basics"}}` | Start the basics tutorial |

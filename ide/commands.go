@@ -56,6 +56,12 @@ var (
 			},
 			handler: (*ex).keydump,
 		},
+		"cheatsheet": {
+			man: textapi.CommandManual{
+				Summary: "Open a keys-first cheatsheet rendered from your current key bindings.",
+			},
+			handler: (*ex).cheatsheet,
+		},
 		"history": {
 			man: textapi.CommandManual{
 				Summary: "Open the command prompt showing previously executed commands.",

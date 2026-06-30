@@ -327,6 +327,29 @@ func TestHandleNonMouseEvent(t *testing.T) {
 	assert.False(t, handled)
 }
 
+// TestHandleModifiedCharKeysFallThrough verifies that less-style single
+// character shortcuts (q, j, k, n, ...) only fire on a bare keypress.
+// When a Ctrl/Alt/Meta modifier is present the event must fall through
+// unhandled so the host can dispatch its bound command (e.g. <meta-n>
+// opening a new window) instead of being swallowed as a scroll.
+func TestHandleModifiedCharKeysFallThrough(t *testing.T) {
+	for _, mod := range []term.Modifier{term.ModCtrl, term.ModAlt, term.ModMeta} {
+		for _, ch := range []rune{'q', 'n', 'N', 'j', 'k', 'g', 'G', 'b', 'f', 'd', 'u', '/'} {
+			comp, err := markdown.New("Hello World")
+			require.NoError(t, err)
+			h := New(comp)
+			h.Resize(20, 5)
+
+			ev := term.Event{Type: term.EventKey, Ch: ch, Mod: mod}
+			exit, handled := h.Handle(ev)
+			assert.False(t, handled,
+				"modified char %q (mod %d) must fall through unhandled", ch, mod)
+			assert.False(t, exit,
+				"modified char %q (mod %d) must not request exit", ch, mod)
+		}
+	}
+}
+
 func TestScrollDownAtMax(t *testing.T) {
 	comp, err := markdown.New("Short")
 	require.NoError(t, err)

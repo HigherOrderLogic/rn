@@ -541,6 +541,9 @@ func (h *workspaceManagerHandler) init(
 		h.dispatchOnPreview, tm, homeParser,
 		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
+		cfg.pkgEditorMode() == editorModeModal,
+		cfg.editorMode(),
+		cfg.editorAutoSave(),
 		cfg.consoleCfg(),
 		globalOpts...)
 	if err != nil {
@@ -1369,6 +1372,9 @@ func (h *workspaceManagerHandler) buildWorkspaceAsync(
 		tm, parser,
 		h.newPromptEditor(cfg), h.commandObserver, h.debugCommands,
 		cfg.commandPromptCfg(),
+		cfg.pkgEditorMode() == editorModeModal,
+		cfg.editorMode(),
+		cfg.editorAutoSave(),
 		cfg.consoleCfg(),
 		textOpts...)
 	if err != nil {

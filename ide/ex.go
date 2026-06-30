@@ -159,6 +159,16 @@ type ex struct {
 	cmdWin           browser.Window
 	promptShader     *shader.Component
 	commandPromptCfg commandPromptConfig
+	// editorModeModal records whether the editor backing this ex runs in
+	// modal mode. The cheatsheet uses it to gate modal-only key tips.
+	editorModeModal bool
+	// editorMode is the raw configured editor mode (modal, modeless, or
+	// exo). The cheatsheet uses it to describe the active editor; unlike
+	// editorModeModal it preserves the exo distinction.
+	editorMode string
+	// editorAutoSave records whether the editor flushes buffers
+	// automatically. The cheatsheet uses it to gate the manual write row.
+	editorAutoSave   bool
 	fullscreenID     uint64
 	exit             bool
 	forceExit        bool
@@ -213,6 +223,9 @@ func newEx(
 	commandObserver commandObserver,
 	debugCommands bool,
 	commandPromptCfg commandPromptConfig,
+	editorModeModal bool,
+	editorMode string,
+	editorAutoSave bool,
 	consoleCfg consoleConfig,
 	opts ...text.Option,
 ) (e *ex, err error) {
@@ -226,6 +239,9 @@ func newEx(
 	e.commandObserver = commandObserver
 	e.debugCommands = debugCommands
 	e.commandPromptCfg = commandPromptCfg
+	e.editorModeModal = editorModeModal
+	e.editorMode = editorMode
+	e.editorAutoSave = editorAutoSave
 	e.consoleCfg = consoleCfg
 	return
 }
