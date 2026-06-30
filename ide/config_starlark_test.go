@@ -690,30 +690,22 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 		"<m-down>":  "windowfocus down",
 		"<m-up>":    "windowfocus up",
 
-		"<s-m-left>":  "windowmove left",
-		"<s-m-right>": "windowmove right",
-		"<s-m-down>":  "windowmove down",
-		"<s-m-up>":    "windowmove up",
-
-		"<c-s-m-left>":  "windowresize decrease width",
-		"<c-s-m-right>": "windowresize increase width",
-		"<c-s-m-down>":  "windowresize decrease height",
-		"<c-s-m-up>":    "windowresize increase height",
+		"<a-s-m-left>":  "windowmove left",
+		"<a-s-m-right>": "windowmove right",
+		"<a-s-m-down>":  "windowmove down",
+		"<a-s-m-up>":    "windowmove up",
 
 		"<a-s-left>":  "tabmove left",
 		"<a-s-right>": "tabmove right",
 
-		"<f12>":   "lsp definition",
-		"<s-f12>": "lsp references",
+		"<a-d>": "lsp definition",
+		"<a-r>": "lsp references",
 
-		"<m-\\\\>": "searchtext",
+		"<m-f>": "searchtext",
 	}
 
 	for _, file := range []string{
-		"override_modeless.star",
 		"override_modeless.yaml",
-		"override_exo_modeless.star",
-		"override_exo_modeless.yaml",
 	} {
 		t.Run(file, func(t *testing.T) {
 			base, err := decodeDefaultConfig(defaultConfigSource{
@@ -738,6 +730,75 @@ func TestModelessPresetsUseArrowLayoutBindings(t *testing.T) {
 					got, "%s must run %q", key, wantCmd)
 			}
 		})
+	}
+}
+
+// TestModelessPresetUnbindsStaleModalChords guards against the modeless
+// preset leaving the modal home-row window/tab chords bound after
+// re-homing the same commands onto the arrow layout. When both the stale
+// modal chord and the new arrow chord map to one command, the
+// command->key reverse lookup is non-deterministic and the tutorial/
+// cheatsheet can surface the wrong key (e.g. <shift-meta-h> instead of
+// <shift-meta-left> for `windowmove left`).
+func TestModelessPresetUnbindsStaleModalChords(t *testing.T) {
+	runeStar := readRuneStar(t)
+
+	base, err := decodeDefaultConfig(defaultConfigSource{
+		src: string(runeStar), modal: true, tui: false,
+	})
+	require.NoError(t, err)
+
+	overlay, err := os.ReadFile("../cmd/rune/override_modeless.yaml")
+	require.NoError(t, err)
+	cfg, err := decodeOverlayConfigFile(
+		bytes.NewReader(overlay), "override_modeless.yaml", base)
+	require.NoError(t, err)
+
+	c := &ideConfig{cfg: cfg, errors: map[string]error{}}
+	mappings := c.commandKeyMappings()
+
+	// The stale modal chords must no longer run their old commands.
+	staleUnbound := map[string]string{
+		"<m-h>":   "windowfocus left",
+		"<m-l>":   "windowfocus right",
+		"<m-j>":   "windowfocus down",
+		"<m-k>":   "windowfocus up",
+		"<s-m-h>": "windowmove left",
+		"<s-m-l>": "windowmove right",
+		"<s-m-j>": "windowmove down",
+		"<s-m-k>": "windowmove up",
+		"<a-s-h>": "tabmove left",
+		"<a-s-l>": "tabmove right",
+		"<a-l>":   "tabnext",
+		"<a-h>":   "tabprevious",
+		"<c-m-h>": "windowdefaultsplit h",
+		"<c-m-v>": "windowdefaultsplit v",
+		"<c-o>":   "cursorhistory prev",
+		"<c-i>":   "cursorhistory next",
+	}
+	for key, oldCmd := range staleUnbound {
+		seq := mustParseBindingKey(t, key)
+		if got, ok := mappings[seq]; ok {
+			require.NotEqualf(t, [][]string{strings.Split(oldCmd, " ")}, got,
+				"%s must not still run %q", key, oldCmd)
+		}
+	}
+
+	// The reverse lookup must resolve to the modeless arrow chords.
+	lookup := c.commandKeyBindingLookup()
+	wantResolved := map[string][]string{
+		"<alt-shift-meta-left>": {"windowmove", "left"},
+		"<meta-left>":           {"windowfocus", "left"},
+		"<alt-shift-left>":      {"tabmove", "left"},
+		"<alt-meta-right>":      {"tabnext"},
+		"<alt-meta-left>":       {"tabprevious"},
+		"<ctrl-shift-->":        {"cursorhistory", "next"},
+		"<ctrl-->":              {"cursorhistory", "prev"},
+	}
+	for wantKey, cmd := range wantResolved {
+		got := lookup(cmd[0], cmd[1:])
+		require.Equalf(t, wantKey, got,
+			"%v must resolve to %s, got %s", cmd, wantKey, got)
 	}
 }
 

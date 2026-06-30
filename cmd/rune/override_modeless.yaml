@@ -28,10 +28,6 @@ command:
     "<m-s>": write
     "<a-m-s>": writeall
     "<m-q>": quit
-    "<a-g>": searchtext
-    "<m-r>": "echo {prompt}jumptoast<space>locals.scm<space>local.definition.type<space>"
-    "<s-m-r>": searchtype
-    "<m-;>": searchtext
     "<c-m-p>": "echo <s-m-p>workspacefocus{wait}<space>"
     "<m-f2>": "locationtoggle bookmark"
     "<f2>": "jumptolocation next bookmark"
@@ -43,64 +39,44 @@ command:
     "<m-f>": searchtext
     "<m-g>": "jumptolocation next search"
     "<s-m-g>": "jumptolocation prev search"
-    "<ctrl-->": "cursorhistory prev"
     "<ctrl-shift-->": "cursorhistory next"
-    "<m-u>": "cursorhistory prev"
-    "<s-m-u>": "cursorhistory next"
-    "<m-,>": config
-    "<s-m-]>": tabnext
-    "<s-m-[>": tabprevious
+    "<ctrl-->": "cursorhistory prev"
     "<c-g>": "echo <esc>:"
     "<ctrl-meta-p>": "echo <esc>:workspacefocus<space>"
-    "<alt-meta-down>": "lsp definition"
-    "<f12>": "lsp definition"
-    "<s-f12>": "lsp references"
-    "<m-=>": "guifontsize increase"
-    "<m-->": "guifontsize decrease"
-    "<m-t>": tabnew
     "<a-s-right>": "tabmove right"
     "<a-s-left>": "tabmove left"
-    "<m-n>": windownew
-    "<m-c>": clipboardcopy
-    "<m-v>": clipboardpaste
     "<m-left>": "windowfocus left"
     "<m-right>": "windowfocus right"
     "<m-down>": "windowfocus down"
     "<m-up>": "windowfocus up"
-    "<s-m-left>": "windowmove left"
-    "<s-m-right>": "windowmove right"
-    "<s-m-down>": "windowmove down"
-    "<s-m-up>": "windowmove up"
-    "<c-s-m-backspace>": "windowresize reset"
-    "<c-s-m-+>": ["windowresize max width", "windowresize max height"]
-    "<c-s-m-->": ["windowresize min width", "windowresize min height"]
-    "<c-s-m-up>": "windowresize increase height"
-    "<c-s-m-down>": "windowresize decrease height"
-    "<c-s-m-left>": "windowresize decrease width"
-    "<c-s-m-right>": "windowresize increase width"
-    "<s-m-w>": windowclose
-    "<c-m-h>": "windowdefaultsplit h"
-    "<c-m-v>": "windowdefaultsplit v"
-    "<s-m-f>": windowtogglemaximize
-    "<m-o>": "lsp hover"
-    "<m-b>": "lsp format"
-    "<m-m>": "go organize-imports"
-    "<a-j>": gitnextchange
-    "<a-k>": gitprevchange
-    "<m-p>": searchfile
-    "<m-\\\\>": searchtext
-    "<m-enter>": terminalneworsplit
-    "<s-m-enter>": "!"
-    "gf": editfileoncursor
-    "<m-1>": "workspacefocus 1"
-    "<m-2>": "workspacefocus 2"
-    "<m-3>": "workspacefocus 3"
-    "<m-4>": "workspacefocus 4"
-    "<m-5>": "workspacefocus 5"
-    "<m-6>": "workspacefocus 6"
-    "<m-7>": "workspacefocus 7"
-    "<m-8>": "workspacefocus 8"
-    "<m-9>": "workspacefocus 9"
+    "<a-s-m-left>": "windowmove left"
+    "<a-s-m-right>": "windowmove right"
+    "<a-s-m-down>": "windowmove down"
+    "<a-s-m-up>": "windowmove up"
+    "<c-m-left>": "windowdefaultsplit h"
+    "<c-m-up>": "windowdefaultsplit v"
+    "<c-m-right>": "windowdefaultsplit h"
+    "<c-m-down>": "windowdefaultsplit v"
+    # Unbind the modal home-row window/tab movement chords this preset
+    # re-homes onto the arrow layout.
+    "<m-h>": ""
+    "<m-j>": ""
+    "<m-k>": ""
+    "<m-l>": ""
+    "<s-m-h>": ""
+    "<s-m-j>": ""
+    "<s-m-k>": ""
+    "<s-m-l>": ""
+    "<a-s-h>": ""
+    "<a-s-l>": ""
+    # Unbind the modal home-row tab, split, and jumplist chords this preset
+    # re-homes onto the arrow / VS Code layout
+    "<a-l>": ""
+    "<a-h>": ""
+    "<c-m-h>": ""
+    "<c-m-v>": ""
+    "<c-o>": ""
+    "<c-i>": ""
 
 # log_level: info               # debug | info | warn | error
 # log_path: ~/.rune/debug.log
@@ -219,28 +195,3 @@ command:
 #       command:   "!! git -C $WORKSPACE_PATH checkout $1"
 #       completer: '! git -C $WORKSPACE_PATH branch --format="%(refname:short)"'
 #     conf: config
-
-# ---------------------------------------------------------------------------
-# LLM provider keys. The `models` block configures the router used by
-# the agent and `:llm message`. Set `default` to any model your
-# configured providers expose.
-# ---------------------------------------------------------------------------
-# models:
-#   openai:
-#     api_key:          ""
-#     # reasoning_effort: ""   # none | minimal | low | medium | high | xhigh | max
-#   anthropic:
-#     api_key:          ""
-#     # cache_control:    ""   # ephemeral | 5m | 1h | "" (disabled)
-#   gemini:
-#     api_key:          ""
-#   codex:
-#     base_url:         ""
-#   custom:
-#     url:              ""
-#     api_key:          ""
-#     available_models: {}     # name -> context window in tokens
-#   local:
-#     models_cache_dir: ""     # empty: $RUNE_DATADIR/models
-#     n_gpu_layers:     -1     # negative offloads every supported layer
-#     flash_attention:  false

@@ -451,7 +451,7 @@ func TestBootstrapE2EEscReopensBootstrapPrompt(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		frame := handlertest.DrawHandler(wrapped, width, height)
-		return strings.Contains(frame, "Vim mode")
+		return strings.Contains(frame, "Choose your key bindings")
 	}, 5*time.Second, 50*time.Millisecond,
 		"vim-mode prompt must be visible after the welcome prompt advances")
 
@@ -459,7 +459,7 @@ func TestBootstrapE2EEscReopensBootstrapPrompt(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		frame := handlertest.DrawHandler(wrapped, width, height)
-		return strings.Contains(frame, "Vim mode")
+		return strings.Contains(frame, "Choose your key bindings")
 	}, 5*time.Second, 50*time.Millisecond,
 		"Esc on the vim-mode prompt must reopen it")
 }

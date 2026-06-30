@@ -617,7 +617,6 @@ config = {
             # key binding, go to System Settings → Keyboard → Keyboard Shortcuts
             # → Input Sources → uncheck both entries.
             "<c-space>":      "lsp complete",
-            "<a-m>":          "go organize-imports",
             "<a-s-j>":        "gitnextchange",
             "<a-s-k>":        "gitprevchange",
             "<m-enter>":      "terminalneworsplit",

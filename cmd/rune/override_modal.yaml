@@ -143,29 +143,3 @@ log_level: info               # debug | info | warn | error
 #     "<m-enter>": terminalneworsplit
 #     "<a-j>":     lspnextdiagnostic
 #     "<a-k>":     lspprevdiagnostic
-
-# ---------------------------------------------------------------------------
-# LLM provider keys. The `models` block configures the router used by
-# the agent and `:llm message`. Set `default` to any model your
-# configured providers expose.
-# ---------------------------------------------------------------------------
-# models:
-#   openai:
-#     api_key:          ""
-#     # reasoning_effort: ""   # none | minimal | low | medium | high | xhigh | max
-#   anthropic:
-#     api_key:          ""
-#     # cache_control:    ""   # ephemeral | 5m | 1h | "" (disabled)
-#   gemini:
-#     api_key:          ""
-#   codex:
-#     base_url:         ""
-#   custom:
-#     url:              ""
-#     api_key:          ""
-#     available_models: {}     # name -> context window in tokens
-#   local:
-#     # llamacpp cache root. Empty means $RUNE_DATADIR/models.
-#     models_cache_dir: ""
-#     n_gpu_layers:     -1     # negative offloads every supported layer
-#     flash_attention:  false
