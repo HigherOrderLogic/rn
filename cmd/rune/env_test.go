@@ -24,17 +24,90 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
+	"github.com/unstablebuild/rune-go-sdk/clipboard"
+	"gopkg.in/yaml.v3"
+
+	"unstable.build/go-tui/ide"
+	"unstable.build/go-tui/ide/idepkg"
 )
+
+// TestGUIEnvLiveApplyHookAppliesNewlyMergedVar is the black-box regression for
+// the install-time GOROOT bug: when a package install merges a brand-new
+// gui.env block into the user config, guiEnvLiveApplyHook must apply it to the
+// live process environment so the freshly-started extension (and the gopls it
+// launches) inherit it. The bug was that the hook read gui.env from
+// IDE.Config() — the in-memory config snapshot captured when the IDE was
+// constructed — which predates the merge and therefore never contains the new
+// var, so os.Setenv was never called and gopls came up with GOROOT unset.
+//
+// The test builds a real configured IDE from a config without the var, then
+// performs the on-disk merge the package manager would (writing the var into
+// the config file) and drives the real hook with a real merge event. The live
+// environment must reflect the merged var.
+func TestGUIEnvLiveApplyHookAppliesNewlyMergedVar(t *testing.T) {
+	const (
+		envKey = "RUNE_TEST_LIVE_APPLY_GOROOT"
+		envVal = "/from/merged/config"
+	)
+	t.Setenv(envKey, "")
+	require.NoError(t, os.Unsetenv(envKey))
+
+	// IDE starts from a config that has no gui.env at all, mirroring a fresh
+	// install before the go package merges its env block.
+	b := newConfiguredBootstrapForEnvTest(t, "editor:\n  mode: modal\n")
+
+	// The package manager merges gui.env into the user config on disk before
+	// invoking the post-merge hook. Reproduce that on-disk state.
+	merged := "editor:\n  mode: modal\ngui:\n  env:\n    " + envKey + ": " + envVal + "\n"
+	require.NoError(t, os.WriteFile(b.configPath, []byte(merged), 0o644))
+
+	event := mergeEvent(t, "gui:\n  env:\n    "+envKey+": "+envVal+"\n")
+	require.True(t, event.TouchesPath("gui", "env"))
+
+	result, err := b.guiEnvLiveApplyHook(event)
+	require.NoError(t, err)
+	assert.True(t, result.LiveApplied,
+		"merging a gui.env var must be reported as live-applied")
+	assert.Equal(t, envVal, os.Getenv(envKey),
+		"guiEnvLiveApplyHook must apply the freshly-merged gui.env to the live "+
+			"environment so extensions started after the merge (and gopls) inherit it")
+}
+
+// TestGUIEnvLiveApplyHookAppliesVarPresentAtStartup is a control: when the var
+// is already in the config the IDE loaded, the hook applies it. This guards
+// against a fix that simply hard-codes values and pins the contract that the
+// hook reflects the persisted gui.env.
+func TestGUIEnvLiveApplyHookAppliesVarPresentAtStartup(t *testing.T) {
+	const (
+		envKey = "RUNE_TEST_LIVE_APPLY_STARTUP"
+		envVal = "/present/at/startup"
+	)
+	t.Setenv(envKey, "")
+	require.NoError(t, os.Unsetenv(envKey))
+
+	configBody := "editor:\n  mode: modal\ngui:\n  env:\n    " + envKey + ": " + envVal + "\n"
+	b := newConfiguredBootstrapForEnvTest(t, configBody)
+
+	event := mergeEvent(t, "gui:\n  env:\n    "+envKey+": "+envVal+"\n")
+	result, err := b.guiEnvLiveApplyHook(event)
+	require.NoError(t, err)
+	assert.True(t, result.LiveApplied)
+	assert.Equal(t, envVal, os.Getenv(envKey))
+}
 
 // fakeShell writes an executable shell script with the given body and returns
 // its path. The script ignores all the interactive/login flags Rune passes.
@@ -332,4 +405,56 @@ func TestApplyShellPATHAndGUIEnvWithPATHWaits(t *testing.T) {
 	require.NoError(t, applyShellPATHAndGUIEnv(cfg, pathDone))
 
 	assert.Equal(t, "/extra/bin:/resolved/bin", os.Getenv("PATH"))
+}
+
+// newConfiguredBootstrapForEnvTest builds a real, already-bootstrapped
+// bootstrapHandler against the given on-disk config. Writing a config.yaml into
+// dataDir makes isBootstrapped true, so newBootstrapHandler builds the real
+// configured IDE (with the production guiEnvLiveApplyHook wired via
+// WithPackageConfigMergeHook) instead of opening the OAuth bootstrap flow. The
+// apiclient is pointed at a 404 server so construction never touches the
+// network.
+func newConfiguredBootstrapForEnvTest(t *testing.T, configBody string) *bootstrapHandler {
+	t.Helper()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	dataDir := t.TempDir()
+	configPath := filepath.Join(dataDir, configFilename)
+	require.NoError(t, os.WriteFile(configPath, []byte(configBody), 0o644))
+
+	restoreFlags := overrideBootstrapFlags(t, bootstrapFlagOverrides{
+		httpAddress:    srv.URL,
+		dataPath:       dataDir,
+		configPath:     configPath,
+		websiteAddress: "https://rune.test",
+	})
+	t.Cleanup(restoreFlags)
+
+	mu := new(sync.Mutex)
+	publishEvent, stopPump := newBootstrapPublishPump(mu)
+	t.Cleanup(stopPump)
+
+	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
+	b, err := newBootstrapHandler(
+		dataDir, configPath, "" /* workspace */, "" /* zdotDir */, nil, /* filenames */
+		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
+		mu, publishEvent,
+		checkoutURL, signupURL,
+		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, b.realIDE, "config.yaml in dataDir must build the configured IDE directly")
+	t.Cleanup(func() { _ = b.Close() })
+	return b
+}
+
+func mergeEvent(t *testing.T, diffYAML string) idepkg.ConfigMergeEvent {
+	t.Helper()
+	var doc yaml.Node
+	require.NoError(t, yaml.Unmarshal([]byte(diffYAML), &doc))
+	return idepkg.ConfigMergeEvent{Diff: &doc}
 }

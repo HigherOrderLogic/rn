@@ -310,21 +310,17 @@ func (b *bootstrapHandler) config() config.Config {
 	return b.preIDE.Config()
 }
 
-// guiEnvLiveApplyHook live-applies package-installed gui.env to the local
-// process environment after a package config merge. It is invoked by the
-// package manager for both the auto-apply and prompt-Allow paths. When the
-// applied diff does not touch gui.env it reports no live application so the
-// package manager keeps its restart-oriented notification. Otherwise it
-// re-reads the resolved gui.env block from the current config and applies it
-// so the live process environment matches the persisted config; new local
-// child processes inherit the updated environment.
 func (b *bootstrapHandler) guiEnvLiveApplyHook(
 	event idepkg.ConfigMergeEvent,
 ) (idepkg.ConfigMergeResult, error) {
 	if !event.TouchesPath("gui", "env") {
 		return idepkg.ConfigMergeResult{}, nil
 	}
-	guiCfg, ok, err := getGUIConfig(b.config())
+	rootCfg, err := ide.Config(b.configPath)
+	if err != nil {
+		return idepkg.ConfigMergeResult{}, fmt.Errorf("reload config for gui.env: %w", err)
+	}
+	guiCfg, ok, err := getGUIConfig(rootCfg)
 	if err != nil {
 		return idepkg.ConfigMergeResult{}, fmt.Errorf("load gui config: %w", err)
 	}
