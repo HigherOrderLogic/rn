@@ -126,7 +126,7 @@ func TestBootstrapE2ESurfacesOAuthURLInWaitPrompt(t *testing.T) {
 	// the publish-channel pumper a chance to drain the scheduled-tick
 	// callbacks that mount each successor prompt before the next key
 	// arrives.
-	for _, ch := range []rune{'g', 'y', 'l'} {
+	for _, ch := range []rune{'g', 'v', 'l'} {
 		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -354,9 +354,9 @@ func TestBootstrapE2ESignUpReopensLoginPrompt(t *testing.T) {
 	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
 	wrapped.Resize(width, height)
 
-	// Welcome → Vim-mode. 'y' enables vim mode; control then
+	// Welcome → Vim-mode. 'v' enables vim mode; control then
 	// advances to the login choice prompt.
-	for _, ch := range []rune{'g', 'y'} {
+	for _, ch := range []rune{'g', 'v'} {
 		wrapped.Handle(term.Event{Type: term.EventKey, Ch: ch})
 		time.Sleep(50 * time.Millisecond)
 	}

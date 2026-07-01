@@ -500,13 +500,13 @@ const (
 // Vim-mode option labels double as map keys in optionToChoice; they
 // must stay byte-identical between the prompt and the callback.
 const (
-	optVimYes = "   Yes   "
-	optVimNo  = "   No    "
+	optVimYes = "    vim    "
+	optVimNo  = "  default  "
 )
 
 var (
 	bootstrapVimKeys = []term.KeyComb{
-		{Ch: 'y'}, {Ch: 'n'},
+		{Ch: 'd'}, {Ch: 'v'},
 	}
 
 	bootstrapWelcomeKeys = []term.KeyComb{
@@ -563,20 +563,15 @@ func (b *bootstrapHandler) openWelcomePrompt() {
 func (b *bootstrapHandler) openVimPrompt() {
 	msg := "## Choose your key bindings\n" +
 		"Rune ships with two built-in editors, so pick the one that feels like home.\n\n" +
-		"Know vim? Pick **Yes** and you get it **everywhere**, not just in editor " +
-		"buffers: the terminal, input boxes, and the file explorer all share the same " +
-		"modes, motions, operators, and macros. The same muscle memory across the " +
-		"whole IDE.\n\n" +
-		"Used to VS Code, Cursor, or a plain text editor? Pick **No** and Rune uses " +
+		"Know vim? Pick **vim** and you get it **everywhere**, not just in editor " +
+		"buffers: the terminal, input boxes, and the file explorer.\n\n" +
+		"Used to VS Code, Cursor, Sublime or a plain text editor? Pick **default** and Rune uses " +
 		"those familiar, standard key bindings everywhere instead.\n\n" +
-		"Either choice sets the default editor and key bindings for files, the file " +
-		"explorer, and every input across Rune. You can fine-tune it later in your " +
-		"config.\n\n" +
-		"**Enable vim mode?**"
+		"**Which key bindings do you want?**"
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
-		[]string{optVimYes, optVimNo},
+		[]string{optVimNo, optVimYes},
 		bootstrapVimKeys,
 		sdkhandler.FuncPromptHandler(
 			guard.onSelect(func(_ int, option string) {
@@ -589,16 +584,8 @@ func (b *bootstrapHandler) openVimPrompt() {
 }
 
 func (b *bootstrapHandler) openLoginPrompt() error {
-	msg := "## Sign in or sign up\n" +
-		"Much of the industry is betting that we won't be writing code for much longer.\n" +
-		"Unstable Build is betting that the technologists, the systems programmers, the\n" +
-		"hackers who love this craft, the ones who'd rather read the source than the\n" +
-		"docs, the ones who check out the branch and run it locally before they approve\n" +
-		"the PR, and the ones everyone wants on their on-call rotation when prod is on\n" +
-		"fire, will outlive every company betting against them.\n\n" +
-		"**Rune is how we stay irreplaceable**.\n\n" +
-		"Independent and user-supported. Your subscription keeps it that way.\n\n" +
-		"$10/month or $100/year. Cancel anytime."
+	msg := "## Subscription\n" +
+		"Sign in to continue, or sign up if you don't have an account yet."
 	guard := b.promptGuard()
 	b.preIDE.Prompt(
 		msg,
