@@ -933,6 +933,27 @@ func TestBrowserFloating(t *testing.T) {
 		})
 }
 
+// TestComponentCloseFloatingReentrantWindowClose reproduces a shutdown crash
+// where a floating handler's Close callback closes its own captured window
+// (as the cheatsheet does). Component.Close must not create a duplicate
+// browserWindow that defeats the double-close guard and panics with
+// "window not found".
+func TestComponentCloseFloatingReentrantWindowClose(t *testing.T) {
+	b := NewComponent(DefaultConfig())
+
+	var win Window
+	floating := FuncFloatingHandler(newTestHandler(), func() error {
+		return win.Close()
+	})
+	win = b.Floating(floating, browserapi.FloatingConfig{
+		Alignment: component.AlignmentCentered,
+	})
+
+	assert.NotPanics(t, func() {
+		_ = b.Close()
+	})
+}
+
 func TestComponentCloseOtherWindows(t *testing.T) {
 	t.Run("fails if there's only one window", func(t *testing.T) {
 		b := NewComponent(DefaultConfig())
@@ -974,6 +995,24 @@ func TestComponentCloseOtherWindows(t *testing.T) {
 		assert.Equal(t, 1, b.Tiles())
 		assert.Equal(t, 0, b.FloatingWindows())
 	})
+	t.Run("does not panic closing floating whose Close callback closes its own window",
+		func(t *testing.T) {
+			b := NewComponent(DefaultConfig())
+			focus := b.Focus()
+
+			var floatWin Window
+			floating := FuncFloatingHandler(newTestHandler(), func() error {
+				return floatWin.Close()
+			})
+			floatWin = b.Floating(floating, browserapi.FloatingConfig{
+				Alignment: component.AlignmentCentered,
+			})
+
+			assert.NotPanics(t, func() {
+				_ = b.CloseOtherWindows(focus)
+			})
+			assert.Equal(t, 0, b.FloatingWindows())
+		})
 }
 
 func TestRemoveInactiveTabs(t *testing.T) {

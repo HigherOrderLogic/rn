@@ -1048,8 +1048,16 @@ func (c *Component) CloseOtherWindows(win Window) (retErr error) {
 		// is released and c.windows is updated. Closing the raw handler
 		// window would leave the tab marked bound to a removed window; a
 		// later click on that stuck tab focuses a detached tile and
-		// panics in TilePosition.
-		if err := c.newWindow(w).Close(); err != nil {
+		// panics in TilePosition. Reuse the tracked browserWindow so the
+		// double-close guard in browserWindow.Close stays effective: a fresh
+		// browserWindow would overwrite c.windows and let a handler whose
+		// Close callback closes its own captured window re-enter closeWindow
+		// for an already-deleted window, panicking.
+		bw, found := c.findWindow(w.ID())
+		if !found {
+			bw = c.newWindow(w)
+		}
+		if err := bw.Close(); err != nil {
 			retErr = multierror.Append(retErr, err)
 			return
 		}
@@ -1079,8 +1087,16 @@ func (c *Component) Close() (ret error) {
 	c.wm.UnsubscribeAll()
 
 	c.wm.Iterate(func(w thandler.Window) {
-		// call Close on all browser handlers
-		_ = c.newWindow(w).Close()
+		// Reuse the tracked browserWindow so the double-close guard in
+		// browserWindow.Close (which nils parent) stays effective. Creating a
+		// fresh browserWindow here would overwrite c.windows and let a handler
+		// whose Close callback closes its own captured window re-enter
+		// closeWindow for an already-deleted window, panicking.
+		bw, ok := c.findWindow(w.ID())
+		if !ok {
+			bw = c.newWindow(w)
+		}
+		_ = bw.Close()
 	})
 	return ret
 }
