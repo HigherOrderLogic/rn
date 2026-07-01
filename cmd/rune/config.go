@@ -61,7 +61,9 @@ func getGUIFontFamily(browser browser.Browser, cfg config.Config) (ret string) {
 }
 
 func getGUIFontSize(browser browser.Browser, cfg config.Config) (ret float64) {
-	ret = 13
+	// 0 selects the DPI-aware automatic default in the font manager,
+	// which picks a larger point size on low-DPI displays.
+	ret = 0
 	size, err := cfg.GetFloat("font_size")
 	if err != nil {
 		if err != config.ErrNotFound {

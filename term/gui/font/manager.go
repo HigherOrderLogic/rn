@@ -194,7 +194,7 @@ func (m *Manager) SetSize(size float64) error {
 // (scale <= 1) down to 13pt on hi-DPI displays (scale >= 2).
 func defaultSizeForScale(scale float64) float64 {
 	const (
-		lowScale, lowSize = 1.0, 17.0
+		lowScale, lowSize = 1.0, 15.0
 		hiScale, hiSize   = 2.0, 13.0
 	)
 	if scale <= lowScale {

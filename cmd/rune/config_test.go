@@ -89,3 +89,24 @@ func TestGetGUIKeyMapping(t *testing.T) {
 		assert.Equal(t, want, got)
 	})
 }
+
+func TestGetGUIFontSize(t *testing.T) {
+	t.Run("returns 0 when absent to select DPI-aware default", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		b := browsertest.NewMockBrowser(ctrl)
+
+		got := getGUIFontSize(b, config.MapConfig(map[string]any{}))
+		assert.Equal(t, float64(0), got)
+	})
+
+	t.Run("returns configured size when set", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		b := browsertest.NewMockBrowser(ctrl)
+
+		cfg := config.MapConfig(map[string]any{"font_size": 15.0})
+		got := getGUIFontSize(b, cfg)
+		assert.Equal(t, float64(15), got)
+	})
+}
