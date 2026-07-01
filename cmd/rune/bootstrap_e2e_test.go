@@ -50,6 +50,7 @@ import (
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/term/gui"
 	"unstable.build/go-tui/text"
 )
 
@@ -173,6 +174,70 @@ type bootstrapFlagOverrides struct {
 	dataPath       string
 	configPath     string
 	websiteAddress string
+}
+
+// TestBootstrapE2EFontSizeKeybindingDuringBootstrap pins the fix for
+// the "unknown command or command alias \"guifontsize\"" bug. rune.star
+// is loaded by the pre-config IDE, so its GUI keybinding <m-=> ->
+// "guifontsize increase" is live during the first-run bootstrap flow.
+// The guifontsize command, however, is registered only by
+// subscribeGUICommands, which the configured IDE gets via
+// setupConfiguredIDE — the pre-config IDE never did, so dispatching the
+// keybinding surfaced "unknown command or command alias". runGUI now
+// calls setupPreIDE on the first-run branch, which this test exercises.
+//
+// The test drives the real path end to end: build the pre-config
+// bootstrap handler, attach a real GUI, run setupPreIDE, then feed the
+// actual <m-=> key event through the handler and assert the resulting
+// frame does not carry the "unknown command" error.
+func TestBootstrapE2EFontSizeKeybindingDuringBootstrap(t *testing.T) {
+	dataDir := t.TempDir()
+	configPath := dataDir + "/config.yaml"
+
+	mu := new(sync.Mutex)
+	publishEvent, stopPump := newBootstrapPublishPump(mu)
+
+	checkoutURL, signupURL := mustResolveBootstrapURLs("https://rune.test")
+	root, err := newBootstrapHandler(
+		dataDir, configPath, "" /* workspace */, "" /* zdotDir */, nil, /* filenames */
+		nil /* launchCmd */, ide.FuncExtensionsRunner(testE2EExtensionsRunner),
+		mu, publishEvent,
+		checkoutURL, signupURL,
+		func(*url.URL) error { return nil }, clipboard.NewInMemory(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = root.Close() })
+	t.Cleanup(stopPump)
+	require.NotNil(t, root.preIDE, "fresh data dir must build the pre-config IDE")
+	require.Nil(t, root.realIDE, "fresh data dir must not build the configured IDE")
+
+	// Attach a real GUI: the guifontsize handler calls
+	// g.IncreaseFontSize() at dispatch time, so a nil GUI would panic
+	// rather than exercise the command path under test.
+	g, err := gui.New(root)
+	require.NoError(t, err)
+	root.attachGUI(g, false)
+	require.NoError(t, root.setupPreIDE(),
+		"setupPreIDE must register the pre-config IDE GUI commands")
+
+	wrapped := &bootstrapE2ELocked{Handler: root, mu: mu}
+
+	// A successful guifontsize dispatch calls g.IncreaseFontSize, which
+	// rescales the cell grid and resizes the pre-config IDE to a new
+	// column/row count. If the command were unregistered (the bug), the
+	// keybinding would surface "unknown command" and leave the pre-config
+	// IDE size untouched. So the resize is a race-free, drawing-free
+	// signal that the command actually ran.
+	beforeW, beforeH := root.preIDE.Size()
+
+	// <m-=> is bound to "guifontsize increase" in rune.star.
+	wrapped.Handle(keyEv('=', term.ModMeta))
+
+	afterW, afterH := root.preIDE.Size()
+	require.NotEqual(t, [2]int{beforeW, beforeH}, [2]int{afterW, afterH},
+		"pressing <m-=> during bootstrap must dispatch the registered "+
+			"guifontsize command and rescale the pre-config IDE, not "+
+			"surface \"unknown command\"")
 }
 
 func overrideBootstrapFlags(t *testing.T, o bootstrapFlagOverrides) func() {

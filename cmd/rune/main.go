@@ -765,6 +765,12 @@ func runGUI(
 			log.Errorf("setup ide: %v", err)
 			return 1
 		}
+	} else {
+		if err := root.setupPreIDE(); err != nil {
+			fmt.Printf("setup pre-config ide: %s", err)
+			log.Errorf("setup pre-config ide: %v", err)
+			return 1
+		}
 	}
 	err = g.Run("Rune")
 	if err != nil && !errors.Is(err, gui.ErrHandlerExited) {

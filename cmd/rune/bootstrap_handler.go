@@ -259,6 +259,18 @@ func (b *bootstrapHandler) attachGUI(g *gui.GUI, transparentWindow bool) {
 	b.transparentWindow = transparentWindow
 }
 
+// setupPreIDE registers the GUI command family on the pre-config IDE
+// that is active during first-run bootstrap. rune.star's GUI
+// keybindings (e.g. <m-=> -> guifontsize) are live during bootstrap, so
+// the commands they invoke must be subscribed here; otherwise they fail
+// with "unknown command". The configured IDE gets them separately via
+// setupConfiguredIDE after the swap. Must run after attachGUI so b.g is
+// set.
+func (b *bootstrapHandler) setupPreIDE() error {
+	return subscribeGUICommands(b.g, b.preIDE,
+		b.transparentWindow, b.launchCmd)
+}
+
 // wallpaperTheme reports the live GUI theme name for the themed wallpaper.
 // It returns "" before the GUI is attached, which selects the default logo.
 func (b *bootstrapHandler) wallpaperTheme() string {
