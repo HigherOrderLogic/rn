@@ -70,12 +70,11 @@ or to keep notes between sessions.
 
 ## Switching workspaces
 
-Rune has **nine workspace slots**. Press `<meta-1>` through
-`<meta-9>` to jump between them. Every empty slot shows this same home
-workspace; a slot only gets a project attached when you open one
-inside it. So slot 1 may be the project you're working on while
-slots 2-9 are still the home workspace, ready for whatever you
-need.
+Rune has **nine workspace slots**. Press `<meta-1>` through `<meta-9>` to jump between
+them (On macOS `<meta>` is Command; on Linux it is the Super or Windows key).
+Every empty slot shows this same home workspace; a slot only gets a project attached when
+you open one inside it. So slot 1 may be the project you're working on while slots 2-9 are
+still the home workspace, ready for whatever you need.
 
 ## Commands and key bindings
 
@@ -87,8 +86,8 @@ are bound to those commands through your user configuration under
 ## Opening a workspace
 
 1. Press `""" + ck + """` to open the command prompt.
-2. Type `workspaceopen` and use the auto-completer (Tab / arrow keys)
-   to pick a workspace.
+2. Type `workspaceopen` and use the auto-completer
+   to **pick a workspace** from the list, or type the path yourself.
 3. Press Enter to open it.
 
 Press `<enter>` or `<space>` to continue.
@@ -117,8 +116,7 @@ they follow one small, standardized system.
 
 - **`<meta>` is the window and workspace layer.** Anything that
   focuses, moves, or splits a window, or switches a workspace, is a
-  `<meta>` chord. (On macOS `<meta>` is Command; on Linux and Windows
-  it is the Super or Windows key.)
+  `<meta>` chord.
 - **`<alt>` is the tab layer.** Switching or reordering the tabs
   inside a window lives on `<alt>`.
 - **`<shift>` means "move" instead of "go to".** `<meta>` plus a
