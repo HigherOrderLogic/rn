@@ -88,6 +88,11 @@ APP_ICON := $(APP_EXTRAS_DIR)/rune.icns
 DMG_NAME := Rune.dmg
 DMG_NAME_AMD64 := Rune-amd64.dmg
 DMG_DIR := $(RUNE_RELEASE_DIR)
+# DMG_STYLED toggles the styled create-dmg pipeline (background art, fixed
+# window, branded volume icon, drag-to-Applications layout). Set to 0 to fall
+# back to the plain `hdiutil create` path.
+DMG_STYLED ?= 1
+BUILD_DMG := $(abspath $(ROOT_DIR)/extra/osx/build-dmg.sh)
 SED_INPLACE = ''
 
 ifeq ($(OS),Darwin)
@@ -216,12 +221,16 @@ app-arm64: llamacpp-libs-arm64
 dmg: app-arm64
 	@echo "Packing disk image..."
 	@mkdir -p $(DMG_DIR)
+ifeq ($(DMG_STYLED),1)
+	@$(BUILD_DMG) $(APP_DIR) $(DMG_DIR)/$(DMG_NAME) "Rune"
+else
 	@ln -sf /Applications $(DMG_DIR)/Applications
 	@hdiutil create $(DMG_DIR)/$(DMG_NAME) \
 		-volname "Rune" \
 		-fs HFS+ \
 		-srcfolder $(APP_DIR) \
 		-ov -format UDZO
+endif
 	@echo "Signing disk image..."
 	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" $(DMG_DIR)/$(DMG_NAME)
 	@echo "Packed $(DMG_DIR)/$(DMG_NAME)"
@@ -229,12 +238,16 @@ dmg: app-arm64
 dmg-amd64: app-amd64
 	@echo "Packing amd64 disk image..."
 	@mkdir -p $(DMG_DIR)
+ifeq ($(DMG_STYLED),1)
+	@$(BUILD_DMG) $(APP_DIR) $(DMG_DIR)/$(DMG_NAME_AMD64) "Rune"
+else
 	@ln -sf /Applications $(DMG_DIR)/Applications
 	@hdiutil create $(DMG_DIR)/$(DMG_NAME_AMD64) \
 		-volname "Rune" \
 		-fs HFS+ \
 		-srcfolder $(APP_DIR) \
 		-ov -format UDZO
+endif
 	@echo "Signing amd64 disk image..."
 	@codesign --force --options runtime --sign "$(CODESIGN_IDENTITY)" $(DMG_DIR)/$(DMG_NAME_AMD64)
 	@echo "Packed $(DMG_DIR)/$(DMG_NAME_AMD64)"

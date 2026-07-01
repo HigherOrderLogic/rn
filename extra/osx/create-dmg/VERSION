@@ -1,0 +1,18 @@
+Vendored from https://github.com/create-dmg/create-dmg
+
+Release: v1.2.2
+Commit:  118f131aa57c1278aca806eb37cf5021e9064198
+
+Only the files required to build a styled DMG are vendored:
+
+  create-dmg                        the build script
+  support/template.applescript      Finder-layout AppleScript template
+  support/eula-resources-template.xml  EULA resource template (unused, kept
+                                    so create-dmg's --eula path stays intact)
+  .this-is-the-create-dmg-repo      sentinel so create-dmg resolves support/
+                                    relative to the script instead of a
+                                    system prefix
+  LICENSE                           upstream MIT license
+
+To update: download the matching release tarball, replace the files above,
+and bump the Release/Commit fields here.
