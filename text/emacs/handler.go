@@ -1339,6 +1339,30 @@ func (h *emacsHandler) Cursor() (
 // Selection satisfies tui.Handler.
 func (h *emacsHandler) Selection() (string, bool) {
 	text := h.cursor.Selection()
+	if text != "" {
+		return text, true
+	}
+	return h.regionText()
+}
+
+// regionText returns the text between an explicit mark and point. GNU keeps
+// that region live without an active selection, so hosts that read Selection
+// (e.g. the clipboardcopy command) would otherwise see nothing to copy after
+// C-SPC even though C-w and M-w operate on it.
+func (h *emacsHandler) regionText() (string, bool) {
+	if _, active := h.cursor.SelectionMode(); active {
+		return "", false
+	}
+	loc, ok := h.markLocation()
+	if !ok {
+		return "", false
+	}
+	from, to := term.CoordinatesSort(loc.From, h.cursor.CursorAtScroll())
+	cells, _, ok := h.buf.Select(from, to)
+	if !ok {
+		return "", false
+	}
+	text := term.CellsToString(cells)
 	return text, text != ""
 }
 

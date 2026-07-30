@@ -7593,6 +7593,80 @@ func TestCopyLocation(t *testing.T) {
 	}
 }
 
+// TestClipboardCommandsPerEditor pins :clipboardcopy and :clipboardpaste
+// against every built-in editor. Each editor must expose its active
+// selection through tui.Handler.Selection and accept bracketed paste
+// events, otherwise the commands silently report "nothing to copy".
+func TestClipboardCommandsPerEditor(t *testing.T) {
+	key := func(k term.Key, mod term.Modifier) term.Event {
+		return term.Event{Type: term.EventKey, Key: k, Mod: mod}
+	}
+	ch := func(r rune) term.Event {
+		return term.Event{Type: term.EventKey, Ch: r}
+	}
+	shiftRight := key(term.KeyArrowRight, term.ModShift)
+	right := key(term.KeyArrowRight, 0)
+
+	ts := []struct {
+		name   string
+		editor text.Editor
+		// selects "ab" out of "abcde"
+		selection []term.Event
+		// vi ignores bracketed paste outside insert mode.
+		pastes bool
+	}{
+		{"vi", vi.Editor(), []term.Event{ch('v'), ch('l')}, false},
+		{"emacs shift selection", emacs.Editor(),
+			[]term.Event{shiftRight, shiftRight}, true},
+		{"emacs mark region", emacs.Editor(),
+			[]term.Event{key(term.KeySpace, term.ModCtrl), right, right}, true},
+		{"standard", standard.Editor(),
+			[]term.Event{shiftRight, shiftRight}, true},
+	}
+
+	for _, tc := range ts {
+		t.Run(tc.name, func(t *testing.T) {
+			clip := clipboard.NewInMemory()
+			tempDir := t.TempDir()
+			uri, err := workspaceapi.ParseURI(filepath.Join("file://", tempDir))
+			require.NoError(t, err)
+			fileScheme, err := workspace.NewFileScheme(bgctx, config.NopConfig(), uri)
+			require.NoError(t, err)
+			defer func() { require.NoError(t, fileScheme.Close()) }()
+			ws := workspace.NewSchemeWorkspace(uri, fileScheme, inlineSchedule)
+			e := newExForTestingWithWorkspace(t, ws, tc.editor, vte.DefaultConfig(),
+				nopPublishEvent, clip, text.WithCommandKey(testCommandKey))
+			defer func() { require.NoError(t, e.Close()) }()
+
+			require.NoError(t, os.WriteFile(
+				filepath.Join(tempDir, "hello.go"), []byte("abcde\n"), 0o644))
+			fileURI, err := e.workspace.URI("hello.go")
+			require.NoError(t, err)
+			tab, err := e.editFileURI(fileURI, e.invokeWindow(), false)
+			require.NoError(t, err)
+			e.Resize(40, 20)
+
+			for _, ev := range tc.selection {
+				e.Handle(ev)
+			}
+			require.NoError(t, e.copyToClipboard(bgctx))
+			data, err := clip.Paste(clipboard.DefaultRegisterID)
+			require.NoError(t, err)
+			assert.Equal(t, "ab", data.Text)
+
+			if !tc.pastes {
+				return
+			}
+			// Clear the selection first: pasting over one replaces it.
+			e.Handle(key(term.KeyEnd, 0))
+			require.NoError(t, e.pasteFromClipboard(bgctx))
+			h, ok := tab.Handler().(text.Handler)
+			require.True(t, ok)
+			assert.Contains(t, term.CellsToString(h.CellView().RawCells()), "abcdeab")
+		})
+	}
+}
+
 func newExForTestingFileWorkspace(
 	t *testing.T, clip clipboard.Register,
 ) (testEx, schemeapi.Scheme, string) {

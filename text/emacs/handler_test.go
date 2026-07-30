@@ -4089,6 +4089,60 @@ func TestEmacsPrefixAbort(t *testing.T) {
 func TestEmacsRegionCommands(t *testing.T) {
 	setMark := key2(term.KeySpace, term.ModCtrl)
 
+	t.Run("Selection reports the mark-to-point region", func(t *testing.T) {
+		h, buf := newEmacsHandler(t, "alpha beta")
+		require.True(t, runEvent(h, setMark))
+		require.True(t, runEvent(h, alt('f')))
+		sel, ok := h.Selection()
+		require.True(t, ok)
+		assert.Equal(t, "alpha", sel)
+		// Reading the region must not edit the buffer, move point or
+		// leave a selection behind.
+		assert.Equal(t, "alpha beta", buf.String())
+		assert.Equal(t, term.Coordinates{X: 5}, h.CursorAtScroll())
+		_, _, active := h.(*emacsHandler).cursor.SelectionBounds()
+		assert.False(t, active)
+	})
+
+	t.Run("Selection reports a backward region", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "alpha beta")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 5}))
+		require.True(t, runEvent(h, setMark))
+		require.True(t, runEvent(h, ctrl('a')))
+		sel, ok := h.Selection()
+		require.True(t, ok)
+		assert.Equal(t, "alpha", sel)
+	})
+
+	t.Run("Selection reports a multiline region", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "ab\ncd")
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 1}))
+		require.True(t, runEvent(h, setMark))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{Y: 1, X: 1}))
+		sel, ok := h.Selection()
+		require.True(t, ok)
+		assert.Equal(t, "b\nc", sel)
+	})
+
+	t.Run("Selection is empty with point at the mark", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "abc")
+		require.True(t, runEvent(h, setMark))
+		_, ok := h.Selection()
+		assert.False(t, ok)
+	})
+
+	t.Run("Selection is empty after the mark is popped", func(t *testing.T) {
+		h, _ := newEmacsHandler(t, "abcdef")
+		require.True(t, runEvent(h, setMark))
+		require.True(t, h.SetCursorAtScroll(term.Coordinates{X: 2}))
+		require.True(t, runEvent(h, alt('w')))
+		// C-g reports unhandled when there is no selection to clear, but
+		// it still discards the pending mark.
+		require.NotPanics(t, func() { h.Handle(ctrl('g')) })
+		_, ok := h.Selection()
+		assert.False(t, ok)
+	})
+
 	t.Run("C-w without a mark is a no-op", func(t *testing.T) {
 		h, buf, clip := newEmacsHandlerWithClipboard(t, "abc")
 		require.False(t, runEvent(h, ctrl('w')))
