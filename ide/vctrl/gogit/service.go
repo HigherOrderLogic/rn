@@ -102,7 +102,13 @@ func (s svc) Diff(ctx context.Context, file workspaceapi.URI) (
 	s.log(log.TraceLevel, "diffing %s", file)
 	defer func() {
 		if err != nil {
-			s.log(log.ErrorLevel, "diff file %s in %s: %v",
+			// files outside any git repository are routinely
+			// diffed (e.g. config files); not an error
+			level := log.ErrorLevel
+			if errors.Is(err, errNoRepoStorage) {
+				level = log.DebugLevel
+			}
+			s.log(level, "diff file %s in %s: %v",
 				file, time.Since(start), err)
 			return
 		}
@@ -290,10 +296,13 @@ func (s svc) log(level log.Level, msg string, args ...any) {
 	log.WithField(logging.KeyClass, "gogit.svc").Logf(level, msg, args...)
 }
 
+var errNoRepoStorage = errors.New(
+	"could not find repository storage for the given file")
+
 func getRoot(scheme schemeapi.Scheme, path string) (string, error) {
 	for {
 		if path == "/" {
-			return "", errors.New("could not find repository storage for the given file")
+			return "", errNoRepoStorage
 		}
 		// this could cause an ENOTDIR; handled below
 		info, err := scheme.Stat(filepath.Join(path, ".git"))

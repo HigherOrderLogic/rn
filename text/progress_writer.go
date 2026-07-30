@@ -121,7 +121,9 @@ func (w *notifyProgressWriter) Progress(progress, total int64, units string) {
 			id, fmt.Sprintf("%s: %s", w.message, sample),
 			progress, total,
 		); err != nil {
-			log.WithError(err).Warn("text: update notification progress")
+			// the notification routinely expires from display
+			// while progress updates are still arriving
+			log.WithError(err).Debug("text: update notification progress")
 		}
 	})
 	if w.interrupter != nil {

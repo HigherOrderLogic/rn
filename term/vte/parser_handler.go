@@ -1017,12 +1017,12 @@ func (t *parserHandler) SetScrollingRegion(top, bottom int, end bool) {
 
 // DECKPAM - Set the keypad to applications mode (ESCape instead of digits).
 func (t *parserHandler) SetKeypadApplicationMode() {
-	t.log(log.WarnLevel, "unsupported call to SetKeypadApplicationMode")
+	t.log(log.DebugLevel, "unsupported call to SetKeypadApplicationMode")
 }
 
 // DECKPNM - Set the keypad to numeric mode (digits instead of ESCape seq).
 func (t *parserHandler) UnsetKeypadApplicationMode() {
-	t.log(log.WarnLevel, "unsupported call to UnsetKeypadApplicationMode")
+	t.log(log.DebugLevel, "unsupported call to UnsetKeypadApplicationMode")
 }
 
 // Set one of the graphic character sets, G0 to G3, as the active charset.
@@ -1161,7 +1161,7 @@ func (t *parserHandler) PopTitle() {
 
 // Report text area size in pixels.
 func (t *parserHandler) TextAreaSizePixels() {
-	t.log(log.WarnLevel, "unsupported call to TextAreaSizePixels")
+	t.log(log.DebugLevel, "unsupported call to TextAreaSizePixels")
 }
 
 // Report text area size in characters.
@@ -1178,24 +1178,24 @@ func (t *parserHandler) TextAreaSizeChars() {
 
 // Set hyperlink.
 func (t *parserHandler) SetHyperlink(link *vteparser.Hyperlink) {
-	t.log(log.WarnLevel, "unsupported call to SetHyperlink")
+	t.log(log.DebugLevel, "unsupported call to SetHyperlink")
 }
 
 // ReportKeyboardMode reports current keyboard mode.
 func (t *parserHandler) ReportKeyboardMode() {
-	t.log(log.WarnLevel, "unsupported call to ReportKeyboardMode")
+	t.log(log.DebugLevel, "unsupported call to ReportKeyboardMode")
 }
 
 // PushKeyboardMode pushes the keyboard mode into the keyboard mode stack.
 func (t *parserHandler) PushKeyboardMode(mode vteparser.KeyboardMode) {
-	t.log(log.WarnLevel, "unsupported call to PushKeyboardMode: "+
+	t.log(log.DebugLevel, "unsupported call to PushKeyboardMode: "+
 		"kitty keyboard handling not supported yet")
 }
 
 // PopKeyboardModes pops the given amount of keyboard modes
 // from the keyboard mode stack.
 func (t *parserHandler) PopKeyboardModes(count int) {
-	t.log(log.WarnLevel, "unsupported call to PopKeyboardModes: "+
+	t.log(log.DebugLevel, "unsupported call to PopKeyboardModes: "+
 		"kitty keyboard handling not supported yet")
 }
 
@@ -1203,18 +1203,18 @@ func (t *parserHandler) PopKeyboardModes(count int) {
 func (t *parserHandler) SetKeyboardMode(
 	mode vteparser.KeyboardMode, behavior vteparser.KeyboardModesApplyBehavior,
 ) {
-	t.log(log.WarnLevel, "unsupported call to SetKeyboardMode: "+
+	t.log(log.DebugLevel, "unsupported call to SetKeyboardMode: "+
 		"kitty keyboard handling not supported yet")
 }
 
 // SetModifyOtherKeys sets XTerm's [`ModifyOtherKeys`] option.
 func (t *parserHandler) SetModifyOtherKeys(mode vteparser.ModifyOtherKeysMode) {
-	t.log(log.WarnLevel, "unsupported call to SetModifyOtherKeys")
+	t.log(log.DebugLevel, "unsupported call to SetModifyOtherKeys")
 }
 
 // ReportModifyOtherKeys report XTerm's [`ModifyOtherKeys`] state.
 func (t *parserHandler) ReportModifyOtherKeys() {
-	t.log(log.WarnLevel, "unsupported call to ReportModifyOtherKeys")
+	t.log(log.DebugLevel, "unsupported call to ReportModifyOtherKeys")
 }
 
 func (t *parserHandler) log(level log.Level, line string, params ...any) {
