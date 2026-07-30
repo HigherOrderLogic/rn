@@ -485,10 +485,7 @@ func TestSignedPackageTrustIntegration(t *testing.T) {
 	}
 	configPath := filepath.Join(t.TempDir(), "rune.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte(
-		"editor:\n  mode: modal\n"+
-			"authorizer:\n"+
-			"  auto_authorize_extensions: false\n"+
-			"  auto_authorize_verified: true\n"), 0o644))
+		"editor:\n  mode: modal\n"), 0o644))
 
 	mu := new(sync.Mutex)
 	schedule, startSchedule := newDeferredScheduler(mu)
@@ -573,11 +570,21 @@ func TestSignedPackageTrustIntegration(t *testing.T) {
 	require.True(t, ok)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	_, err = restart.HandleCommand(ctx, repl.Command{
-		Name: "extensions",
-		Args: []string{"restart", extID},
-	}, repl.NopProgressWriter())
-	require.NoError(t, err)
+	// The restart blocks on the startup authorization prompt for the now
+	// tampered binary, so it must run in the background; the test asserts
+	// on the prompt window instead of answering it.
+	restartDone := make(chan error, 1)
+	go func() {
+		_, err := restart.HandleCommand(ctx, repl.Command{
+			Name: "extensions",
+			Args: []string{"restart", extID},
+		}, repl.NopProgressWriter())
+		restartDone <- err
+	}()
+	t.Cleanup(func() {
+		cancel()
+		<-restartDone
+	})
 
 	require.Eventually(t, func() bool {
 		return countFloatingWindows(i, mu) > 0

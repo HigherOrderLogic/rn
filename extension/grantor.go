@@ -27,9 +27,12 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
 )
 
-// Grantor encapsulates the ability grant or deny an extension access to resources.
+// Grantor encapsulates the ability grant or deny an extension access to
+// resources. verifiedPublisher carries the trusted signing-key fingerprint
+// of the extension's installed package, or "" when the extension binary is
+// not attested by a signed package.
 type Grantor interface {
-	Grant(metadata extensionapi.Metadata) (bool, error)
+	Grant(metadata extensionapi.Metadata, verifiedPublisher string) (bool, error)
 }
 
 // GrantAll returns Grantor that Grants all permission to all extensions.
@@ -40,6 +43,6 @@ func GrantAll() Grantor {
 type grantAll struct {
 }
 
-func (m grantAll) Grant(meta extensionapi.Metadata) (bool, error) {
+func (m grantAll) Grant(extensionapi.Metadata, string) (bool, error) {
 	return true, nil
 }

@@ -183,7 +183,7 @@ func TestAuthorizerRegularExtensionPromptsForClaimedPermission(t *testing.T) {
 	assert.Contains(t, opener.messages[0], "Test Extension")
 	assert.Contains(t, opener.messages[0], "dev-id")
 	assert.Contains(t, opener.messages[0],
-		permissionActionText(extensionapi.PermissionBrowserWindowManager))
+		PermissionActionText(extensionapi.PermissionBrowserWindowManager))
 
 	// Creating the prompt emits a single warning notification with the
 	// relevant scope so the workspace tab can be highlighted for attention.
@@ -556,7 +556,7 @@ func TestAuthorizerPluginPromptsAndIgnoresClaimsPermissions(t *testing.T) {
 	assert.Contains(t, opener.messages[0], "/bin/test")
 	assert.Contains(t, opener.messages[0], "[--flag]")
 	assert.Contains(t, opener.messages[0],
-		permissionActionText(extensionapi.PermissionBrowserWindowManager))
+		PermissionActionText(extensionapi.PermissionBrowserWindowManager))
 	assert.Equal(t, []string{"--flag"}, ext.Args)
 
 	// Creating the prompt emits a single warning notification.
@@ -1557,7 +1557,7 @@ func TestAuthorizerPluginSignalStillPromptsForExecute(t *testing.T) {
 	// Signal maps to PermissionExecute; the prompt renders the matching
 	// action text.
 	assert.Contains(t, opener.messages[0],
-		permissionActionText(extensionapi.PermissionExecute))
+		PermissionActionText(extensionapi.PermissionExecute))
 }
 
 func TestAuthorizerAuthorizeStartCommandPromptsWithCommandDetails(t *testing.T) {

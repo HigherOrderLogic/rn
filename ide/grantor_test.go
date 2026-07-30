@@ -25,8 +25,11 @@ package ide
 
 import (
 	"context"
+	"encoding/hex"
+	"strings"
 	"testing"
 
+	"github.com/ProtonMail/go-crypto/openpgp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -37,6 +40,7 @@ import (
 	"unstable.build/go-tui/browser"
 	"unstable.build/go-tui/browser/browsertest"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/ide/pkgtrust"
 )
 
 type fakePromptOpener struct {
@@ -73,14 +77,20 @@ func (f *fakePromptOpener) Prompt(
 func TestPermissionGrantor(t *testing.T) {
 	t.Parallel()
 
+	entity, err := openpgp.NewEntity("Trusted Publisher", "", "trusted@example.com", nil)
+	require.NoError(t, err)
+	trustedFingerprint := strings.ToUpper(hex.EncodeToString(entity.PrimaryKey.Fingerprint))
+	trust := pkgtrust.NewStoreWithKeyring(openpgp.EntityList{entity})
+
 	cases := []struct {
-		name           string
-		promptOption   string
-		promptClose    bool
-		storedDecision string
-		wantGrant      bool
-		wantPrompt     bool
-		wantStored     string
+		name              string
+		promptOption      string
+		promptClose       bool
+		storedDecision    string
+		verifiedPublisher string
+		wantGrant         bool
+		wantPrompt        bool
+		wantStored        string
 	}{
 		{
 			name:         "allow once grants without persisting",
@@ -112,6 +122,19 @@ func TestPermissionGrantor(t *testing.T) {
 			promptClose:  true,
 			wantPrompt:   true,
 		},
+		{
+			name:              "trusted publisher bypasses prompt",
+			promptOption:      permissionPromptDenyOnce,
+			verifiedPublisher: trustedFingerprint,
+			wantGrant:         true,
+		},
+		{
+			name:              "untrusted fingerprint prompts",
+			promptOption:      permissionPromptAllowOnce,
+			verifiedPublisher: strings.Repeat("AB", 20),
+			wantGrant:         true,
+			wantPrompt:        true,
+		},
 	}
 
 	for _, tc := range cases {
@@ -119,6 +142,7 @@ func TestPermissionGrantor(t *testing.T) {
 			t.Parallel()
 
 			grantor, prompt, storage, meta := newTestPermissionGrantor(tc.promptOption)
+			grantor.trust = trust
 			prompt.close = tc.promptClose
 
 			if tc.storedDecision != "" {
@@ -127,7 +151,7 @@ func TestPermissionGrantor(t *testing.T) {
 					permissionDecision{Decision: tc.storedDecision}))
 			}
 
-			ok, err := grantor.Grant(meta)
+			ok, err := grantor.Grant(meta, tc.verifiedPublisher)
 			require.NoError(t, err)
 
 			assert.Equal(t, tc.wantGrant, ok)
@@ -136,8 +160,9 @@ func TestPermissionGrantor(t *testing.T) {
 				assert.NotContains(t, prompt.options, "   Never   ")
 				assert.Contains(t, prompt.message,
 					"Allow extension **Test Extension** (v1.2.3) by **dev-id** to run?")
-				assert.NotContains(t, prompt.message, "Access the editor")
-				assert.NotContains(t, prompt.message, "Persistent storage")
+				assert.Contains(t, prompt.message, "It requests permission to:")
+				assert.Contains(t, prompt.message, "- access editor buffers and file events")
+				assert.Contains(t, prompt.message, "- use persistent storage")
 			} else {
 				assert.Zero(t, prompt.calls)
 			}

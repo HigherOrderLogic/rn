@@ -141,7 +141,7 @@ func displayScopeLabels(req PermissionRequest) []string {
 }
 
 func pluginPermissionPromptMessage(req PermissionRequest) string {
-	action := fmt.Sprintf("**%s**", permissionActionText(req.Permission))
+	action := fmt.Sprintf("**%s**", PermissionActionText(req.Permission))
 	commandScopeNote := commandScopeNote(req)
 	if req.CommandPath != "" && req.ExtensionID != "" && req.ExtensionName != "" {
 		command := commandPromptFragment(req)

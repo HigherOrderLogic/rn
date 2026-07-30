@@ -282,7 +282,7 @@ func (g *recordingGrantor) expect(id string, perms []string) {
 // Grant satisfies extension.Grantor. The protocol layer already
 // validates the extension id and required fields; Grant additionally
 // enforces the exact permission set when the spec declares one.
-func (g *recordingGrantor) Grant(meta extensionapi.Metadata) (bool, error) {
+func (g *recordingGrantor) Grant(meta extensionapi.Metadata, _ string) (bool, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.observed = &meta

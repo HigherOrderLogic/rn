@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/unstablebuild/rune-go-sdk/api/extensionapi"
@@ -36,6 +37,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 	"unstable.build/go-tui/extension"
 	"unstable.build/go-tui/ide/ideauthorizer"
+	"unstable.build/go-tui/ide/pkgtrust"
 )
 
 var _ extension.Grantor = (*permissionGrantor)(nil)
@@ -54,30 +56,39 @@ type permissionDecision struct {
 	Decision string
 }
 
-// this a one prompt per permission extension.Grantor.
+// permissionGrantor prompts once at extension startup for extensions that are
+// not attested by a signed package from a trusted publisher. An "Always"
+// decision is persisted so the prompt does not reappear across sessions.
 type permissionGrantor struct {
 	promptOpener     ideauthorizer.PromptOpener
 	storage          storageapi.Service
 	scheduleNextTick func(func()) bool
+	trust            *pkgtrust.Store
 }
 
-// nolint:unused
 func newExtensionPromptGrantor(
 	promptOpener ideauthorizer.PromptOpener,
 	storage storageapi.Service,
 	scheduleNextTick func(func()) bool,
+	trust *pkgtrust.Store,
 ) extension.Grantor {
-	if promptOpener == nil || storage == nil || scheduleNextTick == nil {
-		return extension.GrantAll()
+	if promptOpener == nil || storage == nil || scheduleNextTick == nil || trust == nil {
+		panic("newExtensionPromptGrantor: nil dependency")
 	}
 	return &permissionGrantor{
 		promptOpener:     promptOpener,
 		storage:          storage,
 		scheduleNextTick: scheduleNextTick,
+		trust:            trust,
 	}
 }
 
-func (g *permissionGrantor) Grant(meta extensionapi.Metadata) (bool, error) {
+func (g *permissionGrantor) Grant(
+	meta extensionapi.Metadata, verifiedPublisher string,
+) (bool, error) {
+	if verifiedPublisher != "" && g.trust.IsTrustedFingerprint(verifiedPublisher) {
+		return true, nil
+	}
 	ctx := context.Background()
 	key := permissionStorageKey(meta)
 	var stored permissionDecision
@@ -114,8 +125,21 @@ func (g *permissionGrantor) Grant(meta extensionapi.Metadata) (bool, error) {
 
 func (g *permissionGrantor) prompt(meta extensionapi.Metadata) string {
 	result := make(chan string, 1)
-	message := fmt.Sprintf("Allow extension **%s** (%s) by **%s** to run?",
+	var b strings.Builder
+	fmt.Fprintf(&b, "Allow extension **%s** (%s) by **%s** to run?",
 		meta.ExtensionName, meta.ExtensionVersion, meta.DeveloperID)
+	if len(meta.Permissions) > 0 {
+		b.WriteString("\n\nIt requests permission to:\n")
+		perms := make([]string, 0, len(meta.Permissions))
+		for perm := range meta.Permissions {
+			perms = append(perms, ideauthorizer.PermissionActionText(perm))
+		}
+		sort.Strings(perms)
+		for _, action := range perms {
+			b.WriteString("\n- " + action)
+		}
+	}
+	message := b.String()
 	options := []string{
 		permissionPromptAllowOnce,
 		permissionPromptAllowAlways,

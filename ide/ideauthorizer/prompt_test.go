@@ -111,7 +111,7 @@ func TestPermissionPrompter(t *testing.T) {
 			assert.Equal(t, tc.wantDecision, decision)
 			assert.Equal(t, 1, promptOpener.calls)
 			assert.Contains(t, promptOpener.message,
-				"Program /bin/test with args [--flag] wants to **manage the Window Manager**.")
+				"Program /bin/test with args [--flag] wants to **manage the window manager**.")
 
 			// Creating the prompt also emits exactly one warning
 			// notification with the same permission context.
@@ -164,7 +164,7 @@ func TestPluginPermissionPromptMessageWithLauncher(t *testing.T) {
 		Permission:   extensionapi.PermissionBrowserWindowManager,
 	})
 	assert.Contains(t, message,
-		"Program /usr/local/bin/trusted-cli with args [run] running inside /bin/zsh [--login] wants to **manage the Window Manager**.")
+		"Program /usr/local/bin/trusted-cli with args [run] running inside /bin/zsh [--login] wants to **manage the window manager**.")
 }
 
 func TestPluginPermissionPromptMessageWithCommand(t *testing.T) {

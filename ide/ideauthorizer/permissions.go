@@ -723,9 +723,9 @@ type hashWriter interface {
 	Write([]byte) (int, error)
 }
 
-// permissionActionText returns the phrase used to describe the action
-// requested by an ad-hoc program.
-func permissionActionText(permission extensionapi.Permission) string {
+// PermissionActionText returns the phrase used to describe the action
+// granted by an extension permission, e.g. "access the editor".
+func PermissionActionText(permission extensionapi.Permission) string {
 	switch permission {
 	case extensionapi.PermissionFileSystem:
 		return "access workspace files"
@@ -734,17 +734,17 @@ func permissionActionText(permission extensionapi.Permission) string {
 	case extensionapi.PermissionTerminal:
 		return "manage terminals"
 	case extensionapi.PermissionBrowserWindowManager:
-		return "manage the Window Manager"
+		return "manage the window manager"
 	case extensionapi.PermissionBrowserResourceOpener:
-		return "manage file tabs"
+		return "manage tabs"
 	case extensionapi.PermissionNotifications:
 		return "show notifications"
 	case extensionapi.PermissionInterrupt:
-		return "interrupt the event loop"
+		return "render TUIs asynchronously"
 	case extensionapi.PermissionEditor:
-		return "access the editor"
+		return "access editor buffers and file events"
 	case extensionapi.PermissionCommands:
-		return "register prompt commands"
+		return "register prompt and console commands"
 	case extensionapi.PermissionStorage:
 		return "use persistent storage"
 	case extensionapi.PermissionSyntaxTree:
@@ -756,7 +756,7 @@ func permissionActionText(permission extensionapi.Permission) string {
 	case extensionapi.PermissionDebugger:
 		return "communicate with DAP servers"
 	case extensionapi.PermissionLLM:
-		return "use the host LLM service"
+		return "use your configured LLM providers"
 	default:
 		return fmt.Sprintf("access permission %s", permission)
 	}

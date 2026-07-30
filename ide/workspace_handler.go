@@ -2206,9 +2206,8 @@ func (h *workspaceManagerHandler) buildExtensions(
 	// FindInstalledExecutable.
 	installDir := installRoot(cwd, uri, dataDir)
 	browser := ex.Browser()
-	// grant all permissions for now, until we actually have installable third
-	// party extensions.
-	grantor := extension.GrantAll()
+	grantor := newExtensionPromptGrantor(promptOpener, promptStorage,
+		cfg.scheduleNextTick, h.trust)
 	runner, err := h.extensionRunner.WorkspaceExtensionsRunner(uri, res, cmdAuthorizer,
 		h.pkgmanager.pkg, dataDir, installDir, browser, cwd, extExecutor, grantor,
 		ed, promptOpener, promptStorage, cfg.scheduleNextTick)

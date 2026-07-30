@@ -69,12 +69,8 @@ func newProtocol(
 	ctx context.Context, grantor extension.Grantor,
 	extensionID, socket, dataDir, installDir string,
 	cert []byte, insecureAuth bool, cfg config.Config, keys auth.Keys,
-	readiness *extensionReadiness, verifiedPublishers ...string,
+	readiness *extensionReadiness, verifiedPublisher string,
 ) *protocol {
-	verifiedPublisher := ""
-	if len(verifiedPublishers) > 0 {
-		verifiedPublisher = verifiedPublishers[0]
-	}
 	mapCfg := make(map[string]any)
 	cfg.Iterate(func(k string, v any) {
 		mapCfg[k] = v
@@ -124,7 +120,13 @@ func (p *protocol) Write(data []byte) (int, error) {
 		return n, err
 	}
 
-	ok, err := p.grantor.Grant(meta)
+	verifiedPublisher := p.verifiedPublisher
+	if verifiedPublisher != "" && !matchesPublisherKey(meta.DeveloperKey, verifiedPublisher) {
+		log.Warnf("extension %s developer key does not match verified signing key", p.extensionID)
+		verifiedPublisher = ""
+	}
+
+	ok, err := p.grantor.Grant(meta, verifiedPublisher)
 	if err != nil {
 		err = fmt.Errorf("grant permissions: %w", err)
 		p.setReady(err)
@@ -149,11 +151,6 @@ func (p *protocol) Write(data []byte) (int, error) {
 			err = fmt.Errorf("get sign key: %w", err)
 			p.setReady(err)
 			return n, err
-		}
-		verifiedPublisher := p.verifiedPublisher
-		if verifiedPublisher != "" && !matchesPublisherKey(meta.DeveloperKey, verifiedPublisher) {
-			log.Warnf("extension %s developer key does not match verified signing key", p.extensionID)
-			verifiedPublisher = ""
 		}
 		claimsExtra := ideauthorizer.Extension{Metadata: meta, VerifiedPublisher: verifiedPublisher}
 		accessToken, err := auth.SignToken(signKey,
