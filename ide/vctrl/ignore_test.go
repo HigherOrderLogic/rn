@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"syscall"
 	"testing"
 
 	log "github.com/sirupsen/logrus"
@@ -272,6 +273,39 @@ func TestLoadGitignore(t *testing.T) {
 		assert.Contains(t, entry.Message, gitIgnoreFile)
 		assert.Contains(t, entry.Message, "dir")
 		assert.Contains(t, entry.Message, os.ErrPermission.Error())
+	})
+
+	t.Run("gitlink .git file is treated as missing, not logged", func(t *testing.T) {
+		hook := logtest.NewGlobal()
+		t.Cleanup(hook.Reset)
+
+		ctrl := gomock.NewController(t)
+		mock := schemetest.NewMockScheme(ctrl)
+
+		uri, err := workspaceapi.ParseURI("memory:///tmp")
+		require.NoError(t, err)
+		mock.EXPECT().URI(gomock.Any()).Return(uri, nil).AnyTimes()
+
+		// dir/.git is a gitlink file (submodule/worktree pointer), so
+		// probing dir/.git/info/exclude fails with ENOTDIR.
+		exclude := filepath.Join("dir", infoExcludeFile)
+		mock.EXPECT().
+			OpenFile(exclude, gomock.Any(), gomock.Any()).
+			Return(nil, &fs.PathError{
+				Op: "open", Path: exclude, Err: syscall.ENOTDIR,
+			}).
+			AnyTimes()
+		mock.EXPECT().
+			OpenFile(gomock.Any(), gomock.Any(), gomock.Any()).
+			Return(nil, os.ErrNotExist).
+			AnyTimes()
+
+		matcher, err := LoadGitignore(mock)
+		require.NoError(t, err)
+
+		matcher.MatchRelPath(filepath.Join("dir", "file.txt"), false)
+		assert.Empty(t, hook.AllEntries(),
+			"a gitlink .git file is the normal submodule/worktree layout")
 	})
 
 	t.Run("nested .gitignore is read lazily and cached per directory", func(t *testing.T) {

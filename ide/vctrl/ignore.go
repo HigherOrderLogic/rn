@@ -32,6 +32,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/ernestrc/logd-go/logging"
 	"github.com/go-git/go-git/v6/plumbing/format/gitignore"
@@ -223,7 +224,11 @@ func readIgnoreFile(cwd FileReader, paths []string, file string) (
 	patterns = []gitignore.Pattern{}
 	path := filepath.Join(paths...)
 	f, err := cwd.OpenFile(filepath.Join(path, file), os.O_RDONLY, 0)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
+	// ENOTDIR means .git is a gitlink file (submodule/worktree pointer),
+	// the normal layout for nested checkouts; treat it like a missing
+	// ignore file.
+	if err != nil && !errors.Is(err, os.ErrNotExist) &&
+		!errors.Is(err, syscall.ENOTDIR) {
 		return nil, fmt.Errorf("open %s: %w", file, err)
 	}
 	if err != nil {
