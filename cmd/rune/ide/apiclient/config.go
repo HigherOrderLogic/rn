@@ -119,6 +119,6 @@ type Config struct {
 	// OpenBrowser, when non-nil, overrides the default browser launch
 	// during the OAuth flow. Tests inject a recording function here;
 	// in production it is left nil and the client falls back to
-	// sensible/browser.Browse.
+	// launching the user's preferred browser.
 	OpenBrowser func(*url.URL) error
 }

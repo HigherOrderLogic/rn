@@ -79,7 +79,7 @@ func New(
 		panic(fmt.Sprintf("parse http endpoint url: %s", err))
 	}
 	if config.OpenBrowser == nil {
-		config.OpenBrowser = func(u *url.URL) error { return browser.Browse(u) }
+		config.OpenBrowser = openBrowser
 	}
 	ret := &Client{
 		config:          config,
@@ -107,6 +107,26 @@ func New(
 	}
 
 	return ret
+}
+
+// openBrowser launches the user's preferred browser and returns as soon
+// as the process is started. browser.Browse would instead block until
+// the browser exits, and its shared session state rejects a second
+// login while the first browser is still open.
+func openBrowser(u *url.URL) error {
+	b, err := browser.FindBrowser()
+	if err != nil {
+		return err
+	}
+	if err := b.Start(u); err != nil {
+		return err
+	}
+	go debug.CapturePanicReport(func() {
+		if err := b.Wait(); err != nil {
+			log.Warnf("oauth2: browser process: %v", err)
+		}
+	})
+	return nil
 }
 
 // Handle satisfies text.EventHandler.
@@ -378,13 +398,19 @@ func (a *Client) tokenSourceRefresh(ctx context.Context, token *oauth2.Token, re
 			return err
 		}
 		urlCh <- u
-		if err := a.config.OpenBrowser(u); err != nil {
-			// Keep the OAuth flow alive instead of aborting: the URL was
-			// already published, so the user can copy it from the wait
-			// prompt and complete sign-in in any browser. The local
-			// callback server stays listening for the redirect.
-			log.Warnf("oauth2: open browser failed, falling back to manual URL: %v", err)
-		}
+		// The oauth2 client only starts reading the callback result
+		// once this callback returns, so an opener that blocks for the
+		// lifetime of the browser process would wedge the loopback
+		// redirect handler and the browser tab would spin forever.
+		go debug.CapturePanicReport(func() {
+			if err := a.config.OpenBrowser(u); err != nil {
+				// Keep the OAuth flow alive instead of aborting: the URL was
+				// already published, so the user can copy it from the wait
+				// prompt and complete sign-in in any browser. The local
+				// callback server stays listening for the redirect.
+				log.Warnf("oauth2: open browser failed, falling back to manual URL: %v", err)
+			}
+		})
 
 		return nil
 	}, tryPorts, blueauth.WithSuccessHTML(callbackPageHTML))

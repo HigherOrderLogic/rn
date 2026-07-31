@@ -28,6 +28,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -40,6 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/ox-api/auth"
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
+	"golang.org/x/oauth2"
 )
 
 func TestNewDoesNotStartTelemetryWhenDisabled(t *testing.T) {
@@ -373,6 +375,108 @@ func TestClient_Login_PublishesOAuthURL(t *testing.T) {
 
 	_, ok := <-session.URL
 	assert.False(t, ok, "URL channel must be closed after Login completes")
+}
+
+// TestClient_Login_CompletesWhileBrowserOpenerBlocks reproduces the
+// Linux login deadlock: the underlying OAuth client only starts
+// reading the callback result after the visit-URL callback returns, so
+// an opener that blocks for the lifetime of the browser process wedges
+// the loopback redirect handler. The browser tab then spins forever on
+// the redirect and login never completes.
+func TestClient_Login_CompletesWhileBrowserOpenerBlocks(t *testing.T) {
+	srv := completingOAuthServer(t)
+	defer srv.Close()
+
+	config := DefaultConfig()
+	config.HTTPEndpointAddress = srv.URL
+	openerRelease := make(chan struct{})
+	t.Cleanup(func() { close(openerRelease) })
+	config.OpenBrowser = func(*url.URL) error {
+		<-openerRelease
+		return nil
+	}
+
+	client := New(storagestub.NewInMemoryService(), config, t.TempDir())
+	defer client.Close()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	session := client.Login(ctx)
+
+	var authorizeURL *url.URL
+	select {
+	case u, ok := <-session.URL:
+		require.True(t, ok, "URL channel must emit before close")
+		require.NotNil(t, u)
+		authorizeURL = u
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected Login to publish OAuth URL")
+	}
+
+	redirectURI := authorizeURL.Query().Get("redirect_uri")
+	require.NotEmpty(t, redirectURI)
+	state := authorizeURL.Query().Get("state")
+	require.NotEmpty(t, state)
+
+	callbackURL, err := url.Parse(redirectURI)
+	require.NoError(t, err)
+	q := callbackURL.Query()
+	q.Set("code", "fake-auth-code")
+	q.Set("state", state)
+	callbackURL.RawQuery = q.Encode()
+
+	// The browser tab hitting the loopback redirect must get a response
+	// back even though the opener is still running.
+	browserTab := &http.Client{Timeout: 5 * time.Second}
+	resp, err := browserTab.Get(callbackURL.String())
+	require.NoError(t, err, "loopback redirect must respond while the opener blocks")
+	_, _ = io.Copy(io.Discard, resp.Body)
+	require.NoError(t, resp.Body.Close())
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	select {
+	case err := <-session.Done:
+		assert.NoError(t, err, "Login must complete after the redirect")
+	case <-time.After(5 * time.Second):
+		t.Fatal("expected Login to complete after the OAuth redirect")
+	}
+}
+
+// completingOAuthServer serves an oauth2 config pointing back at itself
+// and a token endpoint that completes the PKCE code exchange.
+func completingOAuthServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	var base atomic.Value
+	mux := http.NewServeMux()
+	mux.HandleFunc(auth.ServeConfigPath, func(w http.ResponseWriter, _ *http.Request) {
+		u, _ := base.Load().(string)
+		cfg := auth.Config{
+			APIURL:    u + "/api/v2/",
+			JWKSURL:   u + "/.well-known/jwks.json",
+			SignupURL: u + "/signup",
+			Config: oauth2.Config{
+				// An empty ClientSecret selects the PKCE flow.
+				ClientID: "test-client-id",
+				Scopes:   []string{"offline_access", "openid"},
+				Endpoint: oauth2.Endpoint{
+					AuthStyle: oauth2.AuthStyleInParams,
+					AuthURL:   u + "/authorize",
+					TokenURL:  u + auth.ServeTokenPath,
+				},
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		require.NoError(t, json.NewEncoder(w).Encode(cfg))
+	})
+	mux.HandleFunc(auth.ServeTokenPath, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"fake-access-token",` +
+			`"token_type":"Bearer","expires_in":3600,` +
+			`"refresh_token":"fake-refresh-token"}`))
+	})
+	srv := httptest.NewServer(mux)
+	base.Store(srv.URL)
+	return srv
 }
 
 func TestParseAccountClaims(t *testing.T) {
