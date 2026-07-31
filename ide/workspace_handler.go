@@ -3435,7 +3435,7 @@ func (h *workspaceManagerHandler) setReleaseManager(releaseManager release.Manag
 	wm := currentWorkspaceWindowManager{root: h}
 	parser := &lazyParser{root: h}
 	editorMode := ""
-	autoInstall := true
+	autoInstall := false
 	if cfg, err := h.reloadConfig(); err == nil {
 		editorMode = cfg.pkgEditorMode()
 		autoInstall = cfg.updatesAutoInstall()

@@ -283,7 +283,7 @@ func TestPackageManagerLibDir(t *testing.T) {
 │                                      │
 │                                      │
 │                                      │
-│     Yes, Always          No          │
+│Yes           Yes, Always          No │
 └──────────────────────────────────────┘
 ├──────────────────────────────────────┤
 │1                                     │
@@ -429,45 +429,6 @@ func TestPackageManagerLibDir(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 
-	t.Run("prompt, no never install", func(t *testing.T) {
-		t.Parallel()
-
-		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
-		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
-
-		it, err := m.pkgmanager.LibDir(context.Background(), "go")
-		require.NoError(t, err)
-
-		cases := []handlertest.SequenceTestCase{
-			{"V",
-				`┌──────────────────────────────────────┐
-│                                      │
-├──────────────────────────────────────┤
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-│          workspaceWallpaper          │
-│                                      │
-│                                      │
-│                                      │
-│                                      │
-├──────────────────────────────────────┤
-│1                                     │
-└━─────────────────────────────────────┘`},
-		}
-
-		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
-
-		_, err = iterator.ToSlice(context.Background(), it)
-		require.Equal(t, document.ErrNotFound, err)
-
-		_, err = m.pkgmanager.LibDir(context.Background(), "six")
-		require.Equal(t, document.ErrNotFound, err)
-
-		require.NoError(t, m.Close())
-	})
-
 	t.Run("auto_install config installs without prompting", func(t *testing.T) {
 		t.Parallel()
 
@@ -485,15 +446,50 @@ func TestPackageManagerLibDir(t *testing.T) {
 		require.NoError(t, m.Close())
 	})
 
-	t.Run("auto_install config overrides stored never", func(t *testing.T) {
+	t.Run("legacy stored never is ignored and prompts again", func(t *testing.T) {
+		t.Parallel()
+
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+		require.NoError(t, m.pkgmanager.storage.Set(context.Background(),
+			installStorageKey, installStorageValue{Value: false}))
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{"N",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└━─────────────────────────────────────┘`},
+		}
+		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
+
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.Equal(t, document.ErrNotFound, err)
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("onboarding active installs without prompting", func(t *testing.T) {
 		t.Parallel()
 
 		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
 		rm.SetMissProgressComplete(true)
 		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
-		require.NoError(t, m.pkgmanager.storage.Set(context.Background(),
-			installStorageKey, installStorageValue{Value: false}))
-		m.pkgmanager.autoInstall = true
+		m.pkgmanager.autoInstall = false
+		m.onboardingActive = func() bool { return true }
 
 		it, err := m.pkgmanager.LibDir(context.Background(), "go")
 		require.NoError(t, err)
@@ -501,6 +497,58 @@ func TestPackageManagerLibDir(t *testing.T) {
 		slice, err := iterator.ToSlice(context.Background(), it)
 		require.NoError(t, err)
 		assert.NotEmpty(t, slice)
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("onboarding inactive keeps prompting", func(t *testing.T) {
+		t.Parallel()
+
+		rm := idepkgtest.NewReleaseManager(pkgs, bundles)
+		m := newTestWorkspaceManagerHandlerForPkgManager(t, rm, false, 0)
+		m.pkgmanager.autoInstall = false
+		m.onboardingActive = func() bool { return false }
+
+		it, err := m.pkgmanager.LibDir(context.Background(), "go")
+		require.NoError(t, err)
+
+		cases := []handlertest.SequenceTestCase{
+			{"",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+█●██████████████████████████████████████
+│                                      │
+│  Do you want to install package      │
+│  "go"?                               │
+│                                      │
+│                                      │
+│                                      │
+│Yes           Yes, Always          No │
+└──────────────────────────────────────┘
+├──────────────────────────────────────┤
+│1                                     │
+└━─────────────────────────────────────┘`},
+			{"N",
+				`┌──────────────────────────────────────┐
+│                                      │
+├──────────────────────────────────────┤
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+│          workspaceWallpaper          │
+│                                      │
+│                                      │
+│                                      │
+│                                      │
+├──────────────────────────────────────┤
+│1                                     │
+└━─────────────────────────────────────┘`},
+		}
+		handlertest.TestHandlerSequence(t, m, 40, 15, cases)
+
+		_, err = iterator.ToSlice(context.Background(), it)
+		require.Equal(t, document.ErrNotFound, err)
 		require.NoError(t, m.Close())
 	})
 

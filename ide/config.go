@@ -2159,14 +2159,14 @@ func (c ideConfig) updates() (config.Config, bool) {
 func (c ideConfig) updatesAutoInstall() bool {
 	cfg, ok := c.updates()
 	if !ok {
-		return true
+		return false
 	}
 	enabled, err := cfg.GetBool("auto_install")
 	if err != nil {
 		if err != config.ErrNotFound {
 			c.errors["updates.auto_install"] = err
 		}
-		return true
+		return false
 	}
 	return enabled
 }

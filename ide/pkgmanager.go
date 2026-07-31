@@ -65,7 +65,7 @@ type pkgManager struct {
 }
 
 type installStorageValue struct {
-	Value bool // true => always, false => never
+	Value bool // true => always install without prompting
 }
 
 func (m *pkgManager) init(
@@ -147,20 +147,20 @@ func (m *pkgManager) LibDir(ctx context.Context, pkgID string) (
 		return newPendingIterator(m.pkg, pkgID, gate.(*installGate)), nil
 	}
 
-	if m.autoInstall {
+	// First-run onboarding stands in for the operator opt-in so the
+	// install prompt does not fight the tutorial overlay.
+	if m.autoInstall || m.onboardingActive() {
 		return m.installLatest(ctx, pkgID, version)
 	}
 
 	var val installStorageValue
-	if err := m.storage.Get(ctx, installStorageKey, &val); err != nil {
-		return m.openInstallPrompt(pkgID, version)
+	// A legacy stored "never" (Value false) is ignored so those users
+	// are prompted again — with the option gone there would otherwise
+	// be no way to undo it.
+	if err := m.storage.Get(ctx, installStorageKey, &val); err == nil && val.Value {
+		return m.installLatest(ctx, pkgID, version)
 	}
-	if !val.Value {
-		// signals that package does not exist, which
-		// should prevent further attempts or errors being logged.
-		return nil, storageapi.ErrNotFound
-	}
-	return m.installLatest(ctx, pkgID, version)
+	return m.openInstallPrompt(pkgID, version)
 }
 
 func (m *pkgManager) installLatest(
@@ -192,6 +192,10 @@ func (m *pkgManager) setAutoInstall() error {
 		installStorageKey, installStorageValue{Value: true})
 }
 
+func (m *pkgManager) onboardingActive() bool {
+	return m.wh.onboardingActive != nil && m.wh.onboardingActive()
+}
+
 func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 	iterator.Iterator[string], error,
 ) {
@@ -199,7 +203,6 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 		yes       = "   Yes   "
 		yesAlways = "   Yes, Always   "
 		no        = "   No   "
-		noNever   = "   No, Never   "
 	)
 
 	msg := fmt.Sprintf("Do you want to install package **%q**?", pkgID)
@@ -208,8 +211,8 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 	gate := newInstallGate(func() { m.pending.Delete(pkgID) })
 
 	m.scheduleNextTick(func() {
-		m.wh.focusEx().comp.Prompt(msg, []string{yes, yesAlways, no, noNever},
-			[]term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}, {Ch: 'V'}},
+		m.wh.focusEx().comp.Prompt(msg, []string{yes, yesAlways, no},
+			[]term.KeyComb{{Ch: 'Y'}, {Ch: 'A'}, {Ch: 'N'}},
 			handler.FuncPromptHandler(
 				func(i int, opt string) {
 					switch opt {
@@ -222,9 +225,6 @@ func (m *pkgManager) openInstallPrompt(pkgID string, version release.Version) (
 						gate.install(func() error {
 							return m.pkg.InstallPackageVersion(ctx, pkgID, version, pw)
 						})
-					case noNever:
-						_ = m.storage.Set(ctx, installStorageKey, installStorageValue{Value: false})
-						fallthrough
 					case no:
 						gate.cancel()
 					}

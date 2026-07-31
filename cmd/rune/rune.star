@@ -527,8 +527,9 @@ config = {
     },
     "updates": {
         # Automatically install language packages on demand. When False,
-        # Rune prompts before installing a missing package.
-        "auto_install": True,
+        # Rune prompts before installing a missing package. First-run
+        # onboarding installs without prompting regardless of this setting.
+        "auto_install": False,
     },
     # Interactive tutorials. Each entry maps a `:tutorial start <name>` to
     # the path of a Starlark file that calls `tutorial(...)` with a

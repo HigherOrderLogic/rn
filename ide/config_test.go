@@ -643,12 +643,12 @@ func TestUpdatesAutoInstall(t *testing.T) {
 		want    bool
 		wantErr bool
 	}{
-		{"absent updates defaults true", nil, true, false},
-		{"absent key defaults true", map[string]any{}, true, false},
+		{"absent updates defaults false", nil, false, false},
+		{"absent key defaults false", map[string]any{}, false, false},
 		{"explicit true", map[string]any{"auto_install": true}, true, false},
 		{"explicit false", map[string]any{"auto_install": false}, false, false},
-		{"invalid type defaults true", map[string]any{"auto_install": "yes"},
-			true, true},
+		{"invalid type defaults false", map[string]any{"auto_install": "yes"},
+			false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := map[string]any{}
