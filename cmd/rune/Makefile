@@ -411,7 +411,7 @@ make-release-linux:
 		: > "$$LIB/.next"; \
 		while IFS= read -r soname; do \
 			case "$$soname" in \
-				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|ld-linux*|linux-vdso*) continue ;; \
+				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|libresolv.so*|ld-linux*|linux-vdso*) continue ;; \
 				libstdc++.so*|libgcc_s.so*|libgomp.so*) continue ;; \
 				libGL.so*|libGLX.so*|libGLdispatch.so*|libEGL.so*|libOpenGL.so*|libGLU.so*|libgbm.so*|libdrm.so*) continue ;; \
 				libX11.so*|libX11-xcb.so*|libxcb*.so*|libXext.so*|libXrandr.so*|libXrender.so*|libXcursor.so*|libXinerama.so*|libXi.so*|libXfixes.so*|libXdamage.so*|libXxf86vm.so*|libXau.so*|libXdmcp.so*|libxshmfence.so*) continue ;; \

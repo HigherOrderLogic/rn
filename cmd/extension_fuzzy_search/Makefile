@@ -100,7 +100,7 @@ make-release-linux:
 		: > "$$LIB/.next"; \
 		while IFS= read -r soname; do \
 			case "$$soname" in \
-				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|ld-linux*|linux-vdso*) continue ;; \
+				libc.so*|libm.so*|libpthread.so*|libdl.so*|librt.so*|libresolv.so*|ld-linux*|linux-vdso*) continue ;; \
 			esac; \
 			[ -f "$$LIB/$$soname" ] && continue; \
 			src=""; \
