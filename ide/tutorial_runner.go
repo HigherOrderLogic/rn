@@ -47,22 +47,32 @@ type tutorialRunner struct {
 	interrupter    term.Interrupter
 	width, height  int
 	onCompleted    func(name string)
+	exitRequested  func(term.Event) bool
 }
 
 var _ commandObserver = (*tutorialRunner)(nil)
 
+// init wires the runner. exitRequested decides whether an event is a
+// quit request that must abort a running tutorial; it is required
+// because without it the tutorial overlay silently makes the IDE
+// unquittable.
 func (r *tutorialRunner) init(
 	root tui.Handler,
 	tutorials map[string]idetutorial.Tutorial,
 	browserOverlay *idetutorial.OverlayBrowser,
 	interrupter term.Interrupter,
 	onCompleted func(name string),
+	exitRequested func(term.Event) bool,
 ) {
+	if exitRequested == nil {
+		panic("tutorialRunner: exitRequested is required")
+	}
 	r.Handler = root
 	r.tutorials = tutorials
 	r.browserOverlay = browserOverlay
 	r.interrupter = interrupter
 	r.onCompleted = onCompleted
+	r.exitRequested = exitRequested
 }
 
 func (r *tutorialRunner) setActive(name string, t idetutorial.Tutorial) {
@@ -144,11 +154,25 @@ func (r *tutorialRunner) Handle(ev term.Event) (bool, bool) {
 	if r.overlay == nil {
 		return r.Handler.Handle(ev)
 	}
-	exit, handled := r.overlay.Handle(ev)
-	if exit {
+	// The overlay swallows stray keys so they cannot reach the IDE
+	// underneath, which would otherwise make the app unquittable
+	// mid-tutorial. Abort the tutorial first so the confirm-exit
+	// prompt is drawn and answerable.
+	if r.exitRequested(ev) {
+		r.finishActive()
+		return r.Handler.Handle(ev)
+	}
+	// A command dispatched from this frame reaches observeCommand
+	// reentrantly and may already have cleared the overlay, so
+	// compare identity rather than dereferencing r.overlay again.
+	overlay := r.overlay
+	exit, handled := overlay.Handle(ev)
+	// finishActive closes the overlay, so it must run after its
+	// Handle frame has returned.
+	if r.overlay == overlay && overlay.Finished() {
 		r.finishActive()
 	}
-	return false, handled
+	return exit, handled
 }
 
 func (r *tutorialRunner) Cursor() (term.Coordinates, term.CursorStyle, bool) {
@@ -183,6 +207,13 @@ func (r *tutorialRunner) observeCommand(
 	typed, resolved string, args []string, err error,
 ) {
 	if r.overlay == nil {
+		return
+	}
+	// The tutorial's floating windows draw over the confirm-exit
+	// prompt, so a user who typed :quit would be answering a prompt
+	// they cannot see. Abort the tutorial instead.
+	if err == nil && isExitCommand(resolved) {
+		r.finishActive()
 		return
 	}
 	exit := r.overlay.ObserveCommand(typed, resolved, args, err)

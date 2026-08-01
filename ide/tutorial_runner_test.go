@@ -46,19 +46,24 @@ import (
 
 type rootStub struct {
 	handled int
+	exit    bool
 }
 
 func (r *rootStub) Resize(_, _ int)    {}
 func (r *rootStub) Draw(_ term.Writer) {}
 func (r *rootStub) Handle(_ term.Event) (bool, bool) {
 	r.handled++
-	return false, true
+	return r.exit, true
 }
 
 func (r *rootStub) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{}, term.CursorStyleDefault, false
 }
 func (r *rootStub) Selection() (string, bool) { return "", false }
+
+// exitRequested mirrors workspaceManagerHandler.exitRequested. The
+// stub root has no key bindings, so nothing is a quit request.
+func (r *rootStub) exitRequested(term.Event) bool { return false }
 
 type tutStub struct {
 	exitOn      rune
@@ -68,13 +73,14 @@ type tutStub struct {
 	completed   bool
 	commandExit bool
 	eventExit   bool
+	passThrough bool
 }
 
 func (t *tutStub) Resize(_, _ int)    {}
 func (t *tutStub) Draw(_ term.Writer) {}
 func (t *tutStub) Handle(ev term.Event) (bool, bool) {
 	t.handleCount++
-	return ev.Ch == t.exitOn, true
+	return ev.Ch == t.exitOn, !t.passThrough
 }
 func (t *tutStub) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 	return term.Coordinates{}, term.CursorStyleDefault, false
@@ -106,9 +112,68 @@ func newTestRunner(tutorials map[string]idetutorial.Tutorial, onCompleted ...fun
 	if len(onCompleted) > 0 {
 		completed = onCompleted[0]
 	}
-	r.init(root, tutorials, nil, term.NopInterrupter(), completed)
+	r.init(root, tutorials, nil, term.NopInterrupter(), completed,
+		root.exitRequested)
 	r.Resize(20, 5)
 	return r, root
+}
+
+// TestTutorialRunnerRequiresExitRequested pins that the quit predicate
+// is a required dependency: without it a tutorial overlay silently
+// makes the IDE unquittable.
+func TestTutorialRunnerRequiresExitRequested(t *testing.T) {
+	t.Parallel()
+	assert.Panics(t, func() {
+		(&tutorialRunner{}).init(&rootStub{}, nil, nil,
+			term.NopInterrupter(), nil, nil)
+	})
+}
+
+// TestTutorialRunnerPropagatesRootExit guards the quit path: the IDE
+// root's exit signal must survive the tutorial overlay frame.
+func TestTutorialRunnerPropagatesRootExit(t *testing.T) {
+	t.Parallel()
+	tut := &tutStub{passThrough: true}
+	r, root := newTestRunner(map[string]idetutorial.Tutorial{"basics": tut})
+	root.exit = true
+	require.NoError(t, r.HandleCommand(context.Background(),
+		textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
+	require.NotNil(t, r.overlay)
+
+	exit, handled := r.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+	assert.True(t, exit, "the root's exit must not be dropped by the overlay")
+	assert.True(t, handled)
+}
+
+// TestTutorialRunnerExitRequestAbortsTutorial covers the case the
+// overlay would otherwise swallow: a quit chord on a floating-window
+// step must tear the tutorial down and reach the root, so the
+// confirm-exit prompt is visible and answerable.
+func TestTutorialRunnerExitRequestAbortsTutorial(t *testing.T) {
+	t.Parallel()
+	tut := &tutStub{}
+	root := &rootStub{}
+	r := &tutorialRunner{}
+	var completed []string
+	quit := term.Event{Type: term.EventKey, Ch: 'q', Mod: term.ModMeta}
+	isQuit := func(ev term.Event) bool {
+		return ev.Type == term.EventKey && ev.Ch == 'q' && ev.Mod == term.ModMeta
+	}
+	r.init(root, map[string]idetutorial.Tutorial{"basics": tut}, nil,
+		term.NopInterrupter(),
+		func(name string) { completed = append(completed, name) },
+		isQuit)
+	r.Resize(20, 5)
+	require.NoError(t, r.HandleCommand(context.Background(),
+		textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
+	require.NotNil(t, r.overlay)
+
+	_, handled := r.Handle(quit)
+	assert.True(t, handled)
+	assert.Nil(t, r.overlay, "a quit request must end the tutorial")
+	assert.Equal(t, 1, root.handled, "quit must reach the IDE root")
+	assert.Zero(t, tut.handleCount, "the tutorial must not swallow the quit chord")
+	assert.Empty(t, completed, "an aborted tutorial is not completed")
 }
 
 func TestTutorialRunnerReportsSuccessfulCompletion(t *testing.T) {
@@ -471,6 +536,67 @@ tutorial(entry=run)
 	// not by the observer call itself.
 	_, _ = r.Handle(term.Event{Type: term.EventInterrupt})
 	assert.Nil(t, r.overlay)
+}
+
+// TestTutorialRunnerQuitOnFloatingWindowStep is the regression test
+// for the user report "Cmd+Q does nothing during the tutorial": a
+// floating_window step swallows every stray key, so the quit chord
+// never reached the IDE root and the confirm-exit prompt never
+// appeared.
+func TestTutorialRunnerQuitOnFloatingWindowStep(t *testing.T) {
+	src := `
+def run():
+    floating_window(title="welcome", text="press enter")
+    floating_window(title="done", text="press enter")
+tutorial(entry=run)
+`
+	tut, err := starlarktutorial.New(
+		"basics", src,
+		nil, nil, nil, nil,
+		term.Attributes{},
+		nil, nil,
+		term.KeyComb{Ch: ':'},
+		"standard", nil,
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	cc := defaultCfg()
+	cc.cfg["command"].(map[string]any)["key_bindings"].(map[string]any)["<m-q>"] = "quit"
+	m := newTestWorkspaceManagerHandler(t, cc, nil, nopShutdownShaderConfig())
+	t.Cleanup(func() { require.NoError(t, m.Close()) })
+	require.NoError(t, m.openFile("notes.txt", true))
+
+	root := m.workspaceManagerHandler
+	r := &tutorialRunner{}
+	r.init(root, map[string]idetutorial.Tutorial{"basics": tut}, nil,
+		term.NopInterrupter(), nil, root.exitRequested)
+	r.Resize(40, 12)
+
+	require.NoError(t, r.HandleCommand(context.Background(),
+		textapi.Command{Name: "tutorial", Args: []string{"start", "basics"}}))
+	require.True(t, tut.WaitActive("floating_window", time.Second),
+		"floating_window step did not become active")
+	require.NotNil(t, r.overlay)
+
+	handle := func(ev term.Event) (bool, bool) {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return r.Handle(ev)
+	}
+
+	exit, handled := handle(term.Event{
+		Type: term.EventKey, Ch: 'q', Mod: term.ModMeta})
+	assert.False(t, exit, "quit opens the confirm prompt first")
+	assert.True(t, handled)
+	require.Nil(t, r.overlay,
+		"the tutorial must be torn down so the confirm prompt is visible")
+
+	exit, handled = handle(term.Event{Type: term.EventKey, Ch: 'y'})
+	assert.True(t, exit, "answering Yes must exit the IDE")
+	assert.True(t, handled)
 }
 
 // TestTutorialRunnerObserveCommandAdvancesWaitCommand asserts that an

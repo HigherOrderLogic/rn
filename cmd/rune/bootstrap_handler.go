@@ -415,6 +415,9 @@ func (b *bootstrapHandler) Handle(ev term.Event) (exit, handled bool) {
 		if b.adjustBootstrapFontSize(ev) {
 			return false, true
 		}
+		if isBootstrapQuitEvent(ev) {
+			return true, true
+		}
 		if shouldSwallowBootstrapEvent(ev) {
 			return false, true
 		}
@@ -676,6 +679,13 @@ func (b *bootstrapHandler) adjustBootstrapFontSize(ev term.Event) bool {
 	return true
 }
 
+// isBootstrapQuitEvent reports whether ev is the quit chord bound by
+// every shipped editor preset. During bootstrap nothing is open and
+// nothing is unsaved, so it exits without a confirmation prompt.
+func isBootstrapQuitEvent(ev term.Event) bool {
+	return ev.Type == term.EventKey && ev.Ch == 'q' && ev.Mod&term.ModMeta != 0
+}
+
 // shouldSwallowBootstrapEvent must NOT swallow Esc: the SDK prompt
 // relies on Esc to exit, and guardedPromptChain.onClose re-opens
 // the prompt right after.
@@ -688,13 +698,10 @@ func shouldSwallowBootstrapEvent(ev term.Event) bool {
 	if ev.Mod == 0 && ev.Ch == ':' {
 		return true
 	}
-	// Quit / close keybindings from the editor presets:
-	//   <m-q> quit
+	// Close keybindings from the editor presets. Closing the
+	// pre-config IDE's only window would break the wizard:
 	//   <m-w> windowclose, <a-w> tabclose, <c-w> tabclose
 	//   <m-s-w> / <s-m-w> windowclose (standard overrides)
-	if ev.Ch == 'q' && ev.Mod&term.ModMeta != 0 {
-		return true
-	}
 	if ev.Ch == 'w' && ev.Mod != 0 {
 		switch {
 		case ev.Mod&term.ModMeta != 0,

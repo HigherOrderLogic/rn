@@ -679,7 +679,8 @@ func (i *IDE) init(
 	}
 	i.tutorial.init(i.workspaceHandler, tutorials,
 		i.tutorialsConfig.overlay,
-		i.workspaceHandler.events.globalInterrupter(), i.onTutorialCompleted)
+		i.workspaceHandler.events.globalInterrupter(), i.onTutorialCompleted,
+		i.workspaceHandler.exitRequested)
 	commandObserver.subscribe(&i.tutorial)
 	_ = i.workspaceHandler.SubscribeEvents(
 		textapi.AllEvents(),

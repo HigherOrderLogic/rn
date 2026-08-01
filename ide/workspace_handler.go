@@ -1156,6 +1156,35 @@ func (h *workspaceManagerHandler) Cursor() (term.Coordinates, term.CursorStyle, 
 	return h.focusHandler().Cursor()
 }
 
+// isExitCommand reports whether name is a command that exits the IDE.
+func isExitCommand(name string) bool {
+	switch name {
+	case "quit", "forcequit!", "writequit", "writeforcequit!":
+		return true
+	}
+	return false
+}
+
+// exitRequested reports whether ev is bound to a command that exits
+// the IDE under the focused workspace's key bindings. Two-key
+// sequences (e.g. the emacs <c-x><c-c>) are resolved by the sequencer
+// inside ex and are not visible here.
+func (h *workspaceManagerHandler) exitRequested(ev term.Event) bool {
+	if ev.Type != term.EventKey {
+		return false
+	}
+	cmdsAndArgs, ok := h.focusEx().comp.CommandKeyBinding(ev.KeyComb())
+	if !ok {
+		return false
+	}
+	for _, cmd := range cmdsAndArgs {
+		if len(cmd) > 0 && isExitCommand(cmd[0]) {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *workspaceManagerHandler) Selection() (string, bool) {
 	return h.focusHandler().Selection()
 }

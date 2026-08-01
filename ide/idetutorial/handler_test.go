@@ -43,6 +43,7 @@ type fakeRoot struct {
 	cursorAt  term.Coordinates
 	selection string
 	handled   bool
+	exit      bool
 }
 
 func (f *fakeRoot) Resize(_, _ int) {}
@@ -53,7 +54,7 @@ func (f *fakeRoot) Draw(w term.Writer) {
 
 func (f *fakeRoot) Handle(ev term.Event) (bool, bool) {
 	f.got = append(f.got, ev)
-	return false, f.handled
+	return f.exit, f.handled
 }
 
 func (f *fakeRoot) Cursor() (term.Coordinates, term.CursorStyle, bool) {
@@ -86,6 +87,8 @@ type fakeTutorial struct {
 	observed []string
 
 	observedEvents []string
+
+	observeExit bool
 }
 
 func (t *fakeTutorial) Resize(_, _ int) {}
@@ -127,12 +130,12 @@ func (t *fakeTutorial) ObserveCommand(
 	typed, _ string, _ []string, _ error,
 ) bool {
 	t.observed = append(t.observed, typed)
-	return false
+	return t.observeExit
 }
 
 func (t *fakeTutorial) ObserveEvent(eventType, _ string) bool {
 	t.observedEvents = append(t.observedEvents, eventType)
-	return false
+	return t.observeExit
 }
 
 func (t *fakeTutorial) Shader() (idetutorial.Shader, bool) {
@@ -231,14 +234,53 @@ func TestHandlerHandleFallsThroughWhenTutorialDeclines(t *testing.T) {
 
 func TestHandlerHandlePropagatesExit(t *testing.T) {
 	t.Parallel()
-	root := &fakeRoot{}
-	tut := &fakeTutorial{handleExit: true, handleHandled: true}
-	h := idetutorial.New(root, tut, nil, nil)
-	h.Resize(10, 3)
 
-	exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
-	assert.True(t, exit)
-	assert.True(t, handled)
+	t.Run("tutorial finish is reported by Finished", func(t *testing.T) {
+		t.Parallel()
+		root := &fakeRoot{}
+		tut := &fakeTutorial{handleExit: true, handleHandled: true}
+		h := idetutorial.New(root, tut, nil, nil)
+		h.Resize(10, 3)
+
+		exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+		assert.False(t, exit, "exit is the root's, not the tutorial's")
+		assert.True(t, handled)
+		assert.True(t, h.Finished())
+	})
+
+	t.Run("root exit is propagated", func(t *testing.T) {
+		t.Parallel()
+		root := &fakeRoot{exit: true, handled: true}
+		tut := &fakeTutorial{handleHandled: false}
+		h := idetutorial.New(root, tut, nil, nil)
+		h.Resize(10, 3)
+
+		exit, handled := h.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+		assert.True(t, exit, "the root's exit must reach the caller")
+		assert.True(t, handled)
+		assert.False(t, h.Finished())
+	})
+
+	t.Run("observers set Finished", func(t *testing.T) {
+		t.Parallel()
+		h := idetutorial.New(&fakeRoot{}, &fakeTutorial{observeExit: true}, nil, nil)
+		assert.True(t, h.ObserveCommand("quit", "quit", nil, nil))
+		assert.True(t, h.Finished())
+
+		h = idetutorial.New(&fakeRoot{}, &fakeTutorial{observeExit: true}, nil, nil)
+		assert.True(t, h.ObserveEvent("open", "file:///x"))
+		assert.True(t, h.Finished())
+	})
+
+	t.Run("Reset clears Finished", func(t *testing.T) {
+		t.Parallel()
+		tut := &fakeTutorial{handleExit: true, handleHandled: true}
+		h := idetutorial.New(&fakeRoot{}, tut, nil, nil)
+		h.Handle(term.Event{Type: term.EventKey, Ch: 'q'})
+		assert.True(t, h.Finished())
+		h.Reset()
+		assert.False(t, h.Finished())
+	})
 }
 
 func TestHandlerCursor(t *testing.T) {

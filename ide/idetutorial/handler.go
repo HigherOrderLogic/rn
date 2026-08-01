@@ -72,6 +72,8 @@ type Handler struct {
 	shaderSpec Shader
 	shaderOn   bool
 
+	finished bool
+
 	composite *rootTutorialComposite
 }
 
@@ -133,17 +135,21 @@ func (h *Handler) Draw(w term.Writer) {
 // browser so window-bar interactions (drag, close, maximize) and
 // content scrolling work. Every other event goes to the tutorial
 // first; unhandled events fall through to the root. exit is the
-// tutorial's exit value; handled is true when any layer reported it.
-// After dispatch the active background shader is reconciled against
-// [Tutorial.Shader].
+// root's exit value, per the [tui.Handler] contract; a tutorial that
+// finished as a result of the event is reported by [Handler.Finished]
+// instead. handled is true when any layer reported it. After dispatch
+// the active background shader is reconciled against [Tutorial.Shader].
 func (h *Handler) Handle(ev term.Event) (bool, bool) {
 	if _, routed := h.overlay.HandleMouse(ev); routed {
 		h.syncShader()
 		return false, true
 	}
-	exit, handled := h.tut.Handle(ev)
+	finished, handled := h.tut.Handle(ev)
+	h.finished = h.finished || finished
+	var exit bool
 	if !handled {
-		_, rootHandled := h.root.Handle(ev)
+		var rootHandled bool
+		exit, rootHandled = h.root.Handle(ev)
 		handled = handled || rootHandled
 	}
 	h.syncShader()
@@ -173,26 +179,35 @@ func (h *Handler) Cursor() (term.Coordinates, term.CursorStyle, bool) {
 // Selection returns the root's selection.
 func (h *Handler) Selection() (string, bool) { return h.root.Selection() }
 
-// ObserveCommand forwards to the underlying tutorial. Returns
-// exit=true when the tutorial finishes as a result of the observation.
+// ObserveCommand forwards to the underlying tutorial. Returns true
+// when the tutorial finished as a result of the observation.
 func (h *Handler) ObserveCommand(
 	typed, resolved string, args []string, err error,
 ) bool {
-	return h.tut.ObserveCommand(typed, resolved, args, err)
+	finished := h.tut.ObserveCommand(typed, resolved, args, err)
+	h.finished = h.finished || finished
+	return finished
 }
 
-// ObserveEvent forwards to the underlying tutorial. Returns exit=true
-// when the tutorial finishes as a result of the observation.
+// ObserveEvent forwards to the underlying tutorial. Returns true when
+// the tutorial finished as a result of the observation.
 func (h *Handler) ObserveEvent(eventType, uri string) bool {
-	return h.tut.ObserveEvent(eventType, uri)
+	finished := h.tut.ObserveEvent(eventType, uri)
+	h.finished = h.finished || finished
+	return finished
 }
 
 // Reset forwards Reset to the underlying tutorial and reconciles any
 // active shader against [Tutorial.Shader].
 func (h *Handler) Reset() {
+	h.finished = false
 	h.tut.Reset()
 	h.syncShader()
 }
+
+// Finished reports whether the wrapped tutorial ended during a
+// previous Handle, ObserveCommand or ObserveEvent call.
+func (h *Handler) Finished() bool { return h.finished }
 
 // Completed reports whether the wrapped tutorial's most recent run returned
 // normally.

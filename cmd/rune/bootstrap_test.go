@@ -29,6 +29,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"github.com/unstablebuild/rune-go-sdk/tui"
+
+	"unstable.build/go-tui/ide"
 )
 
 func TestOptionToChoiceMapping(t *testing.T) {
@@ -159,9 +162,10 @@ func TestShouldSwallowBootstrapEvent(t *testing.T) {
 		// activation key from default rune.star).
 		{"colon opens command prompt", keyEv(':', 0), true},
 
-		// Dangerous: default quit / close-window / close-tab
-		// bindings from the editor presets.
-		{"meta-q quit", keyEv('q', term.ModMeta), true},
+		// Dangerous: default close-window / close-tab bindings from
+		// the editor presets. Quit is not swallowed: it is handled
+		// as a real exit by bootstrapHandler.Handle.
+		{"meta-q quit", keyEv('q', term.ModMeta), false},
 		{"meta-w windowclose", keyEv('w', term.ModMeta), true},
 		{"alt-w tabclose", keyEv('w', term.ModAlt), true},
 		{"ctrl-w tabclose", keyEv('w', term.ModCtrl), true},
@@ -183,6 +187,40 @@ func TestShouldSwallowBootstrapEvent(t *testing.T) {
 			require.Equal(t, tc.want, shouldSwallowBootstrapEvent(tc.ev))
 		})
 	}
+}
+
+// TestBootstrapHandleQuit asserts Cmd+Q exits the app while the
+// bootstrap wizard is still up, and stops being special once the real
+// IDE has been swapped in.
+func TestBootstrapHandleQuit(t *testing.T) {
+	t.Run("quits while pre-config IDE is up", func(t *testing.T) {
+		inner := &recordingHandler{}
+		b := &bootstrapHandler{inner: inner}
+		exit, handled := b.Handle(keyEv('q', term.ModMeta))
+		require.True(t, exit, "meta-q must exit during bootstrap")
+		require.True(t, handled)
+		require.Zero(t, inner.handled,
+			"quit must not reach the pre-config IDE")
+	})
+
+	t.Run("delegates once the real IDE is ready", func(t *testing.T) {
+		inner := &recordingHandler{}
+		b := &bootstrapHandler{inner: inner, realIDE: &ide.IDE{}}
+		exit, handled := b.Handle(keyEv('q', term.ModMeta))
+		require.False(t, exit)
+		require.False(t, handled)
+		require.Equal(t, 1, inner.handled)
+	})
+}
+
+type recordingHandler struct {
+	tui.Handler
+	handled int
+}
+
+func (h *recordingHandler) Handle(term.Event) (bool, bool) {
+	h.handled++
+	return false, false
 }
 
 func keyEv(ch rune, mod term.Modifier) term.Event {
