@@ -171,7 +171,7 @@ func (t *agentTool) Summary(arguments string) string {
 	return args.Prompt
 }
 
-func (t *agentTool) NeedsDeterministicOrder() bool { return true }
+func (t *agentTool) NeedsDeterministicOrder() bool { return false }
 
 func (t *agentTool) Execute(
 	ctx context.Context, arguments string,
