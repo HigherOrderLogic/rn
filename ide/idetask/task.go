@@ -46,6 +46,7 @@ import (
 	tcomponent "unstable.build/go-tui/component"
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/plugin"
+	"unstable.build/go-tui/text/cmdenv"
 )
 
 const (
@@ -440,7 +441,12 @@ func (t *Task) tryRunning(
 	// tryRunning runs on the host event loop for session restores and
 	// user commands. Build the handler off the caller's goroutine and
 	// install it when it settles.
-	cmdAndArgs := t.cmdAndArgs
+	// The vte field-splits the command line against the editor host's
+	// environment, so anything needing shell interpretation (`~`,
+	// `$VAR`, pipes, globs) must be routed through the workspace's own
+	// shell instead. On a remote workspace, expanding here would
+	// resolve paths against the wrong machine.
+	cmdAndArgs := cmdenv.BuildPluginArgv(t.cmdAndArgs)
 	maxWidth := t.maxWidth
 	go debug.CapturePanicReport(func() {
 		h, err := t.newPlugin(b, b, scheme, terminal, b,

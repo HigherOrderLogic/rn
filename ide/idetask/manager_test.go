@@ -52,8 +52,36 @@ import (
 	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/ide/plugin"
 	"unstable.build/go-tui/term/vte"
+	"unstable.build/go-tui/text/cmdenv"
 	"unstable.build/go-tui/workspace/workspacetest"
 )
+
+// A task command that needs shell interpretation must be handed to the
+// workspace's shell rather than field-split on the editor host: on an
+// ssh workspace a locally expanded "~" resolves to the editor host's
+// home, which does not exist on the remote.
+func TestRunTaskDefersShellExpansionToWorkspace(t *testing.T) {
+	wm := newFakeBrowser()
+	exec := newFakeScheme()
+	m := newTestManager(wm, exec)
+
+	task := Task{Name: "task", Cmd: "build", Args: []string{"~/src/rune"}}
+	require.NoError(t, m.RunTask(task))
+
+	taskIfc, ok := m.tasks.Load("task")
+	require.True(t, ok)
+	taskIfc.(*Task).WaitInflight()
+
+	cmds := exec.StartedCmds()
+	require.Len(t, cmds, 1)
+	assert.Equal(t, "sh", cmds[0].Path)
+	assert.Equal(t, []string{"-c", cmdenv.Quote("build ~/src/rune")},
+		cmds[0].Args)
+
+	assert.Equal(t, []string{"build", "~/src/rune"},
+		mustTaskInfo(t, m, "task").CmdAndArgs,
+		"the task keeps the command as the user wrote it")
+}
 
 func TestManager(t *testing.T) {
 	t.Run("StopTask closes windows with no leaks", func(t *testing.T) {
