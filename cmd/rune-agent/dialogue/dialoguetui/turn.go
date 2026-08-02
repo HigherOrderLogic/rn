@@ -437,17 +437,19 @@ func (t *Turn) SetCollapseMode(mode collapseMode) {
 	}
 }
 
-// completeRunning marks all running tool calls as done, recursing
-// into child turns. This is called when the turn ends to clean up
-// tool calls whose completion events were missed (e.g. dropped by
-// a full channel or lost to context cancellation).
+// completeRunning resolves all running tool calls as canceled,
+// recursing into child turns. This is called when the turn ends for
+// tool calls whose completion events never arrived (e.g. dropped by a
+// full channel, or lost because cancellation stopped the event loop
+// before the result was delivered). Their outcome is unknown, so they
+// must not render as successful.
 func (t *Turn) completeRunning() {
 	for id, tn := range t.tools {
 		if tn.childTurn != nil {
 			tn.childTurn.completeRunning()
 		}
 		if !tn.done {
-			t.CompleteToolCall(id, tn.name, tn.args, tn.summary, "", false)
+			t.CompleteToolCall(id, tn.name, tn.args, tn.summary, "canceled", true)
 		}
 	}
 }

@@ -4167,15 +4167,46 @@ func TestComponentBreakCompletesRunningChildTools(t *testing.T) {
 				"                               ",
 		},
 		{
-			// Break completes running child (c2) and parent (p1).
+			// Break resolves running child (c2) and parent (p1) as
+			// canceled: their results never arrived.
 			Action: func() {
 				comp.AddReceiveMessageBreak()
 			},
-			Expected: "✓ agent task                   \n" +
+			Expected: "✗ agent task                   \n" +
+				"canceled                       \n" +
 				"✓ read a                       \n" +
 				"ok                             \n" +
-				"✓ write b                      \n" +
-				blank + blank + blank + blank + blank + blank + blank + blank + blank + blank + blank + blank + blank +
+				"✗ write b                      \n" +
+				"canceled                       \n" +
+				blank + blank + blank + blank + blank + blank + blank + blank + blank + blank + blank +
+				"  ┌───────────────────────┐    \n" +
+				"  │                       │    \n" +
+				"  └───────────────────────┘    \n" +
+				"                               ",
+		},
+	}
+	comptest.TestComponent(t, comp, w, tests)
+}
+
+// TestComponentBreakCancelsRunningTool verifies a tool call whose
+// result never arrives (cancellation stops the event loop before the
+// result is delivered) renders as canceled rather than successful.
+// Regression for RUNE-305.
+func TestComponentBreakCancelsRunningTool(t *testing.T) {
+	comp := NewComponent(ComponentConfig{})
+	comp.Resize(30, 6)
+	w := term.NewStringWriter(31, 7)
+
+	blank := "                               \n"
+	tests := []comptest.TestCase{
+		{
+			Action: func() {
+				comp.AddToolCall("t1", "grep_files", "{}", "pattern")
+				comp.AddReceiveMessageBreak()
+			},
+			Expected: "✗ grep_files pattern           \n" +
+				"canceled                       \n" +
+				blank +
 				"  ┌───────────────────────┐    \n" +
 				"  │                       │    \n" +
 				"  └───────────────────────┘    \n" +

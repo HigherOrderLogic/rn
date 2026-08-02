@@ -138,8 +138,9 @@ func (t *searchTool) Execute(ctx context.Context, arguments string) agent.ToolRe
 		root = resolvePath(t.cwd, args.Path)
 	}
 	walkCtx := walkdir.WithContextFilter(boundedWalkdirContext(ctx), t.filter)
+	wsRoot := t.cwd.Path()
 
-	paths, err := walkdir.ListFiles(walkCtx, t.fs, root)
+	paths, err := listToolFiles(walkCtx, t.fs, t.cwd, root, t.filter)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: listing files: %v", err), IsError: true}
 	}
@@ -152,9 +153,11 @@ func (t *searchTool) Execute(ctx context.Context, arguments string) agent.ToolRe
 		}
 		if args.Include != "" {
 			matched, _ := filepath.Match(args.Include, filepath.Base(path))
-			return matched
+			if !matched {
+				return false
+			}
 		}
-		return true
+		return !pathIsBinary(t.fs, filepath.Join(wsRoot, path))
 	})
 
 	lines, err := walkdir.ReadLines(walkCtx, t.fs, filtered)
@@ -180,6 +183,15 @@ func (t *searchTool) Execute(ctx context.Context, arguments string) agent.ToolRe
 		}
 	}
 
+	var iterErr error
+	if !truncated {
+		iterErr = lines.Err()
+	}
+	warning, fatal := walkIterErr(ctx, iterErr, len(results))
+	if fatal {
+		return agent.ToolResult{Content: warning, IsError: true}
+	}
+
 	if len(results) == 0 {
 		return agent.ToolResult{Content: "no matches found"}
 	}
@@ -189,7 +201,7 @@ func (t *searchTool) Execute(ctx context.Context, arguments string) agent.ToolRe
 	var discoveredPaths []string
 	for _, line := range results {
 		if relPath, _, ok := strings.Cut(line, ":"); ok {
-			absPath := filepath.Join(root, relPath)
+			absPath := filepath.Join(wsRoot, relPath)
 			if _, dup := seen[absPath]; !dup {
 				seen[absPath] = struct{}{}
 				discoveredPaths = append(discoveredPaths, absPath)
@@ -201,6 +213,9 @@ func (t *searchTool) Execute(ctx context.Context, arguments string) agent.ToolRe
 	output := strings.Join(results, "\n")
 	if truncated {
 		output += fmt.Sprintf("\n\n(results truncated at %d matches)", maxSearchResults)
+	}
+	if warning != "" {
+		output += "\n\n" + warning
 	}
 	return agent.ToolResult{Content: output}
 }

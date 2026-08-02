@@ -36,6 +36,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"unicode/utf8"
@@ -1432,6 +1433,148 @@ func setupWorkspace(t *testing.T) string {
 		[]byte("package sub\n\nfunc Foo() {}\n"), 0o644))
 
 	return dir
+}
+
+// blockingFS blocks the first OpenFile of blockFile until release is
+// closed, so tests can cancel a search while it is in flight.
+type blockingFS struct {
+	localFS
+	blockFile string
+	opened    chan struct{}
+	release   chan struct{}
+	once      sync.Once
+}
+
+func (f *blockingFS) OpenFile(path string, flag int, mode os.FileMode) (workspaceapi.File, error) {
+	if filepath.Base(path) == f.blockFile {
+		f.once.Do(func() { close(f.opened) })
+		<-f.release
+	}
+	return f.localFS.OpenFile(path, flag, mode)
+}
+
+// TestSearchTools_explicitFilePath verifies that naming a single file
+// searches only that file. walkdir.ListFiles promotes a file path to
+// its nearest parent directory, which silently searched the whole
+// surrounding tree. Regression for RUNE-305.
+func TestSearchTools_explicitFilePath(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "target.txt"),
+		[]byte("needle in target\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "sibling.txt"),
+		[]byte("needle in sibling\n"), 0o644))
+
+	tests := []struct {
+		name string
+		tool agent.Tool
+		args string
+	}{
+		{
+			"search_content",
+			newSearch(localFS{root: dir}, dirURI(dir), NewFileTracker(), nil),
+			`{"pattern":"needle","path":"target.txt","include":null}`,
+		},
+		{
+			"find_files",
+			newFindFiles(localFS{root: dir}, dirURI(dir), NewFileTracker(), nil),
+			`{"pattern":".*","path":"target.txt"}`,
+		},
+		{
+			"grep_files",
+			NewGrepFiles(localFS{root: dir}, dirURI(dir), NewFileTracker()),
+			`{"pattern":"needle","path":"target.txt"}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.tool.Execute(t.Context(), tt.args)
+			require.False(t, result.IsError, result.Content)
+			assert.Contains(t, result.Content, "target.txt")
+			assert.NotContains(t, result.Content, "sibling.txt")
+		})
+	}
+}
+
+// TestSearchContent_skipsBinaryFiles covers search_content's documented
+// binary exclusion: the pattern is on a clean line before the first NUL
+// byte, so the line scanner alone would still report the file.
+func TestSearchContent_skipsBinaryFiles(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "bin.dat"),
+		[]byte("needle in binary\n\x00\x00\x01\x02"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "text.txt"),
+		[]byte("needle in text\n"), 0o644))
+
+	tool := newSearch(localFS{root: dir}, dirURI(dir), NewFileTracker(), nil)
+	result := tool.Execute(t.Context(), `{"pattern":"needle","path":"","include":null}`)
+
+	require.False(t, result.IsError, result.Content)
+	assert.Contains(t, result.Content, "text.txt")
+	assert.NotContains(t, result.Content, "bin.dat")
+}
+
+// TestSearchTools_canceledContext verifies a canceled search reports an
+// error instead of rendering as a successful (possibly empty) result.
+func TestSearchTools_canceledContext(t *testing.T) {
+	dir := setupWorkspace(t)
+	tests := []struct {
+		name string
+		tool agent.Tool
+		args string
+	}{
+		{
+			"search_content",
+			newSearch(localFS{root: dir}, dirURI(dir), NewFileTracker(), nil),
+			`{"pattern":"hello","path":"","include":null}`,
+		},
+		{
+			"find_files",
+			newFindFiles(localFS{root: dir}, dirURI(dir), NewFileTracker(), nil),
+			`{"pattern":".*","path":""}`,
+		},
+		{
+			"grep_files",
+			NewGrepFiles(localFS{root: dir}, dirURI(dir), NewFileTracker()),
+			`{"pattern":"hello"}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			result := tt.tool.Execute(ctx, tt.args)
+			assert.True(t, result.IsError, result.Content)
+		})
+	}
+}
+
+// TestSearchContent_cancelDuringSearch verifies that matches collected
+// before a cancellation are not returned as a successful result.
+func TestSearchContent_cancelDuringSearch(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "match.txt"),
+		[]byte("needle here\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "block.txt"),
+		[]byte("needle here\n"), 0o644))
+
+	fs := &blockingFS{
+		localFS:   localFS{root: dir},
+		blockFile: "block.txt",
+		opened:    make(chan struct{}),
+		release:   make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	go func() {
+		<-fs.opened
+		cancel()
+		close(fs.release)
+	}()
+
+	tool := newSearch(fs, dirURI(dir), NewFileTracker(), nil)
+	result := tool.Execute(ctx, `{"pattern":"needle","path":"","include":null}`)
+
+	assert.True(t, result.IsError, result.Content)
+	assert.NotContains(t, result.Content, "match.txt")
 }
 
 func TestDefaultTools_wiresApplyPatchLSP(t *testing.T) {

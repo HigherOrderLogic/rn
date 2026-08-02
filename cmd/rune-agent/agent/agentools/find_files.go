@@ -121,8 +121,9 @@ func (t *findFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		root = resolvePath(t.cwd, args.Path)
 	}
 	walkCtx := walkdir.WithContextFilter(boundedWalkdirContext(ctx), t.filter)
+	wsRoot := t.cwd.Path()
 
-	paths, err := walkdir.ListFiles(walkCtx, t.fs, root)
+	paths, err := listToolFiles(walkCtx, t.fs, t.cwd, root, t.filter)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: listing files: %v", err), IsError: true}
 	}
@@ -138,6 +139,7 @@ func (t *findFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 	defer func() { _ = filtered.Close() }()
 
 	var results []string
+	truncated := false
 	for {
 		path, ok := filtered.Next(ctx)
 		if !ok {
@@ -145,8 +147,18 @@ func (t *findFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		}
 		results = append(results, path)
 		if len(results) >= maxFindResults {
+			truncated = true
 			break
 		}
+	}
+
+	var iterErr error
+	if !truncated {
+		iterErr = filtered.Err()
+	}
+	warning, fatal := walkIterErr(ctx, iterErr, len(results))
+	if fatal {
+		return agent.ToolResult{Content: warning, IsError: true}
 	}
 
 	if len(results) == 0 {
@@ -156,13 +168,16 @@ func (t *findFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 	// Track discovered paths so file-reading tools can consume them.
 	discoveredPaths := make([]string, len(results))
 	for i, relPath := range results {
-		discoveredPaths[i] = filepath.Join(root, relPath)
+		discoveredPaths[i] = filepath.Join(wsRoot, relPath)
 	}
 	t.tracker.TrackDiscovery(ctx, discoveredPaths)
 
 	output := strings.Join(results, "\n")
-	if len(results) >= maxFindResults {
+	if truncated {
 		output += fmt.Sprintf("\n\n(results truncated at %d files)", maxFindResults)
+	}
+	if warning != "" {
+		output += "\n\n" + warning
 	}
 	return agent.ToolResult{Content: output}
 }

@@ -151,8 +151,9 @@ func (t *grepFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		root = resolvePath(t.cwd, args.Path)
 	}
 	walkCtx := boundedWalkdirContext(ctx)
+	wsRoot := t.cwd.Path()
 
-	paths, err := walkdir.ListFiles(walkCtx, t.fs, root)
+	paths, err := listToolFiles(walkCtx, t.fs, t.cwd, root, nil)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: listing files: %v", err), IsError: true}
 	}
@@ -173,7 +174,7 @@ func (t *grepFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		// without recognised extensions). Reading lines from them
 		// would emit invalid UTF-8 and bloats the line iterator
 		// channel; this matches ripgrep's default behaviour.
-		return !pathIsBinary(t.fs, filepath.Join(root, path))
+		return !pathIsBinary(t.fs, filepath.Join(wsRoot, path))
 	})
 
 	lines, err := walkdir.ReadLines(walkCtx, t.fs, filtered)
@@ -200,7 +201,7 @@ func (t *grepFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 		content := utf8validate.Sanitize(contentAfterLineNum(line))
 		if re.MatchString(content) {
 			seen[relPath] = struct{}{}
-			absPath := filepath.Join(root, relPath)
+			absPath := filepath.Join(wsRoot, relPath)
 			var modTime time.Time
 			if info, err := t.fs.Stat(absPath); err == nil {
 				modTime = info.ModTime()
@@ -211,6 +212,11 @@ func (t *grepFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 				modTime: modTime,
 			})
 		}
+	}
+
+	warning, fatal := walkIterErr(ctx, lines.Err(), len(matches))
+	if fatal {
+		return agent.ToolResult{Content: warning, IsError: true}
 	}
 
 	if len(matches) == 0 {
@@ -239,6 +245,9 @@ func (t *grepFilesTool) Execute(ctx context.Context, arguments string) agent.Too
 	output := strings.Join(results, "\n")
 	if truncated {
 		output += fmt.Sprintf("\n\n(results truncated at %d files)", limit)
+	}
+	if warning != "" {
+		output += "\n\n" + warning
 	}
 	return agent.ToolResult{Content: output}
 }

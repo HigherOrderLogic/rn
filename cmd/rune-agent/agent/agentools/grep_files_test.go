@@ -248,7 +248,7 @@ func TestGrepFiles_skipsBinaryFiles(t *testing.T) {
 	// Plain text file with the same token.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "text.txt"), []byte("a needle in a haystack\n"), 0o644))
 
-	tool := NewGrepFiles(localFS{}, dirURI(dir), NewFileTracker())
+	tool := NewGrepFiles(localFS{root: dir}, dirURI(dir), NewFileTracker())
 	result := tool.Execute(t.Context(), `{"pattern":"needle"}`)
 
 	require.False(t, result.IsError)
