@@ -153,6 +153,7 @@ func TestReleaseInstallE2E(t *testing.T) {
 		"",  // billingMailFrom
 		nil, // contactHandler
 		nil, // newsletterHandler
+		nil, // newsletterStore
 		oxapi.HealthConfig{
 			ProbeSecret:   "test-probe-secret",
 			ReleaseBucket: gcsClient.Bucket(bucketName),
