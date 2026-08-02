@@ -5663,94 +5663,666 @@ func TestViNormalModeArrowEdgeReturnsUnhandled(t *testing.T) {
 	})
 }
 
-func TestViJoinNoSpace(t *testing.T) {
-	newVi := func(t *testing.T, content string, opts ...Option) *viHandlerImpl {
-		t.Helper()
-		vi := setupVi(t, content, 2, opts...)
-		vi.Resize(40, 10)
-		vi.Draw(term.NoopWriter{})
-		return vi
+// TestViJoin pins the normal-mode join commands: J joins with a single
+// space (dropping the next line's indent), gJ joins verbatim.
+func TestViJoin(t *testing.T) {
+	type joinCase struct {
+		name          string
+		content       string
+		at            *term.Coordinates
+		before        func(t *testing.T, vi *viHandlerImpl)
+		width         int
+		wrap          bool
+		seq           string
+		wantBuffer    string
+		wantCursor    *term.Coordinates
+		wantUnhandled bool
 	}
 
-	runEvents := func(t *testing.T, vi *viHandlerImpl, seq string) {
-		t.Helper()
-		for _, ch := range seq {
-			_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
-			require.True(t, handled, "sequence %q failed on %q", seq, string(ch))
+	at := func(x, y int) *term.Coordinates {
+		return &term.Coordinates{X: x, Y: y}
+	}
+
+	lineComment := func(prefix string) func(*testing.T, *viHandlerImpl) {
+		return func(_ *testing.T, vi *viHandlerImpl) {
+			vi.cursor.SetCommentSpec(text.CommentSpec{Line: []string{prefix}})
 		}
 	}
 
-	t.Run("joins current line with next without adding a space", func(t *testing.T) {
-		vi := newVi(t, "hello\nworld\nfoo")
-
-		runEvents(t, vi, "gJ")
-
-		assert.Equal(t, "helloworld\nfoo", vi.less.Buffer().String())
-		assert.Equal(t, term.Coordinates{X: len("hello"), Y: 0}, vi.cursor.Coordinates())
-		assert.Equal(t, normalMode, vi.mode())
-		assert.Equal(t, 1, vi.count)
-		assert.Empty(t, vi.countDigits)
-	})
-
-	t.Run("joins blank line without inserting padding", func(t *testing.T) {
-		vi := newVi(t, "hello\n\nworld")
-
-		runEvents(t, vi, "gJ")
-
-		assert.Equal(t, "hello\nworld", vi.less.Buffer().String())
-		assert.Equal(t, term.Coordinates{X: len("hello") - 1, Y: 0}, vi.cursor.Coordinates())
-		assert.Equal(t, normalMode, vi.mode())
-	})
-
-	t.Run("from last line gJ is a no-op and exits g mode", func(t *testing.T) {
-		vi := newVi(t, "hello\nworld\nfoo")
-		vi.cursor.MoveLastLine()
+	run := func(t *testing.T, tc joinCase) {
+		t.Helper()
+		width := tc.width
+		if width == 0 {
+			width = 40
+		}
+		vi := setupVi(t, tc.content, 2, WithWrap(tc.wrap))
+		vi.Resize(width, 10)
 		vi.Draw(term.NoopWriter{})
+		if tc.at != nil {
+			require.True(t, vi.setCursorAtScroll(*tc.at))
+		}
+		if tc.before != nil {
+			tc.before(t, vi)
+		}
 
-		before := vi.less.Buffer().String()
-		beforeCoord := vi.cursor.Coordinates()
+		events := parseSearchOpEvents(tc.seq)
+		for i, ev := range events {
+			_, handled := vi.Handle(ev)
+			if tc.wantUnhandled && i == len(events)-1 {
+				assert.Falsef(t, handled, "sequence %q at %v", tc.seq, ev)
+				continue
+			}
+			require.Truef(t, handled, "sequence %q failed at %v", tc.seq, ev)
+		}
 
-		runEvents(t, vi, "gJ")
-
-		assert.Equal(t, before, vi.less.Buffer().String())
-		assert.Equal(t, beforeCoord, vi.cursor.Coordinates())
+		assert.Equal(t, tc.wantBuffer, vi.less.Buffer().String())
+		if tc.wantCursor != nil {
+			assert.Equal(t, *tc.wantCursor, vi.cursor.CursorAtScroll())
+		}
 		assert.Equal(t, normalMode, vi.mode())
-	})
-
-	t.Run("repeated gJ can join multiple lines", func(t *testing.T) {
-		vi := newVi(t, "a\nb\nc\nd")
-
-		runEvents(t, vi, "gJgJ")
-
-		assert.Equal(t, "abc\nd", vi.less.Buffer().String())
-		assert.Equal(t, term.Coordinates{X: 2, Y: 0}, vi.cursor.Coordinates())
-		assert.Equal(t, normalMode, vi.mode())
-	})
-
-	t.Run("count before gJ is reset after command", func(t *testing.T) {
-		vi := newVi(t, "abc\ndef\nghi")
-
-		runEvents(t, vi, "2gJ")
-
-		assert.Equal(t, "abcdef\nghi", vi.less.Buffer().String())
-		assert.Equal(t, term.Coordinates{X: len("abc"), Y: 0}, vi.cursor.Coordinates())
-		assert.Equal(t, normalMode, vi.mode())
+		_, selected := vi.Selection()
+		assert.False(t, selected)
 		assert.Equal(t, 1, vi.count)
 		assert.Empty(t, vi.countDigits)
-	})
+	}
 
-	t.Run("unsupported g sequence returns to normal mode", func(t *testing.T) {
-		vi := newVi(t, "abc\ndef")
+	for _, tc := range []joinCase{
+		// --- J: the space it inserts ---
+		{
+			name:       "J inserts a space between the two lines",
+			content:    "hello\nworld\nfoo",
+			seq:        "J",
+			wantBuffer: "hello world\nfoo",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "J joins from anywhere on the line",
+			content:    "hello\nworld",
+			at:         at(3, 0),
+			seq:        "J",
+			wantBuffer: "hello world",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "J drops the next line's leading spaces",
+			content:    "hello\n    world",
+			seq:        "J",
+			wantBuffer: "hello world",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "J drops the next line's leading tab",
+			content:    "hello\n\tworld",
+			seq:        "J",
+			wantBuffer: "hello world",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "J drops the next line's leading nulls",
+			content:    "hello\n\x00\x00world",
+			seq:        "J",
+			wantBuffer: "hello world",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "J adds no space after a trailing space",
+			content:    "hello \nworld",
+			seq:        "J",
+			wantBuffer: "hello world",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "J keeps every trailing space and adds none",
+			content:    "hello  \nworld",
+			seq:        "J",
+			wantBuffer: "hello  world",
+			wantCursor: at(7, 0),
+		},
+		{
+			name:       "J adds no space after a trailing tab",
+			content:    "hello\t\nworld",
+			seq:        "J",
+			wantBuffer: "hello\tworld",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "J adds no space after a trailing null",
+			content:    "hello\x00\nworld",
+			seq:        "J",
+			wantBuffer: "hello\x00world",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "J adds no space before a closing paren",
+			content:    "foo(bar\n)baz",
+			seq:        "J",
+			wantBuffer: "foo(bar)baz",
+			wantCursor: at(7, 0),
+		},
+		{
+			name:       "J drops indent and adds no space before a closing paren",
+			content:    "foo(bar\n\t)baz",
+			seq:        "J",
+			wantBuffer: "foo(bar)baz",
+			wantCursor: at(7, 0),
+		},
+		{
+			name:       "J inserts a space between wide characters",
+			content:    "世界\nこんにちは",
+			seq:        "J",
+			wantBuffer: "世界 こんにちは",
+			wantCursor: at(2, 0),
+		},
+		// --- J: blank and empty lines ---
+		{
+			name:       "J adds no space when the current line is empty",
+			content:    "\nworld\nfoo",
+			seq:        "J",
+			wantBuffer: "world\nfoo",
+			wantCursor: at(0, 0),
+		},
+		{
+			name:       "J drops the next indent when the current line is empty",
+			content:    "\n   world",
+			seq:        "J",
+			wantBuffer: "world",
+			wantCursor: at(0, 0),
+		},
+		{
+			name:       "J on a blank current line keeps its blanks",
+			content:    "   \nworld",
+			seq:        "J",
+			wantBuffer: "   world",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "J removes an empty next line without padding",
+			content:    "hello\n\nworld",
+			seq:        "J",
+			wantBuffer: "hello\nworld",
+			wantCursor: at(4, 0),
+		},
+		{
+			name:       "J removes a blank next line entirely",
+			content:    "hello\n \t \nworld",
+			seq:        "J",
+			wantBuffer: "hello\nworld",
+			wantCursor: at(4, 0),
+		},
+		{
+			name:       "J on the last text line absorbs the trailing empty line",
+			content:    "hello\nworld\n",
+			at:         at(0, 1),
+			seq:        "J",
+			wantBuffer: "hello\nworld",
+			wantCursor: at(4, 1),
+		},
+		// --- J: boundaries ---
+		{
+			name:       "J on the last line is a no-op",
+			content:    "hello\nworld",
+			at:         at(0, 1),
+			seq:        "J",
+			wantBuffer: "hello\nworld",
+			wantCursor: at(0, 1),
+		},
+		{
+			name:       "J on a single-line buffer is a no-op",
+			content:    "hello",
+			seq:        "J",
+			wantBuffer: "hello",
+			wantCursor: at(0, 0),
+		},
+		{
+			name:       "J on an empty buffer is a no-op",
+			content:    "",
+			seq:        "J",
+			wantBuffer: "",
+			wantCursor: at(0, 0),
+		},
+		{
+			name:    "J with a stale cursor past the last row is a no-op",
+			content: "hello\nworld",
+			before: func(t *testing.T, vi *viHandlerImpl) {
+				vi.cursor.SetCursorAtScroll(term.Coordinates{Y: 5})
+			},
+			seq:        "J",
+			wantBuffer: "hello\nworld",
+		},
+		{
+			name:       "J joins logical lines when wrapping",
+			content:    "hello\nworld",
+			width:      4,
+			wrap:       true,
+			seq:        "J",
+			wantBuffer: "hello world",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "J from a wrapped continuation joins logical lines",
+			content:    "hello\nworld",
+			width:      4,
+			wrap:       true,
+			at:         at(4, 0),
+			seq:        "J",
+			wantBuffer: "hello world",
+			wantCursor: at(5, 0),
+		},
+		// --- J: counts ---
+		{
+			name:       "1J joins two lines",
+			content:    "a\nb\nc",
+			seq:        "1J",
+			wantBuffer: "a b\nc",
+			wantCursor: at(1, 0),
+		},
+		{
+			name:       "2J joins two lines",
+			content:    "a\nb\nc\nd",
+			seq:        "2J",
+			wantBuffer: "a b\nc\nd",
+			wantCursor: at(1, 0),
+		},
+		{
+			name:       "3J joins three lines and leaves the cursor at the last join",
+			content:    "a\nb\nc\nd",
+			seq:        "3J",
+			wantBuffer: "a b c\nd",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "3J drops the indent of every joined line",
+			content:    "a\n  b\n\tc\nd",
+			seq:        "3J",
+			wantBuffer: "a b c\nd",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "count larger than the remaining lines is clamped",
+			content:    "a\nb\nc",
+			seq:        "9J",
+			wantBuffer: "a b c",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "counted J on the last line is a no-op",
+			content:    "a\nb",
+			at:         at(0, 1),
+			seq:        "9J",
+			wantBuffer: "a\nb",
+			wantCursor: at(0, 1),
+		},
+		{
+			name:       "successive J commands keep joining",
+			content:    "a\nb\nc\nd",
+			seq:        "JJ",
+			wantBuffer: "a b c\nd",
+			wantCursor: at(3, 0),
+		},
+		// --- J: comment leaders ---
+		{
+			name:       "J removes the next line's comment leader",
+			content:    "// foo\n// bar",
+			before:     lineComment("//"),
+			seq:        "J",
+			wantBuffer: "// foo bar",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "J removes an indented comment leader",
+			content:    "// foo\n\t//   bar",
+			before:     lineComment("//"),
+			seq:        "J",
+			wantBuffer: "// foo bar",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "J keeps the leader when the current line is not a comment",
+			content:    "foo\n// bar",
+			before:     lineComment("//"),
+			seq:        "J",
+			wantBuffer: "foo // bar",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "J drops a leader-only next line entirely",
+			content:    "// foo\n//",
+			before:     lineComment("//"),
+			seq:        "J",
+			wantBuffer: "// foo",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "3J removes the leader of every joined comment line",
+			content:    "// a\n// b\n// c\nd",
+			before:     lineComment("//"),
+			seq:        "3J",
+			wantBuffer: "// a b c\nd",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "J without a configured comment spec keeps the leader",
+			content:    "// foo\n// bar",
+			seq:        "J",
+			wantBuffer: "// foo // bar",
+			wantCursor: at(6, 0),
+		},
+		// --- J: visual mode ---
+		{
+			name:       "visual J joins the selected line with the next",
+			content:    "a\nb\nc",
+			seq:        "vJ",
+			wantBuffer: "a b\nc",
+			wantCursor: at(1, 0),
+		},
+		{
+			name:       "visual J joins every line the selection spans",
+			content:    "a\nb\nc\nd",
+			seq:        "vjjJ",
+			wantBuffer: "a b c\nd",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "visual line J joins the selected lines",
+			content:    "a\nb\nc\nd",
+			seq:        "VjjJ",
+			wantBuffer: "a b c\nd",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "visual line J on a single line still joins two",
+			content:    "a\nb\nc",
+			seq:        "VJ",
+			wantBuffer: "a b\nc",
+			wantCursor: at(1, 0),
+		},
+		{
+			name:       "visual block J joins the spanned lines",
+			content:    "aa\nbb\ncc",
+			seq:        "<c-v>jJ",
+			wantBuffer: "aa bb\ncc",
+			wantCursor: at(2, 0),
+		},
+		{
+			name:       "visual J drops the indent of every joined line",
+			content:    "a\n    b\n\tc\nd",
+			seq:        "VjjJ",
+			wantBuffer: "a b c\nd",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "visual J on an upward selection joins from the top",
+			content:    "a\nb\nc\nd",
+			at:         at(0, 2),
+			seq:        "VkJ",
+			wantBuffer: "a\nb c\nd",
+			wantCursor: at(1, 1),
+		},
+		{
+			name:       "visual J on the last line is a no-op",
+			content:    "a\nb",
+			at:         at(0, 1),
+			seq:        "VJ",
+			wantBuffer: "a\nb",
+			wantCursor: at(0, 1),
+		},
+		{
+			name:       "visual J ignores a count typed inside the selection",
+			content:    "a\nb\nc\nd",
+			seq:        "V3J",
+			wantBuffer: "a b\nc\nd",
+			wantCursor: at(1, 0),
+		},
+		{
+			name:       "visual J removes leaders from every joined line",
+			content:    "// a\n// b\n// c\nd",
+			before:     lineComment("//"),
+			seq:        "VjjJ",
+			wantBuffer: "// a b c\nd",
+			wantCursor: at(6, 0),
+		},
+		// --- gJ: verbatim join ---
+		{
+			name:       "gJ joins without inserting a space",
+			content:    "hello\nworld\nfoo",
+			seq:        "gJ",
+			wantBuffer: "helloworld\nfoo",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "gJ keeps the next line's leading spaces",
+			content:    "hello\n    world",
+			seq:        "gJ",
+			wantBuffer: "hello    world",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "gJ keeps the next line's leading tab",
+			content:    "hello\n\tworld",
+			seq:        "gJ",
+			wantBuffer: "hello\tworld",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "gJ keeps the current line's trailing space",
+			content:    "hello \nworld",
+			seq:        "gJ",
+			wantBuffer: "hello world",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "gJ keeps a trailing tab",
+			content:    "hello\t\nworld",
+			seq:        "gJ",
+			wantBuffer: "hello\tworld",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "gJ keeps null cells on both sides",
+			content:    "hello\x00\n\x00world",
+			seq:        "gJ",
+			wantBuffer: "hello\x00\x00world",
+			wantCursor: at(6, 0),
+		},
+		{
+			name:       "gJ does not separate wide characters",
+			content:    "世界\nこんにちは",
+			seq:        "gJ",
+			wantBuffer: "世界こんにちは",
+			wantCursor: at(2, 0),
+		},
+		{
+			name:       "gJ removes an empty next line",
+			content:    "hello\n\nworld",
+			seq:        "gJ",
+			wantBuffer: "hello\nworld",
+			wantCursor: at(4, 0),
+		},
+		{
+			name:       "gJ keeps the blanks of a blank next line",
+			content:    "hello\n   \nworld",
+			seq:        "gJ",
+			wantBuffer: "hello   \nworld",
+			wantCursor: at(5, 0),
+		},
+		{
+			name:       "gJ on an empty current line removes it",
+			content:    "\nworld\nfoo",
+			seq:        "gJ",
+			wantBuffer: "world\nfoo",
+			wantCursor: at(0, 0),
+		},
+		{
+			name:       "gJ on the last text line absorbs the trailing empty line",
+			content:    "hello\nworld\n",
+			at:         at(0, 1),
+			seq:        "gJ",
+			wantBuffer: "hello\nworld",
+			wantCursor: at(4, 1),
+		},
+		{
+			name:       "gJ on the last line is a no-op and exits g mode",
+			content:    "hello\nworld\nfoo",
+			at:         at(0, 2),
+			seq:        "gJ",
+			wantBuffer: "hello\nworld\nfoo",
+			wantCursor: at(0, 2),
+		},
+		{
+			name:       "gJ on a single-line buffer is a no-op",
+			content:    "hello",
+			seq:        "gJ",
+			wantBuffer: "hello",
+			wantCursor: at(0, 0),
+		},
+		{
+			name:       "gJ on an empty buffer is a no-op",
+			content:    "",
+			seq:        "gJ",
+			wantBuffer: "",
+			wantCursor: at(0, 0),
+		},
+		{
+			name:       "2gJ joins two lines",
+			content:    "abc\ndef\nghi",
+			seq:        "2gJ",
+			wantBuffer: "abcdef\nghi",
+			wantCursor: at(3, 0),
+		},
+		{
+			name:       "3gJ joins three lines",
+			content:    "a\nb\nc\nd",
+			seq:        "3gJ",
+			wantBuffer: "abc\nd",
+			wantCursor: at(2, 0),
+		},
+		{
+			name:       "counted gJ clamps to the remaining lines",
+			content:    "a\nb\nc",
+			seq:        "9gJ",
+			wantBuffer: "abc",
+			wantCursor: at(2, 0),
+		},
+		{
+			name:       "successive gJ commands keep joining",
+			content:    "a\nb\nc\nd",
+			seq:        "gJgJ",
+			wantBuffer: "abc\nd",
+			wantCursor: at(2, 0),
+		},
+		// --- gJ: visual mode ---
+		{
+			name:       "visual gJ joins the selection verbatim",
+			content:    "a\n   b\nc",
+			seq:        "VjgJ",
+			wantBuffer: "a   b\nc",
+			wantCursor: at(1, 0),
+		},
+		{
+			name:       "visual gJ joins every line the selection spans",
+			content:    "a\nb\nc\nd",
+			seq:        "vjjgJ",
+			wantBuffer: "abc\nd",
+			wantCursor: at(2, 0),
+		},
+		{
+			name:       "visual gJ on a single line still joins two",
+			content:    "a\nb\nc",
+			seq:        "VgJ",
+			wantBuffer: "ab\nc",
+			wantCursor: at(1, 0),
+		},
+		{
+			name:       "visual block gJ joins the spanned lines",
+			content:    "aa\nbb\ncc",
+			seq:        "<c-v>jgJ",
+			wantBuffer: "aabb\ncc",
+			wantCursor: at(2, 0),
+		},
+		{
+			name:       "visual gJ keeps the comment leader",
+			content:    "// a\n// b\nc",
+			before:     lineComment("//"),
+			seq:        "VjgJ",
+			wantBuffer: "// a// b\nc",
+			wantCursor: at(4, 0),
+		},
+		{
+			name:       "visual gJ on the last line is a no-op",
+			content:    "a\nb",
+			at:         at(0, 1),
+			seq:        "VgJ",
+			wantBuffer: "a\nb",
+			wantCursor: at(0, 1),
+		},
+		{
+			name:          "unsupported g sequence returns to normal mode",
+			content:       "abc\ndef",
+			seq:           "gx",
+			wantBuffer:    "abc\ndef",
+			wantUnhandled: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			run(t, tc)
+		})
+	}
+}
 
-		_, handled := vi.Handle(term.Event{Type: term.EventKey, Ch: 'g'})
-		require.True(t, handled)
-		assert.Equal(t, gMode, vi.mode())
+// TestViJoinUndoAndRepeat pins that a join is a single undo step and
+// that `.` replays it.
+func TestViJoinUndoAndRepeat(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		content    string
+		seq        string
+		wantBuffer string
+	}{
+		{
+			name:       "u restores a J in one step",
+			content:    "a\nb\nc",
+			seq:        "Ju",
+			wantBuffer: "a\nb\nc",
+		},
+		{
+			name:       "u restores a counted J in one step",
+			content:    "a\nb\nc\nd",
+			seq:        "3Ju",
+			wantBuffer: "a\nb\nc\nd",
+		},
+		{
+			name:       "u restores a gJ in one step",
+			content:    "a\nb\nc",
+			seq:        "gJu",
+			wantBuffer: "a\nb\nc",
+		},
+		{
+			name:       "u restores a counted gJ in one step",
+			content:    "a\nb\nc\nd",
+			seq:        "3gJu",
+			wantBuffer: "a\nb\nc\nd",
+		},
+		{
+			name:       "dot repeats J",
+			content:    "a\nb\nc\nd",
+			seq:        "J.",
+			wantBuffer: "a b c\nd",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := cell.NewBuffer()
+			_, err := buf.ReadFrom(strings.NewReader(tc.content))
+			require.NoError(t, err)
 
-		_, handled = vi.Handle(term.Event{Type: term.EventKey, Ch: 'x'})
-		assert.False(t, handled)
-		assert.Equal(t, normalMode, vi.mode())
-		assert.Equal(t, "abc\ndef", vi.less.Buffer().String())
-	})
+			vi := New(buf, uri)
+			vi.Resize(40, 10)
+			for _, ch := range tc.seq {
+				vi.Handle(term.Event{Type: term.EventKey, Ch: ch})
+			}
+
+			assert.Equal(t, tc.wantBuffer, buf.String())
+		})
+	}
 }
 
 func TestVigg(t *testing.T) {

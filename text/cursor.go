@@ -2728,6 +2728,86 @@ func (c *Cursor) ConflateContext(ctx context.Context) (ok bool) {
 	return
 }
 
+// Join is equivalent to calling JoinContext with the cursor context.
+func (c *Cursor) Join() (ok bool) {
+	return c.JoinContext(c.ctx)
+}
+
+// JoinContext joins the current line with the one below it, separated by
+// a single space, and leaves the cursor at the join point. It follows
+// Vim's J: the next line's leading blanks are dropped, and no space is
+// inserted when either line is blank, when the current line already ends
+// in a blank, or when the next line starts with a closing parenthesis.
+// A line comment leader shared by both lines is dropped as well, matching
+// Vim's "j" format option.
+func (c *Cursor) JoinContext(ctx context.Context) (ok bool) {
+	enable := c.disablePublishing()
+	defer enable()
+
+	pos := c.cursorAtScroll()
+	cells := c.view().RawCells()
+	if pos.Y < 0 || pos.Y+1 >= len(cells) {
+		return false
+	}
+	curr, next := cells[pos.Y], cells[pos.Y+1]
+
+	start := skipBlankCells(next, 0)
+	if leader, found := c.sharedCommentLeader(curr, next, start); found {
+		start = skipBlankCells(next, start+leader)
+	}
+
+	var separator string
+	if len(curr) > 0 && start < len(next) &&
+		next[start].Ch != ')' &&
+		isNoneOf(curr[len(curr)-1], blankCharacters) {
+		separator = " "
+	}
+
+	from, _, _ := c.buffer().Edit(ctx,
+		term.Coordinates{Y: pos.Y, X: len(curr)},
+		term.Coordinates{Y: pos.Y + 1, X: start},
+		separator)
+	c.setCursorAfterUpdate(from)
+	return true
+}
+
+// sharedCommentLeader reports the cell length of the line comment leader
+// that both lines start with. Vim only strips the leader from the joined
+// line when the line above is a comment too.
+func (c *Cursor) sharedCommentLeader(curr, next []term.Cell, nextStart int) (int, bool) {
+	if !c.commentSpec.HasLine() {
+		return 0, false
+	}
+	currStart := skipBlankCells(curr, 0)
+	for _, prefix := range c.commentSpec.Line {
+		leader := []rune(prefix)
+		if cellsHavePrefix(curr, currStart, leader) &&
+			cellsHavePrefix(next, nextStart, leader) {
+			return len(leader), true
+		}
+	}
+	return 0, false
+}
+
+func skipBlankCells(cells []term.Cell, at int) int {
+	for at < len(cells) && isOneOf(cells[at], blankCharacters) {
+		at++
+	}
+	return at
+}
+
+func cellsHavePrefix(cells []term.Cell, at int, prefix []rune) bool {
+	if at+len(prefix) > len(cells) {
+		return false
+	}
+	for i, r := range prefix {
+		if cells[at+i].Ch != r {
+			return false
+		}
+	}
+	return true
+}
+
 // DeleteHorizontalSpace deletes the blank characters (spaces and tabs)
 // surrounding the cursor on the current line, leaving the cursor where the
 // whitespace run began. It mirrors Emacs delete-horizontal-space (M-\).

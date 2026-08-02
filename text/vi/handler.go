@@ -1083,7 +1083,7 @@ func (vi *viHandlerImpl) handleNormal(ev term.Event) (quit, handled bool) {
 			vi.cursor.MoveStartLineNonBlank()
 			vi.setInsertMode()
 		case 'J':
-			vi.cursor.Conflate()
+			vi.repeatJoin(vi.cursor.Join)
 		case 'a':
 			vi.cursor.MoveRight()
 			vi.setInsertMode()
@@ -1437,6 +1437,41 @@ func (vi *viHandlerImpl) repeatMotion(fn func() bool) bool {
 			if vi.cursor.CursorAtScroll() == before {
 				break
 			}
+		}
+		ok = true
+	}
+	return ok
+}
+
+// repeatJoin applies a join command count-1 times, with a minimum of
+// one: Vim's J counts lines to join, not joins to perform.
+func (vi *viHandlerImpl) repeatJoin(fn func() bool) bool {
+	var ok bool
+	for range max(1, vi.motionCount()-1) {
+		if !fn() {
+			break
+		}
+		ok = true
+	}
+	return ok
+}
+
+// joinSelection collapses the lines spanned by the visual selection,
+// with a minimum of two lines. Vim ignores any count typed in visual
+// mode here: the selection alone decides how many lines are joined.
+func (vi *viHandlerImpl) joinSelection(fn func() bool) bool {
+	from, to, found := vi.cursor.SelectionBounds()
+	if !found {
+		return false
+	}
+	from, to = term.CoordinatesSort(from, to)
+	vi.cursor.Unselect()
+	vi.setCursorAtScroll(term.Coordinates{Y: from.Y})
+
+	var ok bool
+	for range max(1, to.Y-from.Y) {
+		if !fn() {
+			break
 		}
 		ok = true
 	}
@@ -1894,6 +1929,9 @@ func (vi *viHandlerImpl) handleVisual(ev term.Event) (quit, handled bool) {
 			vi.setNormalMode()
 		case 'y':
 			vi.copySelection()
+			vi.setNormalMode()
+		case 'J':
+			vi.joinSelection(vi.cursor.Join)
 			vi.setNormalMode()
 		case 'd', 'x':
 			vi.copySelectionForDelete()
@@ -3236,7 +3274,11 @@ func (vi *viHandlerImpl) handleGo(ev term.Event) (quit, handled bool) {
 			vi.repeatMotion(vi.cursor.MoveLeftEndWordGroup)
 			handled = true
 		case 'J':
-			vi.cursor.Conflate()
+			if _, selected := vi.cursor.SelectionMode(); selected {
+				vi.joinSelection(vi.cursor.Conflate)
+			} else {
+				vi.repeatJoin(vi.cursor.Conflate)
+			}
 			handled = true
 		case 'g':
 			vi.cursor.MoveToScroll(vi.anchor)
