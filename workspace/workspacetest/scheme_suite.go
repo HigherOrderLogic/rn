@@ -741,6 +741,22 @@ func TestWorkspaceSchemeNewFile(
 		_, err = f.Read(buf[:])
 		require.Equal(t, io.EOF, err)
 	})
+
+	t.Run("a mismatched filename does not resolve the descriptor", func(t *testing.T) {
+		scheme := schemeFn(t)
+		defer scheme.Close()
+		f, err := scheme.OpenFile("file", os.O_CREATE|os.O_RDWR, 0644)
+		require.NoError(t, err)
+
+		stale := scheme.NewFile(f.Fd(), f.Name()+".stale")
+		if stale == nil {
+			return
+		}
+		// Schemes that cannot return nil hand back an invalid file
+		// instead; either way the descriptor must not be usable.
+		_, err = stale.Read(make([]byte, 1))
+		require.Error(t, err)
+	})
 }
 
 func TestWorkspaceSchemeOpen(

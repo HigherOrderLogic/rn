@@ -265,7 +265,14 @@ func (p *fileScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
 	if !ok {
 		return nil
 	}
-	return f.(*fileSchemeFile)
+	ret := f.(*fileSchemeFile)
+	// The OS recycles descriptor numbers, so a stale request naming a
+	// file that has since been closed would otherwise resolve to
+	// whatever now owns the number (e.g. a task pty).
+	if ret.Name() != filename {
+		return nil
+	}
+	return ret
 }
 
 func (p *fileScheme) Remove(path string) error {

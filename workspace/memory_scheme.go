@@ -158,7 +158,10 @@ func (m *memoryScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
 	defer m.mu.Unlock()
 
 	for _, f := range m.files {
-		if f.fd == fd {
+		// The filename must match: descriptor numbers are recycled, so
+		// a stale request naming a closed file would otherwise resolve
+		// to whatever now owns the number.
+		if f.fd == fd && f.filename == filename {
 			return f
 		}
 	}

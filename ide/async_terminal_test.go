@@ -203,6 +203,22 @@ func TestAsyncTerminal(t *testing.T) {
 			notis.notified()[0])
 	})
 
+	t.Run("a resize against a dead pty is not notified", func(t *testing.T) {
+		wrapped := newBlockingTerminal()
+		wrapped.setSizeErr = errors.New(
+			"rpc error: code = Unknown desc = invalid master pty fd")
+		close(wrapped.release)
+		notis := new(resizeNotifications)
+		at := newAsyncTerminal(wrapped, notis)
+		defer at.Close()
+
+		require.NoError(t, at.SetPtySize(workspaceapi.Pty{}, 80, 24))
+		require.Eventually(t, func() bool {
+			return len(wrapped.delivered()) == 1
+		}, 5*time.Second, 5*time.Millisecond)
+		assert.Empty(t, notis.notified())
+	})
+
 	t.Run("Close does not wait for the in-flight RPC", func(t *testing.T) {
 		wrapped := newBlockingTerminal()
 		at := newAsyncTerminal(wrapped, nopNotifications{})

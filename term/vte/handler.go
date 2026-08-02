@@ -29,7 +29,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
@@ -50,6 +52,19 @@ var _ tui.Handler = (*Handler)(nil)
 // to produce an update after writing a keypress. It is a redraw
 // debounce, NOT a gate on whether the event is considered handled.
 const defaultHandleTimeout = 50 * time.Millisecond
+
+// isNormalPtyExit reports whether the pty read loop ended because the
+// child process exited rather than because something went wrong. Linux
+// fails the master read with EIO once the last slave descriptor closes,
+// where macOS reports EOF. For a remote workspace the error crosses the
+// RPC boundary untyped, so the message is matched as well.
+func isNormalPtyExit(err error) bool {
+	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) ||
+		errors.Is(err, syscall.EIO) {
+		return true
+	}
+	return strings.Contains(err.Error(), syscall.EIO.Error())
+}
 
 // Handler is a terminal emulator that satisfies tui.Handler.
 type Handler struct {
@@ -144,7 +159,7 @@ func (e *Handler) Init(
 			e.log(log.DebugLevel, "terminal run: ok")
 			return
 		}
-		if logErr != nil && !errors.Is(logErr, io.EOF) && !errors.Is(logErr, context.Canceled) {
+		if logErr != nil && !isNormalPtyExit(logErr) {
 			e.log(log.ErrorLevel, "terminal run: %v", logErr)
 			_, _ = e.notifications.Notify(browserapi.LevelError,
 				"terminal run: %v", logErr)

@@ -341,22 +341,49 @@ func (s *remoteScheme) OpenFile(path string, flag int, perm os.FileMode) (
 	if err != nil {
 		return nil, err
 	}
-	// clear workspace client finalizer
-	// so we can manage lifecycle manually,
-	// accross clients of the remote workspace,
-	// as we potentially recycle through reconnections
+	return s.track(f, generation), nil
+}
+
+// track clears the workspace client finalizer so we can manage lifecycle
+// manually across clients of the remote workspace, as we potentially
+// recycle through reconnections. An untracked file left to the SDK
+// finalizer sends a close for a descriptor number the remote may have
+// already recycled.
+func (s *remoteScheme) track(
+	f workspaceapi.File, generation uint64,
+) workspaceapi.File {
 	runtime.SetFinalizer(f, nil)
 	rf := newRemoteFile(s, f.Fd(), f.Name(), generation)
 	s.files.Store(rf.key(), rf)
-	return rf, nil
+	return rf
+}
+
+func (s *remoteScheme) lookupFile(
+	generation uint64, fd uintptr, filename string,
+) workspaceapi.File {
+	f, _ := s.files.Load(remoteFileKey{generation: generation, fd: fd})
+	if f == nil {
+		return nil
+	}
+	rf := f.(*remoteFile)
+	// Descriptor numbers are recycled within a generation, so a stale
+	// request naming a closed file must not resolve to its successor.
+	if rf.filename != filename {
+		return nil
+	}
+	return rf
 }
 
 func (s *remoteScheme) Chroot(path string) (schemeapi.Scheme, error) {
-	err, scheme := s.state()
+	scheme, generation, err := s.stateWithGeneration()
 	if err != nil {
 		return nil, err
 	}
-	return scheme.Chroot(path)
+	sub, err := scheme.Chroot(path)
+	if err != nil {
+		return nil, err
+	}
+	return &remoteChroot{Scheme: sub, parent: s, generation: generation}, nil
 }
 
 func (s *remoteScheme) Root() string {
@@ -377,11 +404,15 @@ func (s *remoteScheme) Symlink(target, link string) error {
 }
 
 func (s *remoteScheme) TempFile(dir, prefix string) (workspaceapi.File, error) {
-	err, scheme := s.state()
+	scheme, generation, err := s.stateWithGeneration()
 	if err != nil {
 		return nil, err
 	}
-	return scheme.TempFile(dir, prefix)
+	f, err := scheme.TempFile(dir, prefix)
+	if err != nil {
+		return nil, err
+	}
+	return s.track(f, generation), nil
 }
 
 func (s *remoteScheme) Join(elem ...string) string {
@@ -393,18 +424,27 @@ func (s *remoteScheme) Join(elem ...string) string {
 }
 
 func (s *remoteScheme) Create(filename string) (workspaceapi.File, error) {
-	err, scheme := s.state()
+	scheme, generation, err := s.stateWithGeneration()
 	if err != nil {
 		return nil, err
 	}
-	return scheme.Create(filename)
+	f, err := scheme.Create(filename)
+	if err != nil {
+		return nil, err
+	}
+	return s.track(f, generation), nil
 }
+
 func (s *remoteScheme) Open(filename string) (workspaceapi.File, error) {
-	err, scheme := s.state()
+	scheme, generation, err := s.stateWithGeneration()
 	if err != nil {
 		return nil, err
 	}
-	return scheme.Open(filename)
+	f, err := scheme.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	return s.track(f, generation), nil
 }
 
 func (s *remoteScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
@@ -412,11 +452,7 @@ func (s *remoteScheme) NewFile(fd uintptr, filename string) workspaceapi.File {
 	if err != nil {
 		return nil
 	}
-	f, _ := s.files.Load(remoteFileKey{generation: generation, fd: fd})
-	if f == nil {
-		return nil
-	}
-	return f.(workspaceapi.File)
+	return s.lookupFile(generation, fd, filename)
 }
 
 func (s *remoteScheme) Remove(path string) error {
@@ -513,15 +549,8 @@ func (s *remoteScheme) NewPty(ctx context.Context) (workspaceapi.Pty, error) {
 	// like this for now.
 	pty, err := scheme.NewPty(ctx)
 	if err == nil {
-		runtime.SetFinalizer(pty.Master, nil)
-		master := newRemoteFile(s, pty.Master.Fd(), pty.Master.Name(), generation)
-		s.files.Store(master.key(), master)
-		pty.Master = master
-
-		runtime.SetFinalizer(pty.Slave, nil)
-		slave := newRemoteFile(s, pty.Slave.Fd(), pty.Slave.Name(), generation)
-		s.files.Store(slave.key(), slave)
-		pty.Slave = slave
+		pty.Master = s.track(pty.Master, generation)
+		pty.Slave = s.track(pty.Slave, generation)
 	}
 	return pty, err
 }

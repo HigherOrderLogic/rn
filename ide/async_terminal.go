@@ -25,6 +25,7 @@ package ide
 
 import (
 	"context"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/blue/logging"
@@ -39,6 +40,11 @@ import (
 // worker has not picked up yet: anything older is already superseded
 // by the newest size, so SetPtySize drops it rather than wait.
 const asyncTerminalResizeQueue = 1
+
+// errInvalidMasterPtyFd is the message workspacerpc.Server.SetPtySize
+// reports once the master descriptor is gone. gRPC flattens it to an
+// untyped status error, so the message is all the client can match on.
+const errInvalidMasterPtyFd = "invalid master pty fd"
 
 type ptyResize struct {
 	pty           workspaceapi.Pty
@@ -130,6 +136,12 @@ func (t *asyncTerminal) run() {
 			if err != nil {
 				t.log(log.ErrorLevel, "set pty size %dx%d: %v",
 					req.width, req.height, err)
+				// A pty that is already gone cannot be resized, and
+				// the terminal is tearing down anyway, so the toast
+				// would only be noise.
+				if strings.Contains(err.Error(), errInvalidMasterPtyFd) {
+					continue
+				}
 				_, _ = t.notifications.Notify(browserapi.LevelError,
 					"resize terminal to %dx%d: %v",
 					req.width, req.height, err)

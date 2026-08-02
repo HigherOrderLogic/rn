@@ -25,9 +25,13 @@ package vte
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -208,6 +212,34 @@ exit
 
 	_, _, show := handler.Cursor()
 	assert.False(t, show)
+}
+
+func TestIsNormalPtyExit(t *testing.T) {
+	t.Parallel()
+
+	tsuite := []struct {
+		desc     string
+		err      error
+		expected bool
+	}{
+		{"macOS reports EOF once the child exits", io.EOF, true},
+		{"Close cancels the read loop", context.Canceled, true},
+		{"Linux fails the master read with EIO", syscall.EIO, true},
+		{"a wrapped EIO is still a clean exit",
+			fmt.Errorf("read /dev/ptmx: %w", syscall.EIO), true},
+		{"a remote EIO arrives untyped over the RPC boundary",
+			errors.New("rpc error: code = Unknown desc = read error: " +
+				"read /dev/ptmx: input/output error"), true},
+		{"a genuine transport failure is still reported",
+			errors.New("rpc error: code = Unavailable desc = " +
+				"invalid file descriptor"), false},
+	}
+
+	for _, tcase := range tsuite {
+		t.Run(tcase.desc, func(t *testing.T) {
+			assert.Equal(t, tcase.expected, isNormalPtyExit(tcase.err))
+		})
+	}
 }
 
 // TestHandlerPublishesEventOnPtyExit pins the auto-close behaviour
