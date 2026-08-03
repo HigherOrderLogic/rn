@@ -32,7 +32,6 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
-	"time"
 
 	multierr "github.com/ernestrc/go-multierror"
 	log "github.com/sirupsen/logrus"
@@ -47,11 +46,6 @@ import (
 )
 
 var _ tui.Handler = (*Handler)(nil)
-
-// defaultHandleTimeout bounds how long Handle will wait for the pty
-// to produce an update after writing a keypress. It is a redraw
-// debounce, NOT a gate on whether the event is considered handled.
-const defaultHandleTimeout = 50 * time.Millisecond
 
 // isNormalPtyExit reports whether the pty read loop ended because the
 // child process exited rather than because something went wrong. Linux
@@ -71,8 +65,6 @@ type Handler struct {
 	comp          *Component
 	publisher     browser.EventPublisher
 	notifications browser.Notifications
-	handleTimer   *time.Timer
-	handleTimeout time.Duration
 	vi            viHandler
 	ctx           context.Context
 	cancelCtx     func()
@@ -89,7 +81,6 @@ type Handler struct {
 	exit          atomic.Bool // whether running shell/program has exited
 	width, height int
 	updateCh      chan struct{}
-	sema          chan struct{}
 }
 
 // NewHandler allocates storage for a new Handler and initializes it.
@@ -117,12 +108,6 @@ func (e *Handler) Init(
 	config.Clipboard = stitchingClipboard{root: config.Clipboard}
 	e.publisher = publisher
 	e.notifications = n
-	e.handleTimeout = defaultHandleTimeout
-	e.handleTimer = time.NewTimer(e.handleTimeout)
-	// leave in idle state so we can call Reset directly in handle
-	if !e.handleTimer.Stop() {
-		<-e.handleTimer.C
-	}
 
 	comp, err := NewComponent(termapi, executor, tm, config)
 	if err != nil {
@@ -148,7 +133,6 @@ func (e *Handler) Init(
 	e.ctx, e.cancelCtx = context.WithCancel(context.Background())
 
 	e.updateCh = make(chan struct{}, 1)
-	e.sema = make(chan struct{})
 	go debug.CapturePanicReport(func() {
 		logErr := e.comp.Run(e.updateCh)
 		e.exit.Store(true)
@@ -168,13 +152,7 @@ func (e *Handler) Init(
 
 	go debug.CapturePanicReport(func() {
 		for {
-			// Park the publisher while Handle is running so a
-			// keystroke that triggers a multi-flush repaint produces
-			// at most one EventInterrupt downstream. The handshake
-			// mirrors Handle's send/receive on the same channel.
 			select {
-			case <-e.sema:
-				e.sema <- struct{}{}
 			case <-e.ctx.Done():
 				return
 			case <-e.updateCh:
@@ -366,13 +344,10 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		return
 	}
 
-	select {
-	case e.sema <- struct{}{}:
-	case <-e.ctx.Done():
+	if e.ctx.Err() != nil {
 		exit = true
 		return
 	}
-	defer func() { <-e.sema }()
 
 	err := e.comp.WriteToPty(raw)
 	if err != nil {
@@ -380,17 +355,10 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 		e.notify(browserapi.LevelError, "write to pty: %v", err)
 		return
 	}
-	// Mark the event handled as soon as it is written to the pty.
-	// Whether the pty has finished echoing the bytes back yet is
-	// orthogonal to whether we consumed the event. Gating `handled`
-	// on the round-trip used to break callers that chain into a key
-	// sequencer: over a high-latency transport (e.g. an SSH workspace
-	// where pty bytes round-trip via workspacerpc), the echo arrives
-	// after handleTimeout and we returned handled=false. The IDE
-	// sequencer would then treat the keypress as an unhandled event
-	// for sequence matching and re-issue it on timeout, producing
-	// duplicated input (e.g. typing "g" surfaced as "gg" because
-	// "g" is the prefix of "gg"/"gf" bindings).
+	// A successful pty queue write consumes the event. Waiting for output
+	// cannot establish that contract: password prompts do not echo and a
+	// remote pty may answer after the caller has already reissued an
+	// apparently unhandled sequence prefix.
 	handled = true
 
 	// do not scroll to bottom in all cases or it could
@@ -398,21 +366,6 @@ func (e *Handler) Handle(ev term.Event) (exit, handled bool) {
 	if ev.Type == term.EventKey && ev.Ch == 'c' && ev.Mod == term.ModCtrl {
 		e.comp.ScrollBottom()
 		e.log(log.TraceLevel, "written cltr-c to pty: %q", raw)
-	}
-	// Debounce: give the embedded program up to handleTimeout to flush
-	// its post-keystroke repaint before returning. One update is
-	// consumed directly off updateCh so it does not redundantly wake
-	// the publisher we just parked.
-	e.handleTimer.Reset(e.handleTimeout)
-	select {
-	case <-e.handleTimer.C:
-		e.handleTimer.Stop()
-	case <-e.ctx.Done():
-		exit = true
-	case <-e.updateCh:
-		if !e.handleTimer.Stop() {
-			<-e.handleTimer.C
-		}
 	}
 	return
 }
@@ -504,7 +457,6 @@ func (e *Handler) Close() error {
 	e.mouseDriver = nil
 
 	e.cancelCtx()
-	e.handleTimer.Stop()
 
 	var ret error
 	if err := e.comp.Close(); err != nil {

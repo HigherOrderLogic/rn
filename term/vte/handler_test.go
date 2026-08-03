@@ -630,17 +630,10 @@ func TestHandlerHandleReturnsHandledWithoutPtyEcho(t *testing.T) {
 	cfg := DefaultConfig()
 	handler, _ := testSequence(t, cfg, defaultWaitForIdleVte, cases)
 
-	// Force the pty-echo wait window to effectively zero so the test
-	// reproducibly exercises the path where Handle returns BEFORE
-	// any update arrives from the pty. This mirrors the production
-	// failure mode where an SSH workspace pty round-trips bytes via
-	// workspacerpc and the echo arrives well after handleTimeout.
-	handler.handleTimeout = time.Nanosecond
-
 	// Drive Handle directly with a key event and assert handled=true
-	// returns even if no pty update arrives within handleTimeout. The
-	// underlying contract: writing to the pty is the moment the event
-	// is "consumed" by vte.Handler.
+	// returns without waiting for a pty update. The underlying contract:
+	// writing to the pty is the moment the event is "consumed" by
+	// vte.Handler.
 	exit, handled := handler.Handle(term.Event{
 		Type: term.EventKey,
 		Ch:   'g',
@@ -649,10 +642,38 @@ func TestHandlerHandleReturnsHandledWithoutPtyEcho(t *testing.T) {
 	assert.False(t, exit)
 	assert.True(t, handled,
 		"vte.Handler.Handle must return handled=true once the event "+
-			"is written to the pty, regardless of whether the pty "+
-			"echo round-trip completed within handleTimeout. "+
+			"is written to the pty, regardless of whether the pty echoes it. "+
 			"Otherwise, callers chaining into a key sequencer "+
 			"(e.g. ide/ex) duplicate input on slow remote ptys.")
+}
+
+func TestHandlerHandleBurstDoesNotWaitForPtyEcho(t *testing.T) {
+	t.Parallel()
+
+	const (
+		keys        = 4
+		maxDuration = 100 * time.Millisecond
+	)
+	handler := &Handler{
+		comp: &Component{
+			parserHandler: &parserHandler{},
+			writech:       make(chan []byte, keys),
+		},
+		ctx: context.Background(),
+	}
+
+	start := time.Now()
+	for range keys {
+		exit, handled := handler.Handle(term.Event{
+			Type: term.EventKey,
+			Ch:   'a',
+			Raw:  []byte("a"),
+		})
+		require.False(t, exit)
+		require.True(t, handled)
+	}
+	require.Less(t, time.Since(start), maxDuration,
+		"a burst of PTY writes must not block the UI event loop waiting for echo")
 }
 
 func TestHandlerPasteEndWritesBufferedInput(t *testing.T) {
@@ -681,12 +702,11 @@ func TestHandlerPasteEndWritesBufferedInput(t *testing.T) {
 	assert.Equal(t, []byte("secret\r"), raw)
 }
 
-// TestHandlerCoalescesInterruptsDuringHandle pins that vte.Handler
-// suppresses publisher-bound EventInterrupts for the duration of a
-// Handle call, so a single keystroke that drives the embedded program
-// to flush in multiple stages produces at most one publish, not one
-// per stage. Terminal sessions rely on this to avoid redraw thrash.
-func TestHandlerCoalescesInterruptsDuringHandle(t *testing.T) {
+// TestHandlerCoalescesPtyOutputInterrupts pins that a keystroke which
+// drives the embedded program to flush in multiple stages produces at
+// most one publish during an update interval. Terminal sessions rely on
+// output throttling to avoid redraw thrash without blocking input.
+func TestHandlerCoalescesPtyOutputInterrupts(t *testing.T) {
 	t.Parallel()
 	cases := []vtetest.Case{
 		{"", `$ ▐                 
@@ -712,9 +732,8 @@ func TestHandlerCoalescesInterruptsDuringHandle(t *testing.T) {
 	time.Sleep(defaultWaitForIdleVte)
 
 	assert.LessOrEqual(t, len(ch), 1,
-		"a single Handle call must publish at most one EventInterrupt; "+
-			"got %d. The sema-gated publisher plus the post-write wait "+
-			"in Handle exist to keep terminal redraws cheap.", len(ch))
+		"pty output must publish at most one EventInterrupt per update interval; got %d",
+		len(ch))
 }
 
 func drain(ch chan struct{}) {
