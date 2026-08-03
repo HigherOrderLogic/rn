@@ -100,16 +100,16 @@ func TestUpdate(t *testing.T) {
 		}
 		gui, input := newTestGUI(t, &mock)
 
-		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter)}
+		input.events = action(press(ebiten.KeyEnter))
 		require.NoError(t, gui.Update())
 		require.Equal(t, 1, called)
 
 		expectedIterationID++
-		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter, ebiten.KeyModSuper)}
+		input.events = action(press(ebiten.KeyEnter, ebiten.KeyModSuper))
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
 
-		input.keyEvents = nil
+		input.events = nil
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
 	})
@@ -132,16 +132,16 @@ func TestUpdate(t *testing.T) {
 		}
 		gui, input := newTestGUI(t, &mock)
 
-		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter)}
+		input.events = action(press(ebiten.KeyEnter))
 		require.NoError(t, gui.Update())
 		require.Equal(t, 1, called)
 
 		expectedIterationID++
-		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter, ebiten.KeyModSuper)}
+		input.events = action(press(ebiten.KeyEnter, ebiten.KeyModSuper))
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
 
-		input.keyEvents = nil
+		input.events = nil
 		require.NoError(t, gui.Update())
 		require.Equal(t, 2, called)
 	})
@@ -306,7 +306,7 @@ func TestUpdate(t *testing.T) {
 		}
 		gui, input := newTestGUI(t, &mock)
 
-		input.keyEvents = []ebiten.KeyEvent{press(ebiten.KeyEnter)}
+		input.events = action(press(ebiten.KeyEnter))
 		require.Equal(t, ErrHandlerExited, gui.Update())
 	})
 }

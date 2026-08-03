@@ -24,6 +24,7 @@
 package gui
 
 import (
+	"slices"
 	"testing"
 
 	ebiten "github.com/hajimehoshi/ebiten/v2"
@@ -33,95 +34,155 @@ import (
 	"unstable.build/go-tui/term/gui/font"
 )
 
-func press(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.KeyEvent {
+// nextSource hands out the source IDs that tie a key action to the text the
+// platform committed for it. Ebiten never reuses a source, so tests must not
+// either.
+var nextSource ebiten.InputSource
+
+func keyEvent(key ebiten.Key, act ebiten.KeyAction, mods []ebiten.KeyModifier) ebiten.InputEvent {
 	var m ebiten.KeyModifier
 	for _, mod := range mods {
 		m |= mod
 	}
-	return ebiten.KeyEvent{Key: key, Action: ebiten.KeyActionPress, Mods: m}
+	nextSource++
+	return ebiten.InputEvent{
+		Kind:   ebiten.InputEventKindKey,
+		Key:    key,
+		Action: act,
+		Mods:   m,
+		Source: nextSource,
+	}
 }
 
-func repeat(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.KeyEvent {
-	var m ebiten.KeyModifier
-	for _, mod := range mods {
-		m |= mod
-	}
-	return ebiten.KeyEvent{Key: key, Action: ebiten.KeyActionRepeat, Mods: m}
+func press(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.InputEvent {
+	return keyEvent(key, ebiten.KeyActionPress, mods)
 }
 
-func release(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.KeyEvent {
-	var m ebiten.KeyModifier
-	for _, mod := range mods {
-		m |= mod
+func repeat(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.InputEvent {
+	return keyEvent(key, ebiten.KeyActionRepeat, mods)
+}
+
+func release(key ebiten.Key, mods ...ebiten.KeyModifier) ebiten.InputEvent {
+	return keyEvent(key, ebiten.KeyActionRelease, mods)
+}
+
+func committed(key ebiten.InputEvent, normalText bool, runes []rune) []ebiten.InputEvent {
+	events := make([]ebiten.InputEvent, 0, len(runes)+1)
+	events = append(events, key)
+	for _, r := range runes {
+		events = append(events, ebiten.InputEvent{
+			Kind:       ebiten.InputEventKindText,
+			Mods:       key.Mods,
+			Rune:       r,
+			NormalText: normalText,
+			Source:     key.Source,
+		})
 	}
-	return ebiten.KeyEvent{Key: key, Action: ebiten.KeyActionRelease, Mods: m}
+	return events
+}
+
+// action returns the observations of one key action: the key transition
+// followed by the code points the platform translated from it and classified
+// as ordinary typed text.
+func action(key ebiten.InputEvent, runes ...rune) []ebiten.InputEvent {
+	return committed(key, true, runes)
+}
+
+// shortcut returns the observations of one key action whose committed code
+// points the platform did not classify as ordinary typed text, as X11 reports
+// anything typed while Ctrl or Alt is held.
+func shortcut(key ebiten.InputEvent, runes ...rune) []ebiten.InputEvent {
+	return committed(key, false, runes)
+}
+
+// text returns code points with no originating key action, as an input method
+// commit or a paste delivers them.
+func text(runes ...rune) []ebiten.InputEvent {
+	events := make([]ebiten.InputEvent, 0, len(runes))
+	for _, r := range runes {
+		events = append(events, ebiten.InputEvent{
+			Kind:       ebiten.InputEventKindText,
+			Rune:       r,
+			NormalText: true,
+		})
+	}
+	return events
+}
+
+// commit returns only the code points a key action committed, as a platform
+// that translates text late delivers them in a later update than the key
+// transition itself.
+func commit(key ebiten.InputEvent, runes ...rune) []ebiten.InputEvent {
+	return committed(key, true, runes)[1:]
 }
 
 func TestInputFireOnce(t *testing.T) {
 	suite := []struct {
 		description    string
-		keyEvents      []ebiten.KeyEvent
+		events         []ebiten.InputEvent
 		chars          []rune
 		expectedEvents []term.Event
 	}{
 		{
 			description:    "dispatches a single non-char key",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyEnter)},
+			events:         action(press(ebiten.KeyEnter)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeyEnter, Raw: []byte{0x0d, 0x0a}}},
 		},
 		{
-			description: "plain printable key alone dispatches nothing (text comes from chars)",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyA)},
+			description: "plain printable key alone dispatches nothing (text comes from its commit)",
+			events:      action(press(ebiten.KeyA)),
 		},
 		{
-			description:    "dispatches a single key char, via char",
+			description:    "dispatches a single key char, via committed text",
 			chars:          []rune{'a'},
 			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'a', Raw: []byte("a")}},
 		},
 		{
 			description:    "dispatches a space key",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace)},
+			events:         action(press(ebiten.KeySpace)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")}},
 		},
 		{
-			description:    "dispatches only one space when OS sends both key event and char",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace)},
-			chars:          []rune{' '},
+			description:    "dispatches only one space when the space key also commits text",
+			events:         action(press(ebiten.KeySpace), ' '),
 			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")}},
+		},
+		{
+			description:    "a space with no originating key action still inserts",
+			chars:          []rune{' '},
+			expectedEvents: []term.Event{{Type: term.EventKey, Ch: ' ', Raw: []byte(" ")}},
 		},
 		{
 			description:    "dispatches a shift+space like a space key",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace, ebiten.KeyModShift)},
+			events:         action(press(ebiten.KeySpace, ebiten.KeyModShift)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Key: term.KeySpace, Raw: []byte(" ")}},
 		},
 		{
 			description:    "dispatches a meta+space as meta+space key",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace, ebiten.KeyModSuper)},
+			events:         action(press(ebiten.KeySpace, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModMeta, Key: term.KeySpace, Raw: []byte(" ")}},
 		},
 		{
 			description:    "dispatches a single key ctrl + char",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl)},
+			events:         action(press(ebiten.KeyA, ebiten.KeyModControl)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'a', Raw: []byte{0x01}}},
 		},
 		{
 			description:    "dispatches a single key shift + ctrl + char",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)},
+			events:         action(press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'A', Raw: []byte{0x01}}},
 		},
 		{
 			description:    "dispatches a single key meta + char",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModSuper)},
+			events:         action(press(ebiten.KeyA, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModMeta, Ch: 'a'}},
 		},
 		{
-			// NOTE: The fallback char path has no modifier information.
-			// If Alt is held but only a char arrives (no key event), the
-			// Alt modifier is lost. On desktop/GLFW the key callback
-			// always fires so this path is only hit for IME/paste input
-			// where modifiers aren't relevant.
-			description: "fallback char carries no modifier even if one was held",
-			keyEvents:   nil,
+			// Text with no originating key action carries no modifier: it is
+			// an input method or paste commit, where modifiers are not
+			// meaningful.
+			description: "text with no key action carries no modifier",
+			events:      nil,
 			chars:       []rune{'a'},
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
@@ -129,193 +190,192 @@ func TestInputFireOnce(t *testing.T) {
 		},
 		{
 			description:    "dispatches a single key alt + char, via key",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
+			events:         action(press(ebiten.KeyA, ebiten.KeyModAlt)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}}},
 		},
 		{
 			description:    "dispatches a single key alt + char, undoes macos special chars",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
-			chars:          []rune{'å'},
+			events:         action(press(ebiten.KeyA, ebiten.KeyModAlt), 'å'),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}}},
 		},
 		{
-			description: "shift + printable key alone dispatches nothing (text comes from chars)",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift)},
+			description: "shift + printable key alone dispatches nothing (text comes from its commit)",
+			events:      action(press(ebiten.KeyA, ebiten.KeyModShift)),
 		},
 		{
-			description:    "shifted char via char stream dispatches the shifted rune",
+			description:    "shifted char committed by the platform dispatches the shifted rune",
 			chars:          []rune{'A'},
 			expectedEvents: []term.Event{{Type: term.EventKey, Ch: 'A', Raw: []byte("A")}},
 		},
 		{
 			description: "dispatches a single key ctrl + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModControl)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrl,
 				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x50}}},
 		},
 		{
 			description: "dispatches a single key meta + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModSuper)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModMeta,
 				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x39, 0x50}}},
 		},
 		{
 			description:    "dispatches a single key alt + char, via key",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
+			events:         action(press(ebiten.KeyA, ebiten.KeyModAlt)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: []byte{0x1b, 'a'}}},
 		},
 		{
 			description: "unhandled key dispatches no event",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF24)},
+			events:      action(press(ebiten.KeyF24)),
 		},
 		{
 			description: "dispatches a single key ctrl + alt + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModAlt)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModAlt)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlAlt,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;7P")}},
 		},
 		{
 			description: "dispatches a single key ctrl + meta + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlMeta,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;13P")}},
 		},
 		{
 			description: "dispatches a single key ctrl + shift + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModShift)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModShift)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlShift,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;6P")}},
 		},
 		{
 			description: "dispatches a single key ctrl + alt + shift + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModAlt, ebiten.KeyModShift)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModAlt, ebiten.KeyModShift)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlShiftAlt,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;8P")}},
 		},
 		{
 			description: "dispatches a single key ctrl + shift + meta + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper, ebiten.KeyModShift)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper, ebiten.KeyModShift)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlShiftMeta,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;14P")}},
 		},
 		{
 			description: "dispatches a single key ctrl + alt + meta + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper, ebiten.KeyModAlt)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModControl, ebiten.KeyModSuper, ebiten.KeyModAlt)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrlAltMeta,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;15P")}},
 		},
 		{
 			description: "dispatches a single key ctrl + shift + alt + meta + key",
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyArrowRight, ebiten.KeyModControl,
-				ebiten.KeyModShift, ebiten.KeyModAlt, ebiten.KeyModSuper)},
+			events: action(press(ebiten.KeyArrowRight, ebiten.KeyModControl,
+				ebiten.KeyModShift, ebiten.KeyModAlt, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey,
 				Mod: term.ModCtrlShiftAlt | term.ModMeta,
 				Key: term.KeyArrowRight, Raw: []byte("\x1b[1;16C")}},
 		},
 		{
 			description: "dispatches a tilde key with ctrl + shift + alt + meta",
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyDelete, ebiten.KeyModControl,
-				ebiten.KeyModShift, ebiten.KeyModAlt, ebiten.KeyModSuper)},
+			events: action(press(ebiten.KeyDelete, ebiten.KeyModControl,
+				ebiten.KeyModShift, ebiten.KeyModAlt, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey,
 				Mod: term.ModCtrlShiftAlt | term.ModMeta,
 				Key: term.KeyDelete, Raw: []byte("\x1b[3;16~")}},
 		},
 		{
 			description: "dispatches a single key shift + meta + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModShift, ebiten.KeyModSuper)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModShift, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModShiftMeta,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;10P")}},
 		},
 		{
 			description: "dispatches a single key alt + meta + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModSuper)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAltMeta,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;11P")}},
 		},
 		{
 			description: "dispatches a single key alt + shift + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModShift)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModShift)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAltShift,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;4P")}},
 		},
 		{
 			description: "dispatches a single key alt + shift + meta + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModShift, ebiten.KeyModSuper)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModAlt, ebiten.KeyModShift, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAltShiftMeta,
 				Key: term.KeyF1, Raw: []byte("\x1b[1;12P")}},
 		},
 		{
 			description: "does not dispatch event with raw for meta + enter",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyEnter, ebiten.KeyModSuper)},
+			events:      action(press(ebiten.KeyEnter, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModMeta, Key: term.KeyEnter},
 			},
 		},
 		{
 			description: "dispatches modifier ctrl + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModControl)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModControl)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModCtrl,
 				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x35, 0x50}}},
 		},
 		{
 			description: "dispatches modifier meta + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModSuper)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModMeta,
 				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x39, 0x50}}},
 		},
 		{
 			description: "dispatches modifier alt + key",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF1, ebiten.KeyModAlt)},
+			events:      action(press(ebiten.KeyF1, ebiten.KeyModAlt)),
 			expectedEvents: []term.Event{{Type: term.EventKey, Mod: term.ModAlt,
 				Key: term.KeyF1, Raw: []byte{0x1b, 0x5b, 0x31, 0x3b, 0x33, 0x50}}},
 		},
 		{
 			description: "unhandled key dispatches no event (duplicate)",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyF24)},
+			events:      action(press(ebiten.KeyF24)),
 		},
 		{
 			description: "does not dispatch modifier ctrl + alt",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyAlt)},
+			events:      slices.Concat(action(press(ebiten.KeyControl)), action(press(ebiten.KeyAlt))),
 		},
 		{
 			description: "does not dispatch modifier ctrl + meta",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyMeta)},
+			events:      slices.Concat(action(press(ebiten.KeyControl)), action(press(ebiten.KeyMeta))),
 		},
 		{
 			description: "does not dispatch modifier ctrl + shift",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyShift)},
+			events:      slices.Concat(action(press(ebiten.KeyControl)), action(press(ebiten.KeyShift))),
 		},
 		{
 			description: "does not dispatch modifier ctrl + alt + shift",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyAlt), press(ebiten.KeyShift)},
+			events:      slices.Concat(action(press(ebiten.KeyControl)), action(press(ebiten.KeyAlt)), action(press(ebiten.KeyShift))),
 		},
 		{
 			description: "does not dispatch modifier ctrl + shift + meta",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyMeta), press(ebiten.KeyShift)},
+			events:      slices.Concat(action(press(ebiten.KeyControl)), action(press(ebiten.KeyMeta)), action(press(ebiten.KeyShift))),
 		},
 		{
 			description: "does not dispatch modifier ctrl + alt + meta",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyControl), press(ebiten.KeyMeta), press(ebiten.KeyAlt)},
+			events:      slices.Concat(action(press(ebiten.KeyControl)), action(press(ebiten.KeyMeta)), action(press(ebiten.KeyAlt))),
 		},
 		{
 			description: "does not dispatch modifier shift + meta",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyShift), press(ebiten.KeyMeta)},
+			events:      slices.Concat(action(press(ebiten.KeyShift)), action(press(ebiten.KeyMeta))),
 		},
 		{
 			description: "does not dispatch modifier alt + meta",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyAlt), press(ebiten.KeyMeta)},
+			events:      slices.Concat(action(press(ebiten.KeyAlt)), action(press(ebiten.KeyMeta))),
 		},
 		{
 			description: "does not dispatch modifier alt + shift",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyAlt), press(ebiten.KeyShift)},
+			events:      slices.Concat(action(press(ebiten.KeyAlt)), action(press(ebiten.KeyShift))),
 		},
 		{
 			description: "does not dispatch modifier alt + shift + meta",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyAlt), press(ebiten.KeyShift), press(ebiten.KeyMeta)},
+			events:      slices.Concat(action(press(ebiten.KeyAlt)), action(press(ebiten.KeyShift)), action(press(ebiten.KeyMeta))),
 		},
 		{
 			description: "dispatches non-alt modifier with arrow key with raw set",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyArrowUp, ebiten.KeyModShift, ebiten.KeyModSuper)},
+			events:      action(press(ebiten.KeyArrowUp, ebiten.KeyModShift, ebiten.KeyModSuper)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Key: term.KeyArrowUp, Mod: term.ModShiftMeta,
 					Raw: []byte("\x1b[1;10A")},
@@ -323,7 +383,7 @@ func TestInputFireOnce(t *testing.T) {
 		},
 		{
 			description: "dispatches arrow key with raw set",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyArrowUp)},
+			events:      action(press(ebiten.KeyArrowUp)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Key: term.KeyArrowUp,
 					Raw: []byte("\x1b[A")},
@@ -331,7 +391,7 @@ func TestInputFireOnce(t *testing.T) {
 		},
 		{
 			description: "dispatches alt arrow key with raw set",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyArrowUp, ebiten.KeyModAlt)},
+			events:      action(press(ebiten.KeyArrowUp, ebiten.KeyModAlt)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModAlt, Key: term.KeyArrowUp,
 					Raw: []byte("\x1b[1;3A")},
@@ -339,28 +399,27 @@ func TestInputFireOnce(t *testing.T) {
 		},
 		{
 			description: "shift+2 key alone dispatches nothing (@ comes from chars)",
-			keyEvents:   []ebiten.KeyEvent{press(ebiten.KeyDigit2, ebiten.KeyModShift)},
+			events:      action(press(ebiten.KeyDigit2, ebiten.KeyModShift)),
 		},
 		{
-			description:    "shifted symbol via char stream dispatches the symbol",
+			description:    "shifted symbol committed by the platform dispatches the symbol",
 			chars:          []rune{'@'},
 			expectedEvents: []term.Event{{Type: term.EventKey, Ch: '@', Raw: []byte("@")}},
 		},
 		{
 			description: "OS repeat of a printable key alone dispatches nothing",
-			keyEvents:   []ebiten.KeyEvent{repeat(ebiten.KeyA)},
+			events:      action(repeat(ebiten.KeyA)),
 		},
 		{
 			description: "does not dispatch releases",
-			keyEvents:   []ebiten.KeyEvent{release(ebiten.KeyA)},
+			events:      action(release(ebiten.KeyA)),
 		},
 	}
 
 	for _, test := range suite {
 		t.Run(test.description, func(t *testing.T) {
 			mock, input := newTestInput(t)
-			mock.keyEvents = test.keyEvents
-			mock.chars = test.chars
+			mock.events = slices.Concat(test.events, text(test.chars...))
 
 			events := input.processEvents(nil)
 			if len(test.expectedEvents) == 0 {
@@ -373,9 +432,11 @@ func TestInputFireOnce(t *testing.T) {
 	}
 }
 
-// frame represents one frame of input for multi-frame tests.
+// frame represents one frame of input for multi-frame tests. events holds the
+// ordered observations of key actions and the text they committed; chars holds
+// text the platform could not attribute to any key action.
 type frame struct {
-	keyEvents      []ebiten.KeyEvent
+	events         []ebiten.InputEvent
 	chars          []rune
 	expectedEvents []term.Event
 }
@@ -388,15 +449,15 @@ func TestInputMultiFrame(t *testing.T) {
 		{
 			description: "multiple unhandled key dispatches no events",
 			frames: []frame{
-				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyF24)}},
-				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyF24)}},
+				{events: action(press(ebiten.KeyF24))},
+				{events: action(press(ebiten.KeyF24))},
 			},
 		},
 		{
 			description: "press dispatches once, held key with no repeat produces nothing",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyEnter)},
+					events:         action(press(ebiten.KeyEnter)),
 					expectedEvents: []term.Event{{Key: term.KeyEnter}},
 				},
 				{
@@ -408,24 +469,24 @@ func TestInputMultiFrame(t *testing.T) {
 			description: "different key on next frame dispatches new event",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyEnter)},
+					events:         action(press(ebiten.KeyEnter)),
 					expectedEvents: []term.Event{{Key: term.KeyEnter}},
 				},
 				{
 					// Key held, no OS repeat yet
 				},
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeySpace)},
+					events:         action(press(ebiten.KeySpace)),
 					expectedEvents: []term.Event{{Key: term.KeySpace}},
 				},
 			},
 		},
 		{
-			description: "char key press alone dispatches nothing; text arrives via chars",
+			description: "char key press alone dispatches nothing; text arrives with the commit",
 			frames: []frame{
 				{
 					// Printable key event only; the char commit lands next frame.
-					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA)},
+					events: action(press(ebiten.KeyA)),
 				},
 				{
 					chars:          []rune{'a'},
@@ -434,7 +495,7 @@ func TestInputMultiFrame(t *testing.T) {
 			},
 		},
 		{
-			description: "chars dispatch one event per frame in order",
+			description: "committed text dispatches one event per frame in order",
 			frames: []frame{
 				{chars: []rune{'a'}, expectedEvents: []term.Event{{Ch: 'a'}}},
 				{chars: []rune{'b'}, expectedEvents: []term.Event{{Ch: 'b'}}},
@@ -446,7 +507,7 @@ func TestInputMultiFrame(t *testing.T) {
 			description: "ctrl + char dispatches once, held produces nothing",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl)},
+					events:         action(press(ebiten.KeyA, ebiten.KeyModControl)),
 					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'a'}},
 				},
 				{
@@ -457,24 +518,24 @@ func TestInputMultiFrame(t *testing.T) {
 		{
 			description: "alternating modifier-only events produce nothing",
 			frames: []frame{
-				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyControl)}},
-				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyMeta)}},
-				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyControl)}},
-				{keyEvents: []ebiten.KeyEvent{press(ebiten.KeyMeta)}},
+				{events: action(press(ebiten.KeyControl))},
+				{events: action(press(ebiten.KeyMeta))},
+				{events: action(press(ebiten.KeyControl))},
+				{events: action(press(ebiten.KeyMeta))},
 			},
 		},
 		{
 			description: "different ctrl+char dispatches a new event",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl)},
+					events:         action(press(ebiten.KeyA, ebiten.KeyModControl)),
 					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'a'}},
 				},
 				{
 					// Key held
 				},
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModControl)},
+					events:         action(press(ebiten.KeyB, ebiten.KeyModControl)),
 					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'b'}},
 				},
 			},
@@ -483,7 +544,7 @@ func TestInputMultiFrame(t *testing.T) {
 			description: "shift + ctrl + char dispatches once, held produces nothing",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)},
+					events:         action(press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)),
 					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'A'}},
 				},
 				{
@@ -495,14 +556,14 @@ func TestInputMultiFrame(t *testing.T) {
 			description: "different shift+ctrl+char dispatches a new event",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)},
+					events:         action(press(ebiten.KeyA, ebiten.KeyModShift, ebiten.KeyModControl)),
 					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'A'}},
 				},
 				{
 					// Key held
 				},
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModShift, ebiten.KeyModControl)},
+					events:         action(press(ebiten.KeyB, ebiten.KeyModShift, ebiten.KeyModControl)),
 					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'B'}},
 				},
 			},
@@ -511,7 +572,7 @@ func TestInputMultiFrame(t *testing.T) {
 			description: "alt + char via key on both frames",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
+					events:         action(press(ebiten.KeyA, ebiten.KeyModAlt)),
 					expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'a'}},
 				},
 				{
@@ -523,7 +584,7 @@ func TestInputMultiFrame(t *testing.T) {
 			description: "alt + shift + char via key on both frames",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt, ebiten.KeyModShift)},
+					events:         action(press(ebiten.KeyA, ebiten.KeyModAlt, ebiten.KeyModShift)),
 					expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'A'}},
 				},
 				{
@@ -536,7 +597,7 @@ func TestInputMultiFrame(t *testing.T) {
 			frames: []frame{
 				{
 					// Shift only → no event
-					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyShift)},
+					events: action(press(ebiten.KeyShift)),
 				},
 				{
 					// Shift still held
@@ -544,7 +605,7 @@ func TestInputMultiFrame(t *testing.T) {
 				{
 					// Shift+A is plain printable text → delivered via chars, not
 					// the key path.
-					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModShift)},
+					events: action(press(ebiten.KeyA, ebiten.KeyModShift)),
 				},
 				{
 					// Ctrl added, B still held with shift+ctrl
@@ -555,7 +616,7 @@ func TestInputMultiFrame(t *testing.T) {
 				},
 				{
 					// C pressed with shift+ctrl
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyC, ebiten.KeyModShift, ebiten.KeyModControl)},
+					events:         action(press(ebiten.KeyC, ebiten.KeyModShift, ebiten.KeyModControl)),
 					expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'C'}},
 				},
 				{
@@ -567,25 +628,23 @@ func TestInputMultiFrame(t *testing.T) {
 			},
 		},
 		{
-			// Printable keys are not echoed by the key path, so an inline char
-			// on the same frame is the only text source and must dispatch once.
-			description: "printable key with same-frame char dispatches the char only",
+			// Rune does not claim a plain printable key, so the text that key
+			// action committed is the only dispatch.
+			description: "printable key with same-frame commit dispatches the text only",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
-					chars:          []rune{'a'},
+					events:         action(press(ebiten.KeyA), 'a'),
 					expectedEvents: []term.Event{{Ch: 'a'}},
 				},
 			},
 		},
 		{
-			// Under IBus the key event fires with no inline char and the commit
-			// lands a frame later. With separated streams the key path emits
-			// nothing, so the delayed commit is the sole, single dispatch.
+			// Under IBus the key transition is reported with no text, and the
+			// commit lands a frame later carrying the same source.
 			description: "IBus delayed commit dispatches once, key path stays silent",
 			frames: []frame{
 				{
-					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA)},
+					events: action(press(ebiten.KeyA)),
 				},
 				{
 					chars:          []rune{'a'}, // delayed IBus commit
@@ -594,60 +653,53 @@ func TestInputMultiFrame(t *testing.T) {
 			},
 		},
 		{
-			// Held key with OS repeats: the key path never emits printable text,
-			// so each frame's dispatch count is driven only by the chars stream.
-			description: "held printable key repeats emit only via chars",
+			// Each OS repeat is a distinct key action with its own commit.
+			description: "held printable key repeats emit their own committed text",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
-					chars:          []rune{'a'},
+					events:         action(press(ebiten.KeyA), 'a'),
 					expectedEvents: []term.Event{{Ch: 'a'}},
 				},
 				{
-					keyEvents:      []ebiten.KeyEvent{repeat(ebiten.KeyA)},
-					chars:          []rune{'a'},
+					events:         action(repeat(ebiten.KeyA), 'a'),
 					expectedEvents: []term.Event{{Ch: 'a'}},
 				},
 				{
 					// Repeat with no accompanying commit → nothing.
-					keyEvents: []ebiten.KeyEvent{repeat(ebiten.KeyA)},
+					events: action(repeat(ebiten.KeyA)),
 				},
 				{
-					keyEvents: []ebiten.KeyEvent{release(ebiten.KeyA)},
+					events: action(release(ebiten.KeyA)),
 				},
 			},
 		},
 		{
-			// Interleaving a second key while the first is held: chars are the
-			// only text source and dispatch in stream order, so a lagging commit
-			// cannot resurrect once its key is released.
-			description: "interleaving a second held key dispatches chars in order",
+			// Interleaving a second key while the first is held: each action's
+			// text dispatches in native order.
+			description: "interleaving a second held key dispatches text in order",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA)},
-					chars:          []rune{'a'},
+					events:         action(press(ebiten.KeyA), 'a'),
 					expectedEvents: []term.Event{{Ch: 'a'}},
 				},
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyB)},
-					chars:          []rune{'b'},
+					events:         action(press(ebiten.KeyB), 'b'),
 					expectedEvents: []term.Event{{Ch: 'b'}},
 				},
 				{
-					keyEvents: []ebiten.KeyEvent{release(ebiten.KeyB)},
+					events: action(release(ebiten.KeyB)),
 				},
 				{
-					keyEvents: []ebiten.KeyEvent{release(ebiten.KeyA)},
+					events: action(release(ebiten.KeyA)),
 				},
 			},
 		},
 		{
-			// A composed character (dead key, CJK) has no key-path echo and is
-			// delivered verbatim by the chars stream.
-			description: "composed IME char passes through the chars stream",
+			// A composed character (dead key, CJK) is delivered verbatim.
+			description: "composed IME char passes through untouched",
 			frames: []frame{
 				{
-					keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA)},
+					events: action(press(ebiten.KeyA)),
 				},
 				{
 					chars:          []rune{'é'},
@@ -656,26 +708,48 @@ func TestInputMultiFrame(t *testing.T) {
 			},
 		},
 		{
-			// Alt+printable is a chord on the key path; macOS also delivers the
-			// Option-composed rune via chars, which must be dropped so the same
-			// physical key is not doubled.
-			description: "macOS Alt chord drops the composed char on the same frame",
+			// Alt+printable is a chord; macOS also commits the Option-composed
+			// rune for the same action, which must not double the key press.
+			description: "macOS Alt chord drops the text its own action committed",
 			frames: []frame{
 				{
-					keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModAlt)},
-					chars:          []rune{'å'},
+					events:         action(press(ebiten.KeyA, ebiten.KeyModAlt), 'å'),
 					expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'a'}},
 				},
 			},
 		},
 		{
-			description: "Ctrl+Alt chord drops the matching char on the same frame",
+			// X11 classifies anything typed with Ctrl or Alt held as not being
+			// normal text, so a Ctrl+Alt action that commits a code point is a
+			// chord and its commit is that chord's echo.
+			description: "Ctrl+Alt chord drops the text its own action committed",
 			frames: []frame{
 				{
-					keyEvents: []ebiten.KeyEvent{
-						press(ebiten.KeyPeriod, ebiten.KeyModControl, ebiten.KeyModAlt),
-					},
-					chars:          []rune{'.'},
+					events: shortcut(
+						press(ebiten.KeyPeriod, ebiten.KeyModControl, ebiten.KeyModAlt), '.'),
+					expectedEvents: []term.Event{{Mod: term.ModCtrlAlt, Ch: '.'}},
+				},
+			},
+		},
+		{
+			// Windows reports AltGr as Ctrl+Alt but classifies what the layout
+			// produces as normal text. The mask alone must not turn an
+			// international layout character into a chord.
+			description: "AltGr layout text is inserted rather than treated as a Ctrl+Alt chord",
+			frames: []frame{
+				{
+					events: action(
+						press(ebiten.KeyE, ebiten.KeyModControl, ebiten.KeyModAlt), '€'),
+					expectedEvents: []term.Event{{Ch: '€'}},
+				},
+			},
+		},
+		{
+			// A Ctrl+Alt action that commits nothing is unambiguously a chord.
+			description: "Ctrl+Alt with no committed text dispatches the chord",
+			frames: []frame{
+				{
+					events:         action(press(ebiten.KeyPeriod, ebiten.KeyModControl, ebiten.KeyModAlt)),
 					expectedEvents: []term.Event{{Mod: term.ModCtrlAlt, Ch: '.'}},
 				},
 			},
@@ -686,8 +760,7 @@ func TestInputMultiFrame(t *testing.T) {
 		t.Run(test.description, func(t *testing.T) {
 			mock, input := newTestInput(t)
 			for fi, f := range test.frames {
-				mock.keyEvents = f.keyEvents
-				mock.chars = f.chars
+				mock.events = slices.Concat(f.events, text(f.chars...))
 
 				events := input.processEvents(nil)
 				if len(f.expectedEvents) == 0 {
@@ -708,6 +781,229 @@ func TestInputMultiFrame(t *testing.T) {
 	}
 }
 
+// TestInputSourceOwnership covers the ownership rule that ties a key action to
+// the text the platform translated from it: whatever Rune turns into a
+// terminal event owns exactly the code points carrying its own source, and
+// nothing else.
+func TestInputSourceOwnership(t *testing.T) {
+	metaL := press(ebiten.KeyL, ebiten.KeyModSuper)
+	altA := press(ebiten.KeyA, ebiten.KeyModAlt)
+	repeatedA := repeat(ebiten.KeyA, ebiten.KeyModSuper)
+
+	suite := []struct {
+		description string
+		mapping     map[term.KeyComb]term.KeyComb
+		frames      []frame
+	}{
+		{
+			// The Linux/X11 regression: Super+L reports a key transition and a
+			// plain 'l' commit for the same action. Only the chord may survive.
+			description: "meta chord consumes the text its own action committed",
+			frames: []frame{{
+				events:         action(metaL, 'l'),
+				expectedEvents: []term.Event{{Mod: term.ModMeta, Ch: 'l'}},
+			}},
+		},
+		{
+			description: "ctrl chord consumes the text its own action committed",
+			frames: []frame{{
+				events:         action(press(ebiten.KeyL, ebiten.KeyModControl), 'l'),
+				expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'l'}},
+			}},
+		},
+		{
+			description: "alt chord consumes the text its own action committed",
+			frames: []frame{{
+				events:         action(press(ebiten.KeyL, ebiten.KeyModAlt), 'l'),
+				expectedEvents: []term.Event{{Mod: term.ModAlt, Ch: 'l'}},
+			}},
+		},
+		{
+			description: "ctrl+shift chord consumes the text its own action committed",
+			frames: []frame{{
+				events: action(press(ebiten.KeyL,
+					ebiten.KeyModControl, ebiten.KeyModShift), 'L'),
+				expectedEvents: []term.Event{{Mod: term.ModCtrl, Ch: 'L'}},
+			}},
+		},
+		{
+			description: "ctrl+alt+meta chord consumes the text its own action committed",
+			frames: []frame{{
+				events: action(press(ebiten.KeyL,
+					ebiten.KeyModControl, ebiten.KeyModAlt, ebiten.KeyModSuper), 'l'),
+				expectedEvents: []term.Event{{Mod: term.ModCtrlAltMeta, Ch: 'l'}},
+			}},
+		},
+		{
+			description: "ctrl+shift+alt+meta chord consumes the text its own action committed",
+			frames: []frame{{
+				events: action(press(ebiten.KeyL, ebiten.KeyModControl,
+					ebiten.KeyModShift, ebiten.KeyModAlt, ebiten.KeyModSuper), 'L'),
+				expectedEvents: []term.Event{
+					{Mod: term.ModCtrlAltMeta, Ch: 'L'},
+				},
+			}},
+		},
+		{
+			description: "a chord preserves unrelated text that follows it",
+			frames: []frame{{
+				events: slices.Concat(action(metaL, 'l'), text('x')),
+				expectedEvents: []term.Event{
+					{Mod: term.ModMeta, Ch: 'l'},
+					{Ch: 'x'},
+				},
+			}},
+		},
+		{
+			description: "a chord preserves unrelated text that precedes it",
+			frames: []frame{{
+				events: slices.Concat(text('x'), action(metaL, 'l')),
+				expectedEvents: []term.Event{
+					{Ch: 'x'},
+					{Mod: term.ModMeta, Ch: 'l'},
+				},
+			}},
+		},
+		{
+			// The old frame-global Alt suppression lost every code point in an
+			// update that contained one Alt chord.
+			description: "an alt chord does not swallow another action's text",
+			frames: []frame{{
+				events: slices.Concat(
+					action(altA, 'å'),
+					action(press(ebiten.KeyB), 'b'),
+				),
+				expectedEvents: []term.Event{
+					{Mod: term.ModAlt, Ch: 'a'},
+					{Ch: 'b'},
+				},
+			}},
+		},
+		{
+			description: "a named key consumes only the text of its own action",
+			frames: []frame{{
+				events: slices.Concat(action(press(ebiten.KeySpace), ' '), text(' ')),
+				expectedEvents: []term.Event{
+					{Key: term.KeySpace},
+					{Ch: ' '},
+				},
+			}},
+		},
+		{
+			description: "press and repeat each emit once and consume their own text",
+			frames: []frame{
+				{
+					events:         action(metaL, 'l'),
+					expectedEvents: []term.Event{{Mod: term.ModMeta, Ch: 'l'}},
+				},
+				{
+					events:         action(repeatedA, 'a'),
+					expectedEvents: []term.Event{{Mod: term.ModMeta, Ch: 'a'}},
+				},
+			},
+		},
+		{
+			description: "text delivered after its key action is still consumed by source",
+			frames: []frame{
+				{
+					events:         action(metaL),
+					expectedEvents: []term.Event{{Mod: term.ModMeta, Ch: 'l'}},
+				},
+				{
+					events: commit(metaL, 'l'),
+				},
+				{
+					events:         text('l'),
+					expectedEvents: []term.Event{{Ch: 'l'}},
+				},
+			},
+		},
+		{
+			description: "a printable key mapped to a named key consumes only its own text",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Ch: 'a'}: {Key: term.KeyEsc},
+			},
+			frames: []frame{{
+				events: slices.Concat(action(press(ebiten.KeyA), 'a'), text('b')),
+				expectedEvents: []term.Event{
+					{Key: term.KeyEsc},
+					{Ch: 'b'},
+				},
+			}},
+		},
+		{
+			description: "a printable key mapped to another printable consumes only its own text",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Ch: 'a'}: {Ch: 'b'},
+			},
+			frames: []frame{{
+				events: slices.Concat(action(press(ebiten.KeyA), 'a'), text('c')),
+				expectedEvents: []term.Event{
+					{Ch: 'b'},
+					{Ch: 'c'},
+				},
+			}},
+		},
+		{
+			description: "a bare modifier remap owns the text of the action it rewrites",
+			mapping: map[term.KeyComb]term.KeyComb{
+				{Mod: term.ModCtrl}: {Mod: term.ModMeta},
+			},
+			frames: []frame{{
+				events: slices.Concat(
+					action(press(ebiten.KeyL, ebiten.KeyModControl), 'l'),
+					text('x'),
+				),
+				expectedEvents: []term.Event{
+					{Mod: term.ModMeta, Ch: 'l'},
+					{Ch: 'x'},
+				},
+			}},
+		},
+		{
+			description: "dead key, multi-rune IME and non-ASCII commits survive verbatim",
+			frames: []frame{{
+				events: text('é', '漢', '字', 'ñ', '€'),
+				expectedEvents: []term.Event{
+					{Ch: 'é'}, {Ch: '漢'}, {Ch: '字'}, {Ch: 'ñ'}, {Ch: '€'},
+				},
+			}},
+		},
+		{
+			description: "an emoji sequence survives a chord in the same update",
+			frames: []frame{{
+				events: slices.Concat(
+					action(metaL, 'l'),
+					text('\U0001F468', '\u200d', '\U0001F469'),
+				),
+				expectedEvents: []term.Event{
+					{Mod: term.ModMeta, Ch: 'l'},
+					{Ch: '\U0001F468'}, {Ch: '\u200d'}, {Ch: '\U0001F469'},
+				},
+			}},
+		},
+	}
+
+	for _, test := range suite {
+		t.Run(test.description, func(t *testing.T) {
+			mock, input := newTestInput(t)
+			input.setKeyMapping(test.mapping)
+			for fi, f := range test.frames {
+				mock.events = slices.Concat(f.events, text(f.chars...))
+
+				events := input.processEvents(nil)
+				require.Equal(t, len(f.expectedEvents), len(events), "frame %d", fi)
+				for ei, expected := range f.expectedEvents {
+					actual := events[ei]
+					actual.Raw = nil
+					actual.Type = 0
+					assert.Equal(t, expected, actual, "frame %d event %d", fi, ei)
+				}
+			}
+		})
+	}
+}
+
 func newTestInput(t *testing.T) (*mockInputManager, *input) {
 	mock := &mockInputManager{}
 	f, err := font.NewManager(1, 1)
@@ -720,23 +1016,18 @@ func newTestInput(t *testing.T) (*mockInputManager, *input) {
 }
 
 type mockInputManager struct {
-	keyEvents []ebiten.KeyEvent
-	chars     []rune
+	events []ebiten.InputEvent
 }
 
-func (m *mockInputManager) AppendKeyEvents(buf []ebiten.KeyEvent) []ebiten.KeyEvent {
-	return append(buf, m.keyEvents...)
-}
-
-func (m *mockInputManager) AppendInputChars(buf []rune) []rune {
-	return append(buf, m.chars...)
+func (m *mockInputManager) AppendInputEvents(buf []ebiten.InputEvent) []ebiten.InputEvent {
+	return append(buf, m.events...)
 }
 
 func TestInputKeyMapping(t *testing.T) {
 	suite := []struct {
 		description    string
 		mapping        map[term.KeyComb]term.KeyComb
-		keyEvents      []ebiten.KeyEvent
+		events         []ebiten.InputEvent
 		chars          []rune
 		expectedEvents []term.Event
 	}{
@@ -745,7 +1036,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyCapsLock}: {Key: term.KeyEsc},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyCapsLock)},
+			events: action(press(ebiten.KeyCapsLock)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Key: term.KeyEsc, Raw: []byte{0x1b}},
 			},
@@ -755,11 +1046,11 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyNumLock}: {Key: term.KeyEsc},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyCapsLock)},
+			events: action(press(ebiten.KeyCapsLock)),
 		},
 		{
 			description:    "CapsLock with no mapping table dispatches no event",
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyCapsLock)},
+			events:         action(press(ebiten.KeyCapsLock)),
 			expectedEvents: nil,
 		},
 		{
@@ -767,7 +1058,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyNumLock}: {Ch: 'a'},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyNumLock)},
+			events: action(press(ebiten.KeyNumLock)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
 			},
@@ -777,7 +1068,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyMenu}: {Key: term.KeyEsc},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyContextMenu)},
+			events: action(press(ebiten.KeyContextMenu)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Key: term.KeyEsc, Raw: []byte{0x1b}},
 			},
@@ -787,7 +1078,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Ch: 'a'}: {Key: term.KeyEsc},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA)},
+			events: action(press(ebiten.KeyA)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Key: term.KeyEsc, Raw: []byte{0x1b}},
 			},
@@ -797,22 +1088,22 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyEsc}: {Ch: 'a'},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyEscape)},
+			events: action(press(ebiten.KeyEscape)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
 			},
 		},
 		{
-			// A key remapped to a printable target has no char-stream echo, so
-			// it must be emitted from the key path even though plain printable
-			// keys are otherwise skipped. An unrelated char on the same frame
+			// A key remapped to a printable target commits no text of its own,
+			// so it must be emitted from the key path even though plain
+			// printable keys are otherwise skipped. Text from another source
 			// still flows through independently.
-			description: "remapped key-to-char emits alongside an independent char",
+			description: "remapped key-to-char emits alongside independent text",
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyNumLock}: {Ch: 'a'},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyNumLock)},
-			chars:     []rune{'b'},
+			events: action(press(ebiten.KeyNumLock)),
+			chars:  []rune{'b'},
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Ch: 'a', Raw: []byte("a")},
 				{Type: term.EventKey, Ch: 'b', Raw: []byte("b")},
@@ -823,7 +1114,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyCapsLock}: {Key: term.KeyEsc},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyEnter)},
+			events: action(press(ebiten.KeyEnter)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Key: term.KeyEnter, Raw: []byte{0x0d, 0x0a}},
 			},
@@ -833,7 +1124,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Key: term.KeyArrowLeft, Mod: term.ModCtrl}: {Key: term.KeyHome},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyArrowLeft, ebiten.KeyModControl)},
+			events: action(press(ebiten.KeyArrowLeft, ebiten.KeyModControl)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Key: term.KeyHome, Raw: []byte("\x1b[H")},
 			},
@@ -843,7 +1134,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl, Ch: 'a'}: {Mod: term.ModMeta, Ch: 'a'},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl)},
+			events: action(press(ebiten.KeyA, ebiten.KeyModControl)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'a'},
 			},
@@ -853,7 +1144,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl, Ch: 'a'}: {Mod: term.ModMeta, Ch: 'a'},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModControl)},
+			events: action(press(ebiten.KeyB, ebiten.KeyModControl)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'b', Raw: []byte{0x02}},
 			},
@@ -863,11 +1154,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl, Ch: 'a'}: {Mod: term.ModMeta, Ch: 'a'},
 			},
-			keyEvents: []ebiten.KeyEvent{
-				press(ebiten.KeyB, ebiten.KeyModControl),
-				press(ebiten.KeyB, ebiten.KeyModSuper),
-				press(ebiten.KeyB, ebiten.KeyModAlt),
-			},
+			events: slices.Concat(action(press(ebiten.KeyB, ebiten.KeyModControl)), action(press(ebiten.KeyB, ebiten.KeyModSuper)), action(press(ebiten.KeyB, ebiten.KeyModAlt))),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModCtrl)},
 				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModMeta)},
@@ -880,10 +1167,7 @@ func TestInputKeyMapping(t *testing.T) {
 				{Mod: term.ModCtrl, Ch: 'a'}: {Mod: term.ModAlt, Ch: 'a'},
 				{Mod: term.ModCtrl}:          {Mod: term.ModMeta},
 			},
-			keyEvents: []ebiten.KeyEvent{
-				press(ebiten.KeyA, ebiten.KeyModControl),
-				press(ebiten.KeyB, ebiten.KeyModControl),
-			},
+			events: slices.Concat(action(press(ebiten.KeyA, ebiten.KeyModControl)), action(press(ebiten.KeyB, ebiten.KeyModControl))),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModAlt, Ch: 'a', Raw: getCharEscapeSequence('a', term.ModAlt)},
 				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'b', Raw: getCharEscapeSequence('b', term.ModMeta)},
@@ -894,7 +1178,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl}: {Mod: term.ModMeta},
 			},
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyControl)},
+			events:         action(press(ebiten.KeyControl)),
 			expectedEvents: nil,
 		},
 		{
@@ -902,7 +1186,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl}: {Mod: term.ModMeta},
 			},
-			keyEvents:      []ebiten.KeyEvent{press(ebiten.KeyControl, ebiten.KeyModControl)},
+			events:         action(press(ebiten.KeyControl, ebiten.KeyModControl)),
 			expectedEvents: nil,
 		},
 		{
@@ -910,7 +1194,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl}: {Key: term.KeyEsc},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyControl, ebiten.KeyModControl)},
+			events: action(press(ebiten.KeyControl, ebiten.KeyModControl)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Key: term.KeyEsc, Raw: []byte{0x1b}},
 			},
@@ -920,7 +1204,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl, Ch: 'A'}: {Mod: term.ModMeta, Ch: 'A'},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyA, ebiten.KeyModControl, ebiten.KeyModShift)},
+			events: action(press(ebiten.KeyA, ebiten.KeyModControl, ebiten.KeyModShift)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'A', Raw: getCharEscapeSequence('A', term.ModMeta)},
 			},
@@ -930,7 +1214,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl, Ch: 'A'}: {Mod: term.ModMeta, Ch: 'A'},
 			},
-			keyEvents: []ebiten.KeyEvent{press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift)},
+			events: action(press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift)),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModCtrl)},
 			},
@@ -940,11 +1224,7 @@ func TestInputKeyMapping(t *testing.T) {
 			mapping: map[term.KeyComb]term.KeyComb{
 				{Mod: term.ModCtrl, Ch: 'A'}: {Mod: term.ModMeta, Ch: 'A'},
 			},
-			keyEvents: []ebiten.KeyEvent{
-				press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift),
-				press(ebiten.KeyB, ebiten.KeyModSuper, ebiten.KeyModShift),
-				press(ebiten.KeyB, ebiten.KeyModAlt, ebiten.KeyModShift),
-			},
+			events: slices.Concat(action(press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift)), action(press(ebiten.KeyB, ebiten.KeyModSuper, ebiten.KeyModShift)), action(press(ebiten.KeyB, ebiten.KeyModAlt, ebiten.KeyModShift))),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModCtrl, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModCtrl)},
 				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModMeta)},
@@ -957,10 +1237,7 @@ func TestInputKeyMapping(t *testing.T) {
 				{Mod: term.ModCtrl, Ch: 'A'}: {Mod: term.ModAlt, Ch: 'A'},
 				{Mod: term.ModCtrl}:          {Mod: term.ModMeta},
 			},
-			keyEvents: []ebiten.KeyEvent{
-				press(ebiten.KeyA, ebiten.KeyModControl, ebiten.KeyModShift),
-				press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift),
-			},
+			events: slices.Concat(action(press(ebiten.KeyA, ebiten.KeyModControl, ebiten.KeyModShift)), action(press(ebiten.KeyB, ebiten.KeyModControl, ebiten.KeyModShift))),
 			expectedEvents: []term.Event{
 				{Type: term.EventKey, Mod: term.ModAlt, Ch: 'A', Raw: getCharEscapeSequence('A', term.ModAlt)},
 				{Type: term.EventKey, Mod: term.ModMeta, Ch: 'B', Raw: getCharEscapeSequence('B', term.ModMeta)},
@@ -972,8 +1249,7 @@ func TestInputKeyMapping(t *testing.T) {
 		t.Run(test.description, func(t *testing.T) {
 			mock, input := newTestInput(t)
 			input.setKeyMapping(test.mapping)
-			mock.keyEvents = test.keyEvents
-			mock.chars = test.chars
+			mock.events = slices.Concat(test.events, text(test.chars...))
 
 			events := input.processEvents(nil)
 			if len(test.expectedEvents) == 0 {
@@ -982,6 +1258,61 @@ func TestInputKeyMapping(t *testing.T) {
 			}
 			require.Equal(t, len(test.expectedEvents), len(events))
 			assert.Equal(t, test.expectedEvents, events)
+		})
+	}
+}
+
+// TestInputForwardsEmojiSequenceRunes asserts that committed text is forwarded
+// rune for rune, including the zero-width joiner that composes a family emoji.
+// The emoji picker delivers a ZWJ sequence as a standalone commit; the runtime
+// must emit a key event for every rune so the buffer can coalesce them into one
+// grapheme cluster. Dropping the joiner here (as the upstream ebiten IsPrint
+// filter used to) would split the emoji.
+func TestInputForwardsEmojiSequenceRunes(t *testing.T) {
+	mock, input := newTestInput(t)
+	family := []rune{'\U0001F468', '\u200d', '\U0001F469', '\u200d', '\U0001F467'}
+	mock.events = text(family...)
+
+	events := input.processEvents(nil)
+
+	require.Len(t, events, len(family))
+	for i, r := range family {
+		assert.Equal(t, term.Event{
+			Type: term.EventKey,
+			Ch:   r,
+			Raw:  getCharEscapeSequence(r, 0),
+		}, events[i], "rune %d (%#U) must be forwarded as a key event", i, r)
+	}
+}
+
+// TestResolveCharKeyStripsShift asserts that Shift selects the shifted rune and
+// leaves the modifier set for every combination of the remaining modifiers. A
+// terminal chord names the character the layout produced, so reporting Shift
+// alongside an already-shifted rune would encode the same intent twice.
+func TestResolveCharKeyStripsShift(t *testing.T) {
+	cases := []struct {
+		name string
+		mod  term.Modifier
+	}{
+		{"none", 0},
+		{"ctrl", term.ModCtrl},
+		{"alt", term.ModAlt},
+		{"meta", term.ModMeta},
+		{"ctrl+alt", term.ModCtrlAlt},
+		{"ctrl+meta", term.ModCtrlMeta},
+		{"alt+meta", term.ModAltMeta},
+		{"ctrl+alt+meta", term.ModCtrlAltMeta},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ch, mod := resolveCharKey('a', 'A', tc.mod)
+			assert.Equal(t, 'a', ch)
+			assert.Equal(t, tc.mod, mod)
+		})
+		t.Run(tc.name+"+shift", func(t *testing.T) {
+			ch, mod := resolveCharKey('a', 'A', tc.mod|term.ModShift)
+			assert.Equal(t, 'A', ch)
+			assert.Equal(t, tc.mod, mod)
 		})
 	}
 }

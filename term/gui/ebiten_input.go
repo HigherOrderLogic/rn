@@ -33,12 +33,8 @@ var _ mouseManager = ebitenInputManager{}
 type ebitenInputManager struct {
 }
 
-func (e ebitenInputManager) AppendInputChars(buf []rune) []rune {
-	return ebiten.AppendInputChars(buf)
-}
-
-func (e ebitenInputManager) AppendKeyEvents(buf []ebiten.KeyEvent) []ebiten.KeyEvent {
-	return ebiten.AppendKeyEvents(buf)
+func (e ebitenInputManager) AppendInputEvents(buf []ebiten.InputEvent) []ebiten.InputEvent {
+	return ebiten.AppendInputEvents(buf)
 }
 
 func (e ebitenInputManager) Wheel() (float64, float64) {

@@ -33,14 +33,22 @@ import (
 
 // abstracts ebiten* input methods
 type keysManager interface {
-	AppendInputChars([]rune) []rune
-	AppendKeyEvents([]ebiten.KeyEvent) []ebiten.KeyEvent
+	AppendInputEvents([]ebiten.InputEvent) []ebiten.InputEvent
 }
+
+// claimedSourceHistory bounds how many key actions Rune remembers claiming.
+// A platform may commit the text of a key action several updates after
+// reporting the key transition (XIM delivers late), so a claim has to outlive
+// the update that made it. Eviction can only miss an extremely late echo; it
+// can never consume unrelated text, because sources identify one key action
+// and are never reused.
+const claimedSourceHistory = 64
 
 type input struct {
 	fontManager *font.Manager
-	keyEvents   []ebiten.KeyEvent
-	chars       []rune
+	events      []ebiten.InputEvent
+	claimed     map[ebiten.InputSource]struct{}
+	claimOrder  []ebiten.InputSource
 	input       keysManager
 	keyMapping  map[ebiten.KeyEvent]ebiten.KeyEvent
 	modMapping  map[ebiten.KeyModifier]ebiten.KeyModifier
@@ -134,27 +142,35 @@ func (i *input) remapMods(mods ebiten.KeyModifier) ebiten.KeyModifier {
 
 // processEvents converts Ebiten input into term.Events and appends them to dst.
 //
-// The two Ebiten input streams are kept separate by purpose, as in other GLFW
-// UIs: AppendInputChars is the sole source of inserted text (layout- and
-// input-method-correct, including dead keys, compose sequences and CJK), while
-// AppendKeyEvents drives only non-text keys and modifier chords. A printable
-// rune therefore travels through exactly one path, so the two never need to be
-// reconciled against each other.
+// Ebiten reports key transitions and committed text as one ordered sequence of
+// observations in which everything a single physical key action produced
+// carries that action's source. Rune claims the source of every key action it
+// turns into a terminal event, so the text that action produced is recognized
+// as an echo of an event already emitted and dropped. Text with any other
+// source, and text the platform could not attribute to a key action at all, is
+// forwarded untouched.
 func (i *input) processEvents(dst []term.Event) []term.Event {
-	i.keyEvents = i.input.AppendKeyEvents(i.keyEvents[:0])
-	i.chars = i.input.AppendInputChars(i.chars[:0])
+	i.events = i.input.AppendInputEvents(i.events[:0])
 
-	// Alt-bearing printable chords are handled on the key path, but the char
-	// stream may still echo the same physical key as a plain or Option-composed
-	// rune. Drop that echo so it cannot be delivered to a new input target.
-	altPrintableChord := false
-
-	for _, ke := range i.keyEvents {
-		if ke.Action == ebiten.KeyActionRelease {
+	for _, ev := range i.events {
+		if ev.Kind == ebiten.InputEventKindText {
+			if i.isClaimed(ev.Source) {
+				continue
+			}
+			dst = append(dst, term.Event{
+				Type: term.EventKey,
+				Ch:   ev.Rune,
+				Raw:  getCharEscapeSequence(ev.Rune, 0),
+			})
 			continue
 		}
-		lookupMods := ke.Mods
-		switch ke.Key {
+
+		if ev.Action == ebiten.KeyActionRelease {
+			continue
+		}
+
+		lookupMods := ev.Mods
+		switch ev.Key {
 		case ebiten.KeyControl, ebiten.KeyControlLeft, ebiten.KeyControlRight:
 			lookupMods &^= ebiten.KeyModControl
 		case ebiten.KeyShift, ebiten.KeyShiftLeft, ebiten.KeyShiftRight:
@@ -164,29 +180,28 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 		case ebiten.KeyMeta, ebiten.KeyMetaLeft, ebiten.KeyMetaRight:
 			lookupMods &^= ebiten.KeyModSuper
 		}
-		rep, ok := i.keyMapping[ebiten.KeyEvent{Key: ke.Key, Mods: lookupMods}]
-		if ok {
-			ke.Key, ke.Mods = rep.Key, rep.Mods
+		key, mods := ev.Key, ev.Mods
+		rep, remapped := i.keyMapping[ebiten.KeyEvent{Key: ev.Key, Mods: lookupMods}]
+		if remapped {
+			key, mods = rep.Key, rep.Mods
 		}
-		remapped := ok
-		ke.Mods = i.remapMods(ke.Mods)
-		if isModifierKey(ke.Key) {
+		mods = i.remapMods(mods)
+		if isModifierKey(key) {
 			continue
 		}
 
-		mod := ebitenModToTermMod(ke.Mods)
+		mod := ebitenModToTermMod(mods)
 
-		if base, shift, ok := keyToBaseAndShift(ke.Key); ok {
-			// Plain printable text is delivered by AppendInputChars, so it is
-			// skipped here unless it was synthesized by a key mapping: a
-			// remapped target has no char-stream echo and must be emitted from
-			// the key path. Ctrl/Alt/Meta chords are always handled here, since
-			// those produce control sequences the char stream never carries.
+		if base, shift, ok := keyToBaseAndShift(key); ok {
+			// Plain and Shift-only text is layout- and input-method-dependent,
+			// so it is taken from the platform's own text commit rather than
+			// synthesized here. A remapped target has no such commit and must
+			// be emitted from the key path.
 			if mod&(term.ModCtrl|term.ModAlt|term.ModMeta) == 0 && !remapped {
 				continue
 			}
-			if mod&term.ModAlt != 0 {
-				altPrintableChord = true
+			if !remapped && i.isLayoutText(ev, mod) {
+				continue
 			}
 			ch, mod := resolveCharKey(base, shift, mod)
 			dst = append(dst, term.Event{
@@ -195,29 +210,63 @@ func (i *input) processEvents(dst []term.Event) []term.Event {
 				Ch:   ch,
 				Raw:  getCharEscapeSequence(ch, mod),
 			})
+			i.claim(ev.Source)
 			continue
 		}
 
-		if ev, ok := mapEbitenKey(ke.Key, mod); ok {
-			dst = append(dst, ev)
+		if e, ok := mapEbitenKey(key, mod); ok {
+			dst = append(dst, e)
+			i.claim(ev.Source)
 		}
-	}
-
-	for _, ch := range i.chars {
-		// Space reaches the key path as term.KeySpace; the char-stream copy
-		// would double it. Alt-bearing printable chords were already emitted
-		// above, so their char-stream echoes must also be dropped.
-		if ch == ' ' || altPrintableChord {
-			continue
-		}
-		dst = append(dst, term.Event{
-			Type: term.EventKey,
-			Ch:   ch,
-			Raw:  getCharEscapeSequence(ch, 0),
-		})
 	}
 
 	return dst
+}
+
+// isLayoutText reports whether a key action carrying Ctrl+Alt produced
+// ordinary typed text rather than a shortcut. Windows reports AltGr as
+// Ctrl+Alt, so the modifier mask alone cannot tell an international layout
+// character from a Ctrl+Alt chord; only the platform's own classification of
+// the text it committed for this action can.
+func (i *input) isLayoutText(ev ebiten.InputEvent, mod term.Modifier) bool {
+	if mod&(term.ModCtrl|term.ModAlt|term.ModMeta) != term.ModCtrlAlt || ev.Source == 0 {
+		return false
+	}
+	for _, other := range i.events {
+		if other.Kind == ebiten.InputEventKindText &&
+			other.Source == ev.Source && other.NormalText {
+			return true
+		}
+	}
+	return false
+}
+
+// claim records that a key action has already been turned into a terminal
+// event, so the text the platform commits for it must not be inserted again.
+func (i *input) claim(source ebiten.InputSource) {
+	if source == 0 {
+		return
+	}
+	if _, ok := i.claimed[source]; ok {
+		return
+	}
+	if i.claimed == nil {
+		i.claimed = make(map[ebiten.InputSource]struct{}, claimedSourceHistory)
+	}
+	i.claimed[source] = struct{}{}
+	i.claimOrder = append(i.claimOrder, source)
+	if len(i.claimOrder) > claimedSourceHistory {
+		delete(i.claimed, i.claimOrder[0])
+		i.claimOrder = append(i.claimOrder[:0], i.claimOrder[1:]...)
+	}
+}
+
+func (i *input) isClaimed(source ebiten.InputSource) bool {
+	if source == 0 {
+		return false
+	}
+	_, ok := i.claimed[source]
+	return ok
 }
 
 // ebitenModToTermMod converts an Ebiten modifier bitmask to a term.Modifier.
@@ -387,28 +436,13 @@ func keyToBaseAndShift(key ebiten.Key) (base, shift rune, ok bool) {
 	}
 }
 
-// resolveCharKey picks the correct character (base vs shift) and
-// strips the Shift modifier from mod when Shift is consumed by
-// the character mapping.
+// resolveCharKey picks the correct character (base vs shift) and strips the
+// Shift modifier from mod when Shift is consumed by the character mapping.
 func resolveCharKey(base, shift rune, mod term.Modifier) (rune, term.Modifier) {
-	switch mod {
-	case term.ModShift:
-		return shift, 0
-	case term.ModCtrlShift:
-		return shift, term.ModCtrl
-	case term.ModCtrlShiftAlt:
-		return shift, term.ModCtrlAlt
-	case term.ModCtrlShiftMeta:
-		return shift, term.ModCtrlMeta
-	case term.ModShiftMeta:
-		return shift, term.ModMeta
-	case term.ModAltShiftMeta:
-		return shift, term.ModAltMeta
-	case term.ModAltShift:
-		return shift, term.ModAlt
-	default:
+	if mod&term.ModShift == 0 {
 		return base, mod
 	}
+	return shift, mod &^ term.ModShift
 }
 
 func mapEbitenKey(key ebiten.Key, mod term.Modifier) (ev term.Event, ok bool) {
