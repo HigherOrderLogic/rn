@@ -31,6 +31,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -49,48 +50,50 @@ import (
 	"unstable.build/go-tui/workspace/walkdir"
 )
 
-// TestFilePathCompleterSkipsProtectedTraversal asserts that completing a
-// path under the user's home never ReadDirs into the macOS TCC-protected
-// dirs (~/Library, ~/Documents, ~/Desktop, ~/Downloads), the reads that
-// trigger a system permission prompt. The reader is rooted at the real
-// home so it lines up with the paths vctrl.ProtectedDirMatcher derives
-// from user.Current().
+// TestFilePathCompleterSkipsProtectedTraversal asserts that recursive
+// completion skips app data under ~/Library without hiding personal folders.
 func TestFilePathCompleterSkipsProtectedTraversal(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("macOS protected-directory policy")
+	}
 	usr, err := user.Current()
 	require.NoError(t, err)
 	if usr.HomeDir == "" {
 		t.Skip("no home directory for current user")
 	}
 
-	var prefixes []string
+	fixtureRoot := t.TempDir()
 	for _, dir := range []string{"Library", "Documents", "Desktop", "Downloads"} {
-		p := filepath.Join(usr.HomeDir, dir)
-		if _, err := os.Stat(p); err == nil {
-			prefixes = append(prefixes, p)
-		}
-	}
-	if len(prefixes) == 0 {
-		t.Skip("no protected home dirs to guard against")
+		require.NoError(t, os.Mkdir(filepath.Join(fixtureRoot, dir), 0o755))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(fixtureRoot, dir, "example.txt"), []byte(dir), 0o644))
 	}
 
-	tracking := &trackingReader{inner: newFSReader(usr.HomeDir)}
+	tracking := &trackingReader{inner: &homeRootReader{
+		fsReader: newFSReader(fixtureRoot),
+		home:     filepath.Clean(usr.HomeDir),
+	}}
 	c := FilePathCompleter(tracking)
 
-	it, _, err := c.Complete(context.Background(), []string{"edit"})
+	it, _, err := c.Complete(context.Background(), nil)
 	require.NoError(t, err)
-	_ = collectAll(t, it)
+	got := collectAll(t, it)
 
+	for _, dir := range []string{"Documents", "Desktop", "Downloads"} {
+		assert.Contains(t, got, filepath.Join(dir, "example.txt"))
+	}
+	assert.NotContains(t, got, filepath.Join("Library", "example.txt"))
+
+	library := filepath.Join(usr.HomeDir, "Library")
 	for _, p := range tracking.snapshot() {
 		abs := p
 		if !filepath.IsAbs(abs) {
 			abs = filepath.Join(usr.HomeDir, p)
 		}
 		abs = filepath.Clean(abs)
-		for _, prefix := range prefixes {
-			assert.Falsef(t,
-				abs == prefix || strings.HasPrefix(abs, prefix+string(filepath.Separator)),
-				"completer must not ReadDir into protected dir: %q", p)
-		}
+		assert.Falsef(t,
+			abs == library || strings.HasPrefix(abs, library+string(filepath.Separator)),
+			"completer must not ReadDir into protected dir: %q", p)
 	}
 }
 func TestCommandOutputLinesCompleterCloseSignals(t *testing.T) {
@@ -315,6 +318,43 @@ func (r *fsReader) Stat(p string) (os.FileInfo, error) { return os.Stat(r.resolv
 
 func (r *fsReader) ReadDir(p string) ([]os.DirEntry, error) {
 	return os.ReadDir(r.resolve(p))
+}
+
+type homeRootReader struct {
+	*fsReader
+	home string
+}
+
+func (r *homeRootReader) fixturePath(p string) string {
+	if filepath.IsAbs(p) {
+		rel, err := filepath.Rel(r.home, p)
+		if err == nil && rel != ".." && !strings.HasPrefix(
+			rel, ".."+string(filepath.Separator)) {
+			p = rel
+		}
+	}
+	return r.fsReader.resolve(p)
+}
+
+func (r *homeRootReader) URI(p string) (workspaceapi.URI, error) {
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(r.home, p)
+	}
+	return workspaceapi.ParseURI("file://" + p)
+}
+
+func (r *homeRootReader) OpenFile(
+	p string, flag int, perm os.FileMode,
+) (workspaceapi.File, error) {
+	return os.OpenFile(r.fixturePath(p), flag, perm)
+}
+
+func (r *homeRootReader) Stat(p string) (os.FileInfo, error) {
+	return os.Stat(r.fixturePath(p))
+}
+
+func (r *homeRootReader) ReadDir(p string) ([]os.DirEntry, error) {
+	return os.ReadDir(r.fixturePath(p))
 }
 
 type originFSReader struct {

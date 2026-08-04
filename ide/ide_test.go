@@ -3477,9 +3477,7 @@ func TestSharedStorageSurvivesPreIDEClose(t *testing.T) {
 }
 
 // TestIDEOpenDoesNotReadProtectedDirs asserts that opening the IDE on the
-// user's home never reads into the macOS TCC-protected directories
-// (~/Library, ~/Documents, ~/Desktop, ~/Downloads); any such read would
-// trigger a system permission prompt.
+// user's home never reads app data under ~/Library.
 func TestIDEOpenDoesNotReadProtectedDirs(t *testing.T) {
 	usr, err := user.Current()
 	require.NoError(t, err)
@@ -3490,9 +3488,6 @@ func TestIDEOpenDoesNotReadProtectedDirs(t *testing.T) {
 
 	forbidden := []string{
 		filepath.Join(home, "Library"),
-		filepath.Join(home, "Documents"),
-		filepath.Join(home, "Desktop"),
-		filepath.Join(home, "Downloads"),
 	}
 
 	tracker := &readTracker{home: home, forbidden: forbidden}

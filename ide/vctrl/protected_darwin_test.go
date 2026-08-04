@@ -39,9 +39,8 @@ import (
 )
 
 // TestLoadGitignoreExcludesProtectedHomeDirs asserts that LoadGitignore
-// excludes the macOS TCC-protected home directories and their descendants
-// by default while leaving unprotected dirs visible, so no IDE surface
-// trips a system permission prompt.
+// excludes macOS app data under ~/Library while leaving personal folders
+// visible.
 func TestLoadGitignoreExcludesProtectedHomeDirs(t *testing.T) {
 	usr, err := user.Current()
 	require.NoError(t, err)
@@ -57,11 +56,16 @@ func TestLoadGitignoreExcludesProtectedHomeDirs(t *testing.T) {
 	matcher, err := LoadGitignore(cwd)
 	require.NoError(t, err)
 
-	for _, dir := range []string{"Library", "Documents", "Desktop", "Downloads"} {
+	libraryURI, err := cwd.URI("Library")
+	require.NoError(t, err)
+	assert.True(t, matcher.Match(libraryURI, true),
+		"~/Library must be excluded by default")
+
+	for _, dir := range []string{"Documents", "Desktop", "Downloads"} {
 		uri, err := cwd.URI(dir)
 		require.NoError(t, err)
-		assert.Truef(t, matcher.Match(uri, true),
-			"~/%s must be excluded by default", dir)
+		assert.Falsef(t, matcher.Match(uri, true),
+			"~/%s must remain visible", dir)
 	}
 
 	subURI, err := cwd.URI(filepath.Join("Library", "Containers", "com.example.app"))

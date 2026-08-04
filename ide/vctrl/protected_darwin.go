@@ -31,9 +31,9 @@ import (
 )
 
 // protectedRoots returns the absolute macOS directories that must not be
-// traversed without an explicit user grant. Reading ~/Library (other
-// apps' data containers) or the ~/Documents, ~/Desktop and ~/Downloads
-// personal-data folders each trips a dedicated TCC permission prompt.
+// traversed without an explicit user grant. Reading ~/Library can enter
+// other apps' data containers and trip the TCC App Data prompt. Personal
+// folders remain visible so users can find their own files there.
 func protectedRoots() []string {
 	usr, err := user.Current()
 	if err != nil || usr.HomeDir == "" {
@@ -42,8 +42,5 @@ func protectedRoots() []string {
 	home := filepath.Clean(usr.HomeDir)
 	return []string{
 		filepath.Join(home, "Library"),
-		filepath.Join(home, "Documents"),
-		filepath.Join(home, "Desktop"),
-		filepath.Join(home, "Downloads"),
 	}
 }

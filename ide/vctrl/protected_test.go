@@ -37,12 +37,7 @@ func TestProtectedMatcherHomeAware(t *testing.T) {
 	t.Parallel()
 	home := filepath.Join("/Users", "tester")
 	library := filepath.Join(home, "Library")
-	m := protectedMatcher{base: home, roots: []string{
-		library,
-		filepath.Join(home, "Documents"),
-		filepath.Join(home, "Desktop"),
-		filepath.Join(home, "Downloads"),
-	}}
+	m := protectedMatcher{base: home, roots: []string{library}}
 
 	cases := []struct {
 		relpath string
@@ -53,10 +48,10 @@ func TestProtectedMatcherHomeAware(t *testing.T) {
 		{"Library/Application Support/SomeApp", true},
 		{library, true},
 		{filepath.Join(library, "Caches"), true},
-		{"Documents", true},
-		{"Desktop/screenshot.png", true},
-		{"Downloads", true},
-		{filepath.Join(home, "Documents"), true},
+		{"Documents", false},
+		{"Desktop/screenshot.png", false},
+		{"Downloads", false},
+		{filepath.Join(home, "Documents"), false},
 		{"src/Library", false},
 		{"LibraryNotReally", false},
 		{"Projects/Documents", false},
