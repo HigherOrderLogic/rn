@@ -223,6 +223,12 @@ func (c ideConfig) llmConfig() llm.Config {
 		overrideString(gemini, "base_url", &out.Gemini.BaseURL)
 		overrideString(gemini, "reasoning_effort", &out.Gemini.ReasoningEffort)
 	}
+	if bedrock, ok := c.getConfig(models, "bedrock"); ok {
+		overrideString(bedrock, "profile", &out.Bedrock.Profile)
+		overrideString(bedrock, "base_url", &out.Bedrock.BaseURL)
+		overrideString(bedrock, "reasoning_effort", &out.Bedrock.ReasoningEffort)
+		overrideString(bedrock, "cache_control", &out.Bedrock.CacheControl)
+	}
 	if codex, ok := c.getConfig(models, "codex"); ok {
 		overrideString(codex, "base_url", &out.Codex.BaseURL)
 	}

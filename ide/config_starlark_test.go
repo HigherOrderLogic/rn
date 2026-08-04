@@ -479,7 +479,9 @@ func TestRuneStarModelsConfig(t *testing.T) {
 	assert.Equal(t, "auto", models["reasoning_summary"])
 	assert.Equal(t, false, models["debug_http"])
 
-	for _, prov := range []string{"openai", "anthropic", "gemini", "codex", "claude", "custom", "local"} {
+	for _, prov := range []string{
+		"openai", "anthropic", "gemini", "bedrock", "codex", "claude", "custom", "local",
+	} {
 		_, ok := models[prov].(map[string]any)
 		assert.Truef(t, ok, "models.%s missing", prov)
 	}

@@ -33,6 +33,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/llmapi"
 	"unstable.build/go-tui/llm/anthropic"
+	"unstable.build/go-tui/llm/bedrock"
 	"unstable.build/go-tui/llm/claude"
 	"unstable.build/go-tui/llm/codex"
 	"unstable.build/go-tui/llm/gemini"
@@ -100,6 +101,8 @@ func flagshipFor(provider string) (string, bool) {
 		return anthropic.FlagshipModel(), true
 	case ProviderGemini:
 		return gemini.FlagshipModel(), true
+	case ProviderBedrock:
+		return bedrock.FlagshipModel(), true
 	case ProviderCodex:
 		return codex.FlagshipModel(), true
 	case ProviderClaude:
@@ -118,6 +121,7 @@ func (r *Router) latestAuthenticatedFlagship(ctx context.Context) (llmapi.ModelE
 		ProviderOpenAI,
 		ProviderAnthropic,
 		ProviderGemini,
+		ProviderBedrock,
 		ProviderCodex,
 		ProviderClaude,
 	}
@@ -132,7 +136,7 @@ func (r *Router) latestAuthenticatedFlagship(ctx context.Context) (llmapi.ModelE
 	}
 	for _, provider := range order {
 		switch provider {
-		case ProviderOpenAI, ProviderAnthropic, ProviderGemini:
+		case ProviderOpenAI, ProviderAnthropic, ProviderGemini, ProviderBedrock:
 			at, ok, err := r.store.activeUpdatedAt(ctx, provider)
 			if err != nil {
 				continue

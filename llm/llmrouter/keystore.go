@@ -45,9 +45,12 @@ var keyStoreRetry = retry.CombinedStrategy(
 )
 
 // providerKeys holds the named API keys stored for a single hosted
-// provider plus which one is currently active.
+// provider plus which one is currently active. Regions carries per-key
+// provider metadata for providers whose keys are region-scoped (Bedrock);
+// it is keyed by the same names as Keys and absent for other providers.
 type providerKeys struct {
 	Keys      map[string]string
+	Regions   map[string]string
 	Active    string
 	UpdatedAt time.Time
 	Version   int64
@@ -102,12 +105,16 @@ func (s *keyStore) mutate(ctx context.Context, provider string, fn func(*provide
 			if doc.Keys == nil {
 				doc.Keys = map[string]string{}
 			}
+			if doc.Regions == nil {
+				doc.Regions = map[string]string{}
+			}
 			version := doc.Version
 			if !fn(&doc) {
 				return nil, nil
 			}
 			updates := []storageapi.Update{
 				{FieldPath: []string{"Keys"}, Value: doc.Keys},
+				{FieldPath: []string{"Regions"}, Value: doc.Regions},
 				{FieldPath: []string{"Active"}, Value: doc.Active},
 				{FieldPath: []string{"Version"}, Value: version + 1},
 				{FieldPath: []string{"UpdatedAt"}, Value: time.Now().UTC()},
@@ -130,8 +137,9 @@ func (s *keyStore) mutate(ctx context.Context, provider string, fn func(*provide
 }
 
 // add stores a named key for the provider. The first key added becomes
-// the active key.
-func (s *keyStore) add(ctx context.Context, provider, name, key string) error {
+// the active key. region records the key's scope for region-bound
+// providers; pass the empty string for providers whose keys are global.
+func (s *keyStore) add(ctx context.Context, provider, name, key, region string) error {
 	key = strings.TrimSpace(key)
 	if name == "" {
 		return errors.New("llmrouter: api key name must not be empty")
@@ -141,6 +149,11 @@ func (s *keyStore) add(ctx context.Context, provider, name, key string) error {
 	}
 	return s.mutate(ctx, provider, func(doc *providerKeys) bool {
 		doc.Keys[name] = key
+		if region == "" {
+			delete(doc.Regions, name)
+		} else {
+			doc.Regions[name] = region
+		}
 		if doc.Active == "" {
 			doc.Active = name
 		}
@@ -157,6 +170,7 @@ func (s *keyStore) remove(ctx context.Context, provider, name string) error {
 			return false
 		}
 		delete(doc.Keys, name)
+		delete(doc.Regions, name)
 		if doc.Active == name {
 			doc.Active = ""
 			if remaining := sortedNames(doc.Keys); len(remaining) > 0 {
@@ -207,6 +221,34 @@ func (s *keyStore) active(ctx context.Context, provider string) (string, error) 
 		return "", ErrAPIKeyNotSet
 	}
 	return key, nil
+}
+
+// activeWithRegion returns the value and stored region of the currently
+// active key, or ErrAPIKeyNotSet when none is set. The region is empty for
+// keys stored without one.
+func (s *keyStore) activeWithRegion(ctx context.Context, provider string) (string, string, error) {
+	doc, err := s.load(ctx, provider)
+	if err != nil {
+		return "", "", err
+	}
+	if doc.Active == "" {
+		return "", "", ErrAPIKeyNotSet
+	}
+	key, ok := doc.Keys[doc.Active]
+	if !ok || key == "" {
+		return "", "", ErrAPIKeyNotSet
+	}
+	return key, doc.Regions[doc.Active], nil
+}
+
+// regions returns the stored key-name -> region mapping for the provider.
+// Keys stored without a region are absent from the map.
+func (s *keyStore) regions(ctx context.Context, provider string) (map[string]string, error) {
+	doc, err := s.load(ctx, provider)
+	if err != nil {
+		return nil, err
+	}
+	return doc.Regions, nil
 }
 
 // activeName returns the name of the currently active key, or the empty

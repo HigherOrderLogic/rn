@@ -68,6 +68,13 @@ func TestValidateConfig_RejectsInvalid(t *testing.T) {
 			msg: "anthropic.reasoning_effort",
 		},
 		{
+			name: "bedrock effort",
+			mut: func(c *Config) {
+				c.Bedrock.ReasoningEffort = "turbo"
+			},
+			msg: "bedrock.reasoning_effort",
+		},
+		{
 			name: "relative cache dir",
 			mut: func(c *Config) {
 				c.Local.ModelsCacheDir = "relative/path"

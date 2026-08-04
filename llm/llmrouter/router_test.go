@@ -26,6 +26,8 @@ package llmrouter
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -36,8 +38,31 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/storageapi/storagestub"
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/llm"
+	"unstable.build/go-tui/llm/bedrock"
 	"unstable.build/go-tui/llm/gemini"
 )
+
+// TestMain neutralises the ambient AWS environment so the live Bedrock
+// catalog never reaches the network from these tests, regardless of the
+// developer's AWS configuration.
+func TestMain(m *testing.M) {
+	absent := filepath.Join(os.TempDir(), "rune-llmrouter-absent-aws-config")
+	for k, v := range map[string]string{
+		"AWS_REGION":                  "",
+		"AWS_DEFAULT_REGION":          "",
+		"AWS_PROFILE":                 "",
+		"AWS_CONFIG_FILE":             absent,
+		"AWS_SHARED_CREDENTIALS_FILE": absent,
+		"AWS_EC2_METADATA_DISABLED":   "true",
+	} {
+		if v == "" {
+			_ = os.Unsetenv(k)
+			continue
+		}
+		_ = os.Setenv(k, v)
+	}
+	os.Exit(m.Run())
+}
 
 // newTestRouter constructs a router with sensible defaults rooted in
 // a fresh temp directory.
@@ -144,6 +169,109 @@ func TestRouter_StaticCatalog(t *testing.T) {
 	assert.True(t, hasProvider(ProviderCodex), "no codex models")
 	assert.True(t, hasProvider(ProviderClaude), "no claude models")
 	assert.True(t, hasProvider(ProviderGemini), "no gemini models")
+}
+
+// TestRouter_Models_IncludesBedrock verifies the Bedrock catalog is part of
+// the aggregate listing. Bedrock is queried live but degrades to its static
+// catalog, so the provider always contributes models.
+func TestRouter_Models_IncludesBedrock(t *testing.T) {
+	r := newTestRouter(t)
+	ctx := context.Background()
+	it := r.Models()
+	defer func() { _ = it.Close() }()
+
+	var hasBedrock bool
+	for {
+		entry, ok := it.Next(ctx)
+		if !ok {
+			break
+		}
+		if entry.Provider == ProviderBedrock {
+			hasBedrock = true
+		}
+	}
+	assert.True(t, hasBedrock, "bedrock static catalog should be present without a key")
+}
+
+// TestRouter_ResolveBedrock_EmptyKeyUsesCredentialChain verifies Bedrock is
+// the one hosted provider where a missing key is not an error: the client is
+// built anyway so it can authenticate with ambient AWS credentials.
+func TestRouter_ResolveBedrock_EmptyKeyUsesCredentialChain(t *testing.T) {
+	ctx := context.Background()
+	cfg := llm.DefaultConfig()
+	r, err := New(cfg, t.TempDir(), storagestub.NewInMemoryService(), &fakeLocalService{})
+	require.NoError(t, err)
+
+	svc, err := r.resolveBedrock(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+
+	r.mu.Lock()
+	_, cached := r.hostedClients[hostedCacheKey{provider: ProviderBedrock, apiKey: ""}]
+	r.mu.Unlock()
+	assert.True(t, cached, "the chain-authenticated client is cached under the empty key")
+}
+
+// TestRouter_ResolveBedrock_StoredKeyGetsOwnClient verifies adding a key
+// produces a distinct client from the credential-chain one.
+func TestRouter_ResolveBedrock_StoredKeyGetsOwnClient(t *testing.T) {
+	ctx := context.Background()
+	r := newTestRouter(t)
+
+	chainSvc, err := r.resolveBedrock(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, r.AddProviderKey(ctx, ProviderBedrock, "work", "bedrock-key", "us-east-1"))
+	keySvc, err := r.resolveBedrock(ctx)
+	require.NoError(t, err)
+	assert.NotSame(t, chainSvc, keySvc)
+
+	again, err := r.resolveBedrock(ctx)
+	require.NoError(t, err)
+	assert.Same(t, keySvc, again, "repeated resolves must return the cached client")
+}
+
+func TestRouter_Resolve_Bedrock(t *testing.T) {
+	r := newTestRouter(t)
+	svc, err := r.resolve(context.Background(),
+		llmapi.ModelEntry{Provider: ProviderBedrock, Name: bedrock.FlagshipModel()})
+	require.NoError(t, err)
+	assert.NotNil(t, svc)
+}
+
+// TestRouter_BuildHostedClient_BedrockVerifiesRegionalFlagship pins that
+// key verification probes the inference profile serving the key's region:
+// a European key checked against the US profile would fail with a
+// model-access error even when the key is valid.
+func TestRouter_BuildHostedClient_BedrockVerifiesRegionalFlagship(t *testing.T) {
+	r := newTestRouter(t)
+
+	svc, model, err := r.buildHostedClient(ProviderBedrock, "bedrock-key", "us-east-1")
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+	assert.Equal(t, ProviderBedrock, model.Provider)
+	assert.Equal(t, bedrock.FlagshipModel(), model.Name)
+
+	_, model, err = r.buildHostedClient(ProviderBedrock, "bedrock-key", "eu-west-1")
+	require.NoError(t, err)
+	assert.Equal(t, bedrock.VerificationModelForRegion("eu-west-1"), model.Name)
+}
+
+// TestRouter_ResolveBedrock_RegionChangeGetsOwnClient pins that re-adding
+// the same key value under a different region cannot serve a stale client
+// from the cache.
+func TestRouter_ResolveBedrock_RegionChangeGetsOwnClient(t *testing.T) {
+	ctx := context.Background()
+	r := newTestRouter(t)
+
+	require.NoError(t, r.AddProviderKey(ctx, ProviderBedrock, "work", "bedrock-key", "us-east-1"))
+	usSvc, err := r.resolveBedrock(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, r.AddProviderKey(ctx, ProviderBedrock, "work", "bedrock-key", "eu-west-1"))
+	euSvc, err := r.resolveBedrock(ctx)
+	require.NoError(t, err)
+	assert.NotSame(t, usSvc, euSvc)
 }
 
 // TestRouter_Models_GeminiErrorDoesNotTruncate verifies that a failing
@@ -258,7 +386,7 @@ func TestRouter_ResolveHosted_StorageWinsOverConfig(t *testing.T) {
 	storage := storagestub.NewInMemoryService()
 	r, err := New(cfg, t.TempDir(), storage, &fakeLocalService{})
 	require.NoError(t, err)
-	require.NoError(t, r.AddProviderKey(ctx, ProviderOpenAI, "work", "storage-key"))
+	require.NoError(t, r.AddProviderKey(ctx, ProviderOpenAI, "work", "storage-key", ""))
 
 	svc, err := r.resolveOpenAI(ctx)
 	require.NoError(t, err)
@@ -332,22 +460,22 @@ func (s *verifyService) GetModel(_ context.Context, _ llmapi.ModelEntry) (llmapi
 func TestRouter_VerifyProviderKey_Success(t *testing.T) {
 	ctx := context.Background()
 	r := newTestRouter(t)
-	r.newHostedClient = func(_, _ string) (llmapi.Service, llmapi.ModelEntry, error) {
+	r.newHostedClient = func(_, _, _ string) (llmapi.Service, llmapi.ModelEntry, error) {
 		return &verifyService{events: []llmapi.Event{{Type: llmapi.EventTextDelta, Text: "ok"}}},
 			llmapi.ModelEntry{Name: "m", Provider: ProviderOpenAI}, nil
 	}
-	require.NoError(t, r.VerifyProviderKey(ctx, ProviderOpenAI, "good-key"))
+	require.NoError(t, r.VerifyProviderKey(ctx, ProviderOpenAI, "good-key", ""))
 }
 
 func TestRouter_VerifyProviderKey_AuthError(t *testing.T) {
 	ctx := context.Background()
 	r := newTestRouter(t)
 	authErr := errors.New("invalid api key")
-	r.newHostedClient = func(_, _ string) (llmapi.Service, llmapi.ModelEntry, error) {
+	r.newHostedClient = func(_, _, _ string) (llmapi.Service, llmapi.ModelEntry, error) {
 		return &verifyService{events: []llmapi.Event{{Type: llmapi.EventStreamError, Error: authErr}}},
 			llmapi.ModelEntry{Name: "m", Provider: ProviderOpenAI}, nil
 	}
-	err := r.VerifyProviderKey(ctx, ProviderOpenAI, "bad-key")
+	err := r.VerifyProviderKey(ctx, ProviderOpenAI, "bad-key", "")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, authErr)
 }

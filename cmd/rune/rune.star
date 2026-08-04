@@ -112,6 +112,18 @@ config = {
         },
         "gemini": {
         },
+        "bedrock": {
+            # Named profile from the shared AWS config files. Empty uses
+            # the default credential chain. API keys and their regions are
+            # stored via `models providers bedrock add <name> <region>`.
+            "profile":          "",
+            # Override the Bedrock runtime endpoint (VPC endpoint or
+            # gateway). Empty uses the standard regional endpoint.
+            "base_url":         "",
+            "reasoning_effort": "",
+            # "default" enables prompt caching, "" disables it.
+            "cache_control":    "",
+        },
         "codex": {
             # OpenAI models via a ChatGPT Codex subscription (browser
             # sign-in, no api_key). Sign in with `models providers codex

@@ -184,8 +184,8 @@ func TestProvidersHostedStatusEmpty(t *testing.T) {
 func TestProvidersHostedUseAndRemove(t *testing.T) {
 	ctx := context.Background()
 	h, _, _, _ := newProvidersHandlerForTest(t)
-	require.NoError(t, h.router.AddProviderKey(ctx, llmrouter.ProviderOpenAI, "work", "k1"))
-	require.NoError(t, h.router.AddProviderKey(ctx, llmrouter.ProviderOpenAI, "home", "k2"))
+	require.NoError(t, h.router.AddProviderKey(ctx, llmrouter.ProviderOpenAI, "work", "k1", ""))
+	require.NoError(t, h.router.AddProviderKey(ctx, llmrouter.ProviderOpenAI, "home", "k2", ""))
 
 	_, err := h.HandleCommand(ctx,
 		repl.Command{Name: "providers", Args: []string{"openai", "use", "home"}}, nil)
@@ -210,14 +210,15 @@ func TestProvidersHostedUseAndRemove(t *testing.T) {
 func TestProvidersComplete(t *testing.T) {
 	ctx := context.Background()
 	h, _, _, _ := newProvidersHandlerForTest(t)
-	require.NoError(t, h.router.AddProviderKey(ctx, llmrouter.ProviderOpenAI, "work", "k1"))
-	require.NoError(t, h.router.AddProviderKey(ctx, llmrouter.ProviderOpenAI, "home", "k2"))
+	require.NoError(t, h.router.AddProviderKey(ctx, llmrouter.ProviderOpenAI, "work", "k1", ""))
+	require.NoError(t, h.router.AddProviderKey(ctx, llmrouter.ProviderOpenAI, "home", "k2", ""))
 
 	level1, err := h.Complete(ctx, "providers", nil)
 	require.NoError(t, err)
 	names, err := iterator.ToSlice(ctx, level1)
 	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"codex", "claude", "openai", "anthropic", "gemini"}, names)
+	assert.ElementsMatch(t,
+		[]string{"codex", "claude", "openai", "anthropic", "gemini", "bedrock"}, names)
 
 	codexSubs, err := h.Complete(ctx, "providers", []string{"codex", ""})
 	require.NoError(t, err)
@@ -293,7 +294,7 @@ func submitKey(t *testing.T, fl browserapi.Floating, key string) {
 func TestProviderAddVerifySuccessStores(t *testing.T) {
 	ctx := context.Background()
 	h, wm, notifs, _ := newProvidersHandlerForTest(t)
-	h.verify = func(context.Context, string, string) error { return nil }
+	h.verify = func(context.Context, string, string, string) error { return nil }
 
 	_, err := h.HandleCommand(ctx,
 		repl.Command{Name: "providers", Args: []string{"openai", "add", "work"}}, nil)
@@ -309,6 +310,50 @@ func TestProviderAddVerifySuccessStores(t *testing.T) {
 	assert.Equal(t, browserapi.LevelSuccess, notifs.notes[len(notifs.notes)-1].level)
 }
 
+// TestProviderAddBedrockRequiresRegion pins that the bedrock add flow
+// refuses to open the key prompt until a region is supplied: keys are
+// region-scoped, and storing one without its region reproduces the
+// wrong-region 403 the region argument exists to prevent.
+func TestProviderAddBedrockRequiresRegion(t *testing.T) {
+	ctx := context.Background()
+	h, wm, _, _ := newProvidersHandlerForTest(t)
+	verifyCalled := false
+	h.verify = func(context.Context, string, string, string) error {
+		verifyCalled = true
+		return nil
+	}
+
+	_, err := h.HandleCommand(ctx,
+		repl.Command{Name: "providers", Args: []string{"bedrock", "add", "work"}}, nil)
+	require.NoError(t, err)
+	assert.Nil(t, wm.lastFloating, "no key prompt without a region")
+	assert.False(t, verifyCalled)
+}
+
+// TestProviderAddBedrockStoresRegionWithKey exercises the happy path:
+// the region rides through verification and lands in the keystore.
+func TestProviderAddBedrockStoresRegionWithKey(t *testing.T) {
+	ctx := context.Background()
+	h, wm, _, _ := newProvidersHandlerForTest(t)
+	var verifiedRegion string
+	h.verify = func(_ context.Context, _, _, region string) error {
+		verifiedRegion = region
+		return nil
+	}
+
+	_, err := h.HandleCommand(ctx,
+		repl.Command{Name: "providers", Args: []string{"bedrock", "add", "work", "eu-west-1"}}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, wm.lastFloating)
+
+	submitKey(t, wm.lastFloating, "bedrock-api-key-abc")
+
+	assert.Equal(t, "eu-west-1", verifiedRegion, "verification must probe the key's region")
+	regions, err := h.router.ProviderKeyRegions(ctx, llmrouter.ProviderBedrock)
+	require.NoError(t, err)
+	assert.Equal(t, "eu-west-1", regions["work"])
+}
+
 // TestProviderAddTrimsWhitespace asserts a key pasted with surrounding
 // whitespace is trimmed before it is verified and stored, so the
 // Authorization header never carries stray spaces or newlines.
@@ -316,7 +361,7 @@ func TestProviderAddTrimsWhitespace(t *testing.T) {
 	ctx := context.Background()
 	h, wm, _, _ := newProvidersHandlerForTest(t)
 	var verified string
-	h.verify = func(_ context.Context, _, key string) error {
+	h.verify = func(_ context.Context, _, key, _ string) error {
 		verified = key
 		return nil
 	}
@@ -340,7 +385,7 @@ func TestProviderAddWhitespaceOnlyKeyAborts(t *testing.T) {
 	ctx := context.Background()
 	h, wm, _, _ := newProvidersHandlerForTest(t)
 	verifyCalled := false
-	h.verify = func(context.Context, string, string) error {
+	h.verify = func(context.Context, string, string, string) error {
 		verifyCalled = true
 		return nil
 	}
@@ -381,7 +426,7 @@ func drainDone(
 func TestProviderAddIteratorBlocksUntilStore(t *testing.T) {
 	ctx := context.Background()
 	h, wm, _, _ := newProvidersHandlerForTest(t)
-	h.verify = func(context.Context, string, string) error { return nil }
+	h.verify = func(context.Context, string, string, string) error { return nil }
 
 	it, err := h.HandleCommand(ctx,
 		repl.Command{Name: "providers", Args: []string{"openai", "add", "work"}}, nil)
@@ -413,7 +458,7 @@ func TestProviderAddIteratorBlocksUntilStore(t *testing.T) {
 // of leaking the draining goroutine.
 func TestProviderAddIteratorUnblocksOnContextCancel(t *testing.T) {
 	h, wm, _, _ := newProvidersHandlerForTest(t)
-	h.verify = func(context.Context, string, string) error { return nil }
+	h.verify = func(context.Context, string, string, string) error { return nil }
 
 	it, err := h.HandleCommand(context.Background(),
 		repl.Command{Name: "providers", Args: []string{"openai", "add", "work"}}, nil)
@@ -443,7 +488,7 @@ func TestProviderAddIteratorUnblocksOnContextCancel(t *testing.T) {
 // still-pending iterator and is safe to call more than once.
 func TestProviderAddIteratorCloseIsIdempotent(t *testing.T) {
 	h, wm, _, _ := newProvidersHandlerForTest(t)
-	h.verify = func(context.Context, string, string) error { return nil }
+	h.verify = func(context.Context, string, string, string) error { return nil }
 
 	it, err := h.HandleCommand(context.Background(),
 		repl.Command{Name: "providers", Args: []string{"openai", "add", "work"}}, nil)
@@ -464,7 +509,7 @@ func TestProviderAddVerifyFailOpensConfirm(t *testing.T) {
 	ctx := context.Background()
 	h, wm, _, prompt := newProvidersHandlerForTest(t)
 	prompt.selectIdx = -1 // capture the prompt without auto-selecting
-	h.verify = func(context.Context, string, string) error {
+	h.verify = func(context.Context, string, string, string) error {
 		return errors.New("401 invalid api key")
 	}
 
@@ -500,7 +545,7 @@ func TestProviderAddVerifyFailConfirmNo(t *testing.T) {
 	ctx := context.Background()
 	h, wm, _, prompt := newProvidersHandlerForTest(t)
 	prompt.selectIdx = -1
-	h.verify = func(context.Context, string, string) error {
+	h.verify = func(context.Context, string, string, string) error {
 		return errors.New("401 invalid api key")
 	}
 

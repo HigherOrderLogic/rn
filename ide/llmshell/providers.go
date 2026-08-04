@@ -50,6 +50,7 @@ var hostedProviders = []string{
 	llmrouter.ProviderOpenAI,
 	llmrouter.ProviderAnthropic,
 	llmrouter.ProviderGemini,
+	llmrouter.ProviderBedrock,
 }
 
 // providersConfig bundles the dependencies the providers subtree needs.
@@ -72,8 +73,9 @@ type providersHandler struct {
 	prompt   PromptOpener
 	// verify tests an API key before storing it. It defaults to the
 	// router's live verification; tests swap in a fake to avoid network
-	// calls.
-	verify func(ctx context.Context, provider, key string) error
+	// calls. region scopes the probe for region-bound providers (Bedrock)
+	// and is empty otherwise.
+	verify func(ctx context.Context, provider, key, region string) error
 	// spawn runs key verification off the event loop. It defaults to a
 	// panic-captured goroutine; tests swap in an inline runner.
 	spawn func(func())
@@ -88,8 +90,8 @@ func newProvidersHandler(cfg providersConfig) *providersHandler {
 		schedule: cfg.schedule,
 		prompt:   cfg.prompt,
 	}
-	h.verify = func(ctx context.Context, provider, key string) error {
-		return h.router.VerifyProviderKey(ctx, provider, key)
+	h.verify = func(ctx context.Context, provider, key, region string) error {
+		return h.router.VerifyProviderKey(ctx, provider, key, region)
 	}
 	h.spawn = func(fn func()) {
 		go debug.CapturePanicReport(fn)
@@ -395,7 +397,7 @@ func formatClaudeStatus(status claude.AuthStatus) string {
 }
 
 // handleHostedKeyProvider dispatches the add/remove/use/status subcommands
-// for the openai/anthropic/gemini providers.
+// for the openai/anthropic/gemini/bedrock providers.
 func (h *providersHandler) handleHostedKeyProvider(
 	ctx context.Context, provider string, args []string,
 ) (iterator.Iterator[component.Responsive], error) {
@@ -455,10 +457,44 @@ func (h *providersHandler) providerStatus(
 	if err != nil {
 		return nil, err
 	}
-	return markdownOutput(formatHostedStatus(provider, names, active)), nil
+	var regions map[string]string
+	if provider == llmrouter.ProviderBedrock {
+		if regions, err = h.router.ProviderKeyRegions(ctx, provider); err != nil {
+			return nil, err
+		}
+	}
+	status := formatHostedStatus(provider, names, active, regions)
+	if provider == llmrouter.ProviderBedrock {
+		status += h.bedrockChainNote(ctx, len(names) > 0)
+	}
+	return markdownOutput(status), nil
 }
 
-func formatHostedStatus(provider string, names []string, active string) string {
+// bedrockChainNote explains how Bedrock authenticates when no API key is
+// stored: Rune falls back to the ambient AWS credentials.
+func (h *providersHandler) bedrockChainNote(ctx context.Context, hasKeys bool) string {
+	source, ok := h.router.BedrockCredentialChain(ctx)
+	switch {
+	case ok && hasKeys:
+		return fmt.Sprintf("\nWithout a stored key, Rune would sign requests "+
+			"with your AWS credentials from %s.\n", source)
+	case ok:
+		return fmt.Sprintf("\nRune is signing Bedrock requests with your AWS "+
+			"credentials from %s. The region comes from your AWS "+
+			"configuration (`AWS_REGION` or the profile's region).\n", source)
+	case hasKeys:
+		return ""
+	default:
+		return "\nNo AWS credentials were found either. Add an API key with " +
+			"`models providers bedrock add <name> <region>`, or sign in with " +
+			"the AWS CLI (`aws configure` for access keys, `aws sso login` " +
+			"for single sign-on) and Rune will use that sign-in.\n"
+	}
+}
+
+// formatHostedStatus renders the stored-key listing. regions, when
+// non-nil, annotates each key with the region it is scoped to.
+func formatHostedStatus(provider string, names []string, active string, regions map[string]string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "## %s API keys\n\n", providerLabel(provider))
 	if len(names) == 0 {
@@ -471,10 +507,14 @@ func formatHostedStatus(provider string, names []string, active string) string {
 	fmt.Fprintf(&b, "%d stored key(s). The **active** key is the one Rune "+
 		"uses for %s requests.\n\n", len(names), providerLabel(provider))
 	for _, n := range names {
+		label := n
+		if region := regions[n]; region != "" {
+			label = fmt.Sprintf("%s (%s)", n, region)
+		}
 		if n == active {
-			fmt.Fprintf(&b, "- **%s** — active\n", n)
+			fmt.Fprintf(&b, "- **%s** — active\n", label)
 		} else {
-			fmt.Fprintf(&b, "- %s\n", n)
+			fmt.Fprintf(&b, "- %s\n", label)
 		}
 	}
 	fmt.Fprintf(&b, "\nSwitch with `models providers %s use <name>`.\n", provider)
@@ -498,7 +538,7 @@ func providerHelp(provider string) string {
 func unknownProviderMarkdown(provider string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Unknown provider `%s`. Choose one of `codex`, `claude`, "+
-		"`openai`, `anthropic`, or `gemini`.\n\n", provider)
+		"`openai`, `anthropic`, `gemini`, or `bedrock`.\n\n", provider)
 	b.WriteString(usageMarkdown(providersManual()))
 	return b.String()
 }
@@ -579,8 +619,22 @@ func (h *providersHandler) providerAdd(
 		return markdownOutput(addKeyHelp(provider)), nil
 	}
 	name := args[0]
+	region := ""
+	if provider == llmrouter.ProviderBedrock {
+		// Bedrock keys only work in the region they were minted in, so the
+		// region is recorded with the key instead of living in config.
+		if len(args) < 2 {
+			return markdownOutput(
+				"Bedrock API keys are bound to one AWS region, so name it " +
+					"when adding the key:\n\n```\nmodels providers bedrock " +
+					"add " + name + " <region>\n```\n\nUse the region shown " +
+					"in the AWS console where you generated the key, for " +
+					"example `us-east-1`.\n"), nil
+		}
+		region = args[1]
+	}
 	ci := newCompletionIter()
-	h.openKeyPrompt(ctx, provider, name, ci)
+	h.openKeyPrompt(ctx, provider, name, region, ci)
 	return ci, nil
 }
 
@@ -610,7 +664,7 @@ func addKeyHelp(provider string) string {
 // signaled on every terminal outcome so the add command's iterator
 // completes only once the prompt has fully resolved.
 func (h *providersHandler) openKeyPrompt(
-	ctx context.Context, provider, name string, ci *completionIter,
+	ctx context.Context, provider, name, region string, ci *completionIter,
 ) {
 	h.schedule(func() {
 		ib := inputbox.New(
@@ -628,7 +682,7 @@ func (h *providersHandler) openKeyPrompt(
 					ci.signalDone()
 					return
 				}
-				h.verifyAndStore(ctx, provider, name, key, ci)
+				h.verifyAndStore(ctx, provider, name, key, region, ci)
 			},
 		}
 		win, err := h.wm.Floating(fh, browserapi.FloatingConfig{
@@ -649,25 +703,25 @@ func (h *providersHandler) openKeyPrompt(
 // opens a yes/no confirmation prompt. ci is propagated so completion is
 // signaled from whichever terminal branch runs.
 func (h *providersHandler) verifyAndStore(
-	ctx context.Context, provider, name, key string, ci *completionIter,
+	ctx context.Context, provider, name, key, region string, ci *completionIter,
 ) {
 	h.spawn(func() {
-		verifyErr := h.verify(ctx, provider, key)
+		verifyErr := h.verify(ctx, provider, key, region)
 		h.schedule(func() {
 			if verifyErr == nil {
-				h.storeKey(ctx, provider, name, key, ci)
+				h.storeKey(ctx, provider, name, key, region, ci)
 				return
 			}
-			h.openConfirmPrompt(ctx, provider, name, key, verifyErr, ci)
+			h.openConfirmPrompt(ctx, provider, name, key, region, verifyErr, ci)
 		})
 	})
 }
 
 func (h *providersHandler) storeKey(
-	ctx context.Context, provider, name, key string, ci *completionIter,
+	ctx context.Context, provider, name, key, region string, ci *completionIter,
 ) {
 	defer ci.signalDone()
-	if err := h.router.AddProviderKey(ctx, provider, name, key); err != nil {
+	if err := h.router.AddProviderKey(ctx, provider, name, key, region); err != nil {
 		_, _ = h.notifs.Notify(browserapi.LevelError,
 			"store %s api key: %v", provider, err)
 		return
@@ -679,7 +733,7 @@ func (h *providersHandler) storeKey(
 // openConfirmPrompt asks the user whether to store a key that failed
 // verification, showing the provider's error.
 func (h *providersHandler) openConfirmPrompt(
-	ctx context.Context, provider, name, key string, verifyErr error, ci *completionIter,
+	ctx context.Context, provider, name, key, region string, verifyErr error, ci *completionIter,
 ) {
 	const (
 		yesOpt = " yes "
@@ -694,7 +748,7 @@ func (h *providersHandler) openConfirmPrompt(
 		[]term.KeyComb{{Ch: 'y'}, {Ch: 'n'}},
 		handler.FuncPromptHandler(func(idx int, _ string) {
 			if idx == 0 {
-				h.storeKey(ctx, provider, name, key, ci)
+				h.storeKey(ctx, provider, name, key, region, ci)
 				return
 			}
 			_, _ = h.notifs.Notify(browserapi.LevelInfo,

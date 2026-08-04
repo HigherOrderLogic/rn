@@ -30,6 +30,7 @@ package llm
 
 import (
 	"unstable.build/go-tui/llm/anthropic"
+	"unstable.build/go-tui/llm/bedrock"
 	"unstable.build/go-tui/llm/codex"
 	"unstable.build/go-tui/llm/gemini"
 	"unstable.build/go-tui/llm/llamaserver"
@@ -62,6 +63,7 @@ type Config struct {
 	OpenAI    OpenAIConfig
 	Anthropic AnthropicConfig
 	Gemini    GeminiConfig
+	Bedrock   BedrockConfig
 	Codex     CodexConfig
 	Claude    ClaudeConfig
 	Custom    CustomConfig
@@ -89,6 +91,19 @@ type GeminiConfig struct {
 	APIKey          string
 	BaseURL         string
 	ReasoningEffort string
+}
+
+// BedrockConfig captures `models.bedrock.*`. The API key and region are
+// deliberately absent: Bedrock keys are region-scoped, so both are stored
+// together through the `models providers bedrock add <name> <region>`
+// keystore flow. Without a stored key the client authenticates through
+// the standard AWS credential chain, whose region comes from the AWS
+// environment or the selected profile.
+type BedrockConfig struct {
+	Profile         string
+	BaseURL         string
+	ReasoningEffort string
+	CacheControl    string
 }
 
 // CodexConfig captures `models.codex.*`.
@@ -189,6 +204,18 @@ func (c Config) GeminiClientConfig() gemini.Config {
 	return gemini.Config{
 		BaseURL:         c.Gemini.BaseURL,
 		ReasoningEffort: c.Gemini.ReasoningEffort,
+		DebugHTTP:       c.DebugHTTP,
+	}
+}
+
+// BedrockClientConfig projects the bedrock.Config used by the Bedrock
+// provider, which talks to the Amazon Bedrock ConverseStream API.
+func (c Config) BedrockClientConfig() bedrock.Config {
+	return bedrock.Config{
+		Profile:         c.Bedrock.Profile,
+		BaseURL:         c.Bedrock.BaseURL,
+		ReasoningEffort: c.Bedrock.ReasoningEffort,
+		CacheControl:    c.Bedrock.CacheControl,
 		DebugHTTP:       c.DebugHTTP,
 	}
 }

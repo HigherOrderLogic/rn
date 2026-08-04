@@ -41,6 +41,7 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/iterator"
 	"unstable.build/go-tui/llm"
 	"unstable.build/go-tui/llm/anthropic"
+	"unstable.build/go-tui/llm/bedrock"
 	"unstable.build/go-tui/llm/claude"
 	"unstable.build/go-tui/llm/codex"
 	"unstable.build/go-tui/llm/gemini"
@@ -57,6 +58,7 @@ const (
 	ProviderCodex     = "codex"
 	ProviderClaude    = "claude"
 	ProviderGemini    = "gemini"
+	ProviderBedrock   = "bedrock"
 	ProviderCustom    = "custom"
 	ProviderOllama    = "ollama"
 	ProviderLocal     = llamacpp.LLMProvider // "llamacpp"
@@ -105,8 +107,10 @@ type Router struct {
 	hostedClients map[hostedCacheKey]llmapi.Service
 	// newHostedClient builds a throwaway hosted client for a given
 	// provider/key, used by VerifyProviderKey to test a key before
-	// storing it. Tests swap in a fake to avoid real network calls.
-	newHostedClient func(provider, apiKey string) (llmapi.Service, llmapi.ModelEntry, error)
+	// storing it. region carries the key's scope for region-bound
+	// providers (Bedrock) and is empty otherwise. Tests swap in a fake to
+	// avoid real network calls.
+	newHostedClient func(provider, apiKey, region string) (llmapi.Service, llmapi.ModelEntry, error)
 	// closed flips to true after Close so late dispatches that try to
 	// resurrect a torn-down service are rejected instead.
 	closed bool
@@ -132,6 +136,10 @@ type Router struct {
 type hostedCacheKey struct {
 	provider string
 	apiKey   string
+	// region distinguishes clients for region-scoped keys (Bedrock), so
+	// re-adding the same key under a different region cannot serve stale
+	// clients. Empty for region-less providers.
+	region string
 }
 
 // ErrRouterClosed is returned by dispatches issued after Router.Close.
@@ -268,12 +276,14 @@ func (r *Router) CountTokens(model llmapi.ModelEntry, messages []llmapi.Message)
 }
 
 // Models implements llmapi.Service by concatenating every known
-// provider's static catalog plus the dynamic gemini / ollama /
+// provider's static catalog plus the dynamic gemini / bedrock / ollama /
 // llamacpp registries. The order is deterministic: openai, anthropic,
-// codex, custom, ollama, local, gemini. Gemini is queried live and
-// surfaces list errors through its iterator; it is placed last so a
-// failed Gemini query (e.g. missing key) cannot truncate the
-// preceding providers when iterator.Aggregate halts on error.
+// codex, custom, ollama, local, bedrock, gemini. Gemini is queried live
+// and surfaces list errors through its iterator; it is placed last so a
+// failed Gemini query (e.g. missing key) cannot truncate the preceding
+// providers when iterator.Aggregate halts on error. Bedrock is also
+// queried live but degrades to its static catalog without reporting an
+// error, so it is safe to place ahead of Gemini.
 func (r *Router) Models() iterator.Iterator[llmapi.ModelEntry] {
 	its := []iterator.Iterator[llmapi.ModelEntry]{
 		iterator.FromSlice(openai.ModelEntries()),
@@ -288,6 +298,7 @@ func (r *Router) Models() iterator.Iterator[llmapi.ModelEntry] {
 		its = append(its, r.ollamaRegistry.Models())
 	}
 	its = append(its, r.localRegistry.Models())
+	its = append(its, r.bedrockCatalog(context.Background()))
 	its = append(its, r.geminiCatalog(context.Background()))
 	return iterator.Aggregate(its...)
 }
@@ -341,6 +352,8 @@ func (r *Router) resolve(ctx context.Context, model llmapi.ModelEntry) (llmapi.S
 		return r.resolveClaude(ctx)
 	case ProviderGemini:
 		return r.resolveGemini(ctx)
+	case ProviderBedrock:
+		return r.resolveBedrock(ctx)
 	case ProviderCustom:
 		if r.custom == nil {
 			return nil, fmt.Errorf("llmrouter: custom provider not configured")
@@ -455,12 +468,18 @@ func (r *Router) resolveAPIKey(ctx context.Context, provider, configKey string) 
 func (r *Router) hostedClient(
 	provider, apiKey string, build func() llmapi.Service,
 ) (llmapi.Service, error) {
+	return r.hostedClientInRegion(provider, apiKey, "", build)
+}
+
+func (r *Router) hostedClientInRegion(
+	provider, apiKey, region string, build func() llmapi.Service,
+) (llmapi.Service, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
 		return nil, ErrRouterClosed
 	}
-	key := hostedCacheKey{provider: provider, apiKey: apiKey}
+	key := hostedCacheKey{provider: provider, apiKey: apiKey, region: region}
 	if svc, ok := r.hostedClients[key]; ok {
 		return svc, nil
 	}
@@ -513,10 +532,46 @@ func (r *Router) geminiCatalog(ctx context.Context) iterator.Iterator[llmapi.Mod
 	return svc.Models()
 }
 
+// resolveBedrock returns the Bedrock client. Unlike the other hosted
+// providers an unset key is not an error: the client then authenticates
+// through the standard AWS credential chain (environment, shared profile,
+// SSO, IMDS). The empty key is still a valid cache key, so switching
+// between a stored key and the chain produces distinct clients. Keys come
+// exclusively from the keystore, which also records the region each key
+// is scoped to; there is no config-file key or region.
+func (r *Router) resolveBedrock(ctx context.Context) (llmapi.Service, error) {
+	key, region, err := r.store.activeWithRegion(ctx, ProviderBedrock)
+	if err != nil {
+		key, region = "", ""
+	}
+	return r.hostedClientInRegion(ProviderBedrock, key, region, func() llmapi.Service {
+		cfg := r.cfg.BedrockClientConfig()
+		cfg.Region = region
+		return bedrock.NewClient(key, cfg)
+	})
+}
+
+func (r *Router) bedrockCatalog(ctx context.Context) iterator.Iterator[llmapi.ModelEntry] {
+	svc, err := r.resolveBedrock(ctx)
+	if err != nil {
+		return iterator.FromSlice(bedrock.ModelEntries())
+	}
+	return svc.Models()
+}
+
+// BedrockCredentialChain reports whether ambient AWS credentials can sign
+// Bedrock requests, and names the source that supplied them. Callers use it
+// to explain that Bedrock works even with no stored API key.
+func (r *Router) BedrockCredentialChain(ctx context.Context) (string, bool) {
+	return bedrock.CredentialChainStatus(ctx, r.cfg.BedrockClientConfig())
+}
+
 // AddProviderKey stores a named API key for a hosted provider. The first
-// key added for a provider becomes the active key.
-func (r *Router) AddProviderKey(ctx context.Context, provider, name, key string) error {
-	return r.store.add(ctx, provider, name, key)
+// key added for a provider becomes the active key. region records the
+// key's scope for region-bound providers (Bedrock); pass the empty string
+// for providers whose keys are global.
+func (r *Router) AddProviderKey(ctx context.Context, provider, name, key, region string) error {
+	return r.store.add(ctx, provider, name, key, region)
 }
 
 // RemoveProviderKey deletes a named API key. When the removed key is the
@@ -548,11 +603,18 @@ func (r *Router) ProviderKeyActive(ctx context.Context, provider string) (string
 	return r.store.active(ctx, provider)
 }
 
+// ProviderKeyRegions returns the stored key-name -> region mapping for a
+// provider. Keys stored without a region are absent from the map.
+func (r *Router) ProviderKeyRegions(ctx context.Context, provider string) (map[string]string, error) {
+	return r.store.regions(ctx, provider)
+}
+
 // buildHostedClient constructs a throwaway client for the given provider
 // and key plus the model entry to probe during verification. The client
-// is not cached.
+// is not cached. region carries the key's scope for region-bound
+// providers (Bedrock) and is ignored by the rest.
 func (r *Router) buildHostedClient(
-	provider, apiKey string,
+	provider, apiKey, region string,
 ) (llmapi.Service, llmapi.ModelEntry, error) {
 	switch provider {
 	case ProviderOpenAI:
@@ -571,6 +633,15 @@ func (r *Router) buildHostedClient(
 		client := gemini.NewClient(apiKey, r.cfg.GeminiClientConfig())
 		model := llmapi.ModelEntry{Name: gemini.VerificationModel, Provider: ProviderGemini}
 		return client, model, nil
+	case ProviderBedrock:
+		cfg := r.cfg.BedrockClientConfig()
+		cfg.Region = region
+		client := bedrock.NewClient(apiKey, cfg)
+		model := llmapi.ModelEntry{
+			Name:     bedrock.VerificationModelForRegion(region),
+			Provider: ProviderBedrock,
+		}
+		return client, model, nil
 	default:
 		return nil, llmapi.ModelEntry{}, fmt.Errorf("llmrouter: provider %q does not support key verification", provider)
 	}
@@ -578,9 +649,11 @@ func (r *Router) buildHostedClient(
 
 // VerifyProviderKey tests an API key by issuing a minimal completion
 // against the provider's first model and consuming the first event. It
-// returns the provider error verbatim, or nil when the key works.
-func (r *Router) VerifyProviderKey(ctx context.Context, provider, key string) error {
-	client, model, err := r.newHostedClient(provider, key)
+// returns the provider error verbatim, or nil when the key works. region
+// scopes the probe for region-bound providers (Bedrock) and is empty
+// otherwise.
+func (r *Router) VerifyProviderKey(ctx context.Context, provider, key, region string) error {
+	client, model, err := r.newHostedClient(provider, key, region)
 	if err != nil {
 		return err
 	}

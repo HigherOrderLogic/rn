@@ -76,9 +76,9 @@ func TestRouter_Alias_UnsetReservedFallsBackToFlagship(t *testing.T) {
 	// The key document's server-managed UpdatedAt advances on every add,
 	// so the most-recently authenticated provider wins. A short sleep
 	// guarantees the millisecond-resolution timestamps differ.
-	require.NoError(t, r.store.add(ctx, ProviderAnthropic, "k", "key-a"))
+	require.NoError(t, r.store.add(ctx, ProviderAnthropic, "k", "key-a", ""))
 	time.Sleep(2 * time.Millisecond)
-	require.NoError(t, r.store.add(ctx, ProviderGemini, "k", "key-g"))
+	require.NoError(t, r.store.add(ctx, ProviderGemini, "k", "key-g", ""))
 
 	for _, name := range []string{llmapi.DefaultModel, "query"} {
 		got, err := r.GetModel(ctx, llmapi.ModelEntry{Name: name})
@@ -90,7 +90,7 @@ func TestRouter_Alias_UnsetReservedFallsBackToFlagship(t *testing.T) {
 	// Re-authenticate anthropic so it becomes the most recent; the
 	// fallback flips.
 	time.Sleep(2 * time.Millisecond)
-	require.NoError(t, r.store.add(ctx, ProviderAnthropic, "k2", "key-a2"))
+	require.NoError(t, r.store.add(ctx, ProviderAnthropic, "k2", "key-a2", ""))
 	got, err := r.GetModel(ctx, llmapi.ModelEntry{Name: llmapi.DefaultModel})
 	require.NoError(t, err)
 	assert.Equal(t, ProviderAnthropic, got.Provider)

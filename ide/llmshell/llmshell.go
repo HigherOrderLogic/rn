@@ -64,8 +64,8 @@ var commandManual = textapi.CommandManual{
 			Name: "providers",
 			Summary: "Sign in to model providers. `codex` and `claude` use a " +
 				"ChatGPT/Claude subscription via browser sign-in; `openai`, " +
-				"`anthropic`, and `gemini` use pay-as-you-go API keys.",
-			Synopsis: "(codex|claude|openai|anthropic|gemini)",
+				"`anthropic`, `gemini`, and `bedrock` use pay-as-you-go API keys.",
+			Synopsis: "(codex|claude|openai|anthropic|gemini|bedrock)",
 			Commands: []textapi.CommandManual{
 				{
 					Name: "codex",
@@ -136,6 +136,17 @@ var commandManual = textapi.CommandManual{
 					Synopsis: "(add|remove|use|status)",
 					Commands: hostedProviderManual,
 				},
+				{
+					Name: "bedrock",
+					Summary: "Use Amazon Bedrock models with a Bedrock API key. " +
+						"Keys are bound to one AWS region, so `add` takes the " +
+						"region alongside the key name. Without a stored key, " +
+						"Rune uses the AWS sign-in already on this machine (run " +
+						"`aws configure` or `aws sso login` with the AWS CLI " +
+						"to sign in).",
+					Synopsis: "(add|remove|use|status)",
+					Commands: bedrockProviderManual,
+				},
 			},
 		},
 		{
@@ -198,6 +209,34 @@ var hostedProviderManual = []textapi.CommandManual{
 	{
 		Name:    "status",
 		Summary: "List the names of stored API keys and show which one is currently active.",
+	},
+}
+
+// bedrockProviderManual mirrors hostedProviderManual with a region-aware
+// `add`: Bedrock API keys only work in the AWS region they were minted
+// in, so the region is stored with the key.
+var bedrockProviderManual = []textapi.CommandManual{
+	{
+		Name: "add",
+		Summary: "Add a new API key under a name, scoped to the AWS region " +
+			"it was generated in. Opens a hidden prompt to paste the key, " +
+			"tests it against Bedrock in that region, then stores both " +
+			"together. The first key you add becomes the active one.",
+		Synopsis: "<name> <region>",
+	},
+	{
+		Name:     "remove",
+		Summary:  "Delete a stored API key by name. If it was the active key, another stored key is promoted automatically.",
+		Synopsis: "<name>",
+	},
+	{
+		Name:     "use",
+		Summary:  "Switch the active API key to a stored one by name. Takes effect immediately, no restart needed.",
+		Synopsis: "<name>",
+	},
+	{
+		Name:    "status",
+		Summary: "List the stored API keys with their regions and show which one is currently active.",
 	},
 }
 
@@ -493,6 +532,12 @@ var commandExamples = map[string]string{
 		"models providers gemini use work    # make 'work' the active key\n" +
 		"models providers gemini status      # list keys and the active one\n" +
 		"models providers gemini remove work # delete the 'work' key\n" +
+		"```",
+	"models providers bedrock": "```\n" +
+		"models providers bedrock add work us-east-1 # paste a key minted in us-east-1, store it as 'work'\n" +
+		"models providers bedrock use work           # make 'work' the active key\n" +
+		"models providers bedrock status             # list keys, regions, and the active one\n" +
+		"models providers bedrock remove work        # delete the 'work' key\n" +
 		"```",
 	"alias": "```\n" +
 		"models alias                          # list aliases and what they resolve to\n" +

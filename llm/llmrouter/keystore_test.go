@@ -39,7 +39,7 @@ func TestKeyStore_AddFirstKeyBecomesActive(t *testing.T) {
 	ctx := context.Background()
 	s := newKeyStore(storagestub.NewInMemoryService())
 
-	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1"))
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1", ""))
 	active, err := s.active(ctx, ProviderOpenAI)
 	require.NoError(t, err)
 	assert.Equal(t, "k1", active)
@@ -53,19 +53,63 @@ func TestKeyStore_AddSecondKeyKeepsActive(t *testing.T) {
 	ctx := context.Background()
 	s := newKeyStore(storagestub.NewInMemoryService())
 
-	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1"))
-	require.NoError(t, s.add(ctx, ProviderOpenAI, "home", "k2"))
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1", ""))
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "home", "k2", ""))
 
 	active, err := s.active(ctx, ProviderOpenAI)
 	require.NoError(t, err)
 	assert.Equal(t, "k1", active, "adding a second key must not change the active key")
 }
 
+// TestKeyStore_RegionTravelsWithKey pins that a key's region is stored,
+// returned with the active key, follows re-adds, and dies with the key.
+// Bedrock keys only work in the region they were minted in, so the region
+// must live in storage next to the key rather than in config.
+func TestKeyStore_RegionTravelsWithKey(t *testing.T) {
+	ctx := context.Background()
+	s := newKeyStore(storagestub.NewInMemoryService())
+
+	require.NoError(t, s.add(ctx, ProviderBedrock, "work", "k1", "eu-west-1"))
+	key, region, err := s.activeWithRegion(ctx, ProviderBedrock)
+	require.NoError(t, err)
+	assert.Equal(t, "k1", key)
+	assert.Equal(t, "eu-west-1", region)
+
+	// Re-adding under a new region replaces the old scope.
+	require.NoError(t, s.add(ctx, ProviderBedrock, "work", "k1", "us-east-1"))
+	_, region, err = s.activeWithRegion(ctx, ProviderBedrock)
+	require.NoError(t, err)
+	assert.Equal(t, "us-east-1", region)
+
+	regions, err := s.regions(ctx, ProviderBedrock)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"work": "us-east-1"}, regions)
+
+	require.NoError(t, s.remove(ctx, ProviderBedrock, "work"))
+	regions, err = s.regions(ctx, ProviderBedrock)
+	require.NoError(t, err)
+	assert.Empty(t, regions)
+}
+
+// TestKeyStore_RegionlessProvidersStayRegionless pins that the shared
+// keystore does not grow region entries for providers whose keys are
+// global.
+func TestKeyStore_RegionlessProvidersStayRegionless(t *testing.T) {
+	ctx := context.Background()
+	s := newKeyStore(storagestub.NewInMemoryService())
+
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1", ""))
+	key, region, err := s.activeWithRegion(ctx, ProviderOpenAI)
+	require.NoError(t, err)
+	assert.Equal(t, "k1", key)
+	assert.Empty(t, region)
+}
+
 func TestKeyStore_Use(t *testing.T) {
 	ctx := context.Background()
 	s := newKeyStore(storagestub.NewInMemoryService())
-	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1"))
-	require.NoError(t, s.add(ctx, ProviderOpenAI, "home", "k2"))
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1", ""))
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "home", "k2", ""))
 
 	require.NoError(t, s.use(ctx, ProviderOpenAI, "home"))
 	active, err := s.active(ctx, ProviderOpenAI)
@@ -80,8 +124,8 @@ func TestKeyStore_Use(t *testing.T) {
 func TestKeyStore_RemovePromotesActive(t *testing.T) {
 	ctx := context.Background()
 	s := newKeyStore(storagestub.NewInMemoryService())
-	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1"))
-	require.NoError(t, s.add(ctx, ProviderOpenAI, "home", "k2"))
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1", ""))
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "home", "k2", ""))
 
 	require.NoError(t, s.remove(ctx, ProviderOpenAI, "work"))
 	active, err := s.active(ctx, ProviderOpenAI)
@@ -95,7 +139,7 @@ func TestKeyStore_RemovePromotesActive(t *testing.T) {
 func TestKeyStore_RemoveLastClearsActive(t *testing.T) {
 	ctx := context.Background()
 	s := newKeyStore(storagestub.NewInMemoryService())
-	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1"))
+	require.NoError(t, s.add(ctx, ProviderOpenAI, "work", "k1", ""))
 	require.NoError(t, s.remove(ctx, ProviderOpenAI, "work"))
 
 	_, err := s.active(ctx, ProviderOpenAI)
@@ -105,8 +149,8 @@ func TestKeyStore_RemoveLastClearsActive(t *testing.T) {
 func TestKeyStore_Names(t *testing.T) {
 	ctx := context.Background()
 	s := newKeyStore(storagestub.NewInMemoryService())
-	require.NoError(t, s.add(ctx, ProviderAnthropic, "work", "k1"))
-	require.NoError(t, s.add(ctx, ProviderAnthropic, "home", "k2"))
+	require.NoError(t, s.add(ctx, ProviderAnthropic, "work", "k1", ""))
+	require.NoError(t, s.add(ctx, ProviderAnthropic, "home", "k2", ""))
 
 	names, err := s.names(ctx, ProviderAnthropic)
 	require.NoError(t, err)
@@ -162,7 +206,7 @@ func TestKeyStore_VersionPreconditionIsInt64(t *testing.T) {
 	ctx := context.Background()
 	svc := storagestub.NewInMemoryService()
 	s := newKeyStore(svc)
-	require.NoError(t, s.add(ctx, ProviderGemini, "work", "k1"))
+	require.NoError(t, s.add(ctx, ProviderGemini, "work", "k1", ""))
 
 	id := keyStoreDocID(ProviderGemini)
 	var doc providerKeys
@@ -189,7 +233,7 @@ func TestKeyStore_ConcurrentAddsNoLostWrites(t *testing.T) {
 	for i := range n {
 		go func(i int) {
 			defer wg.Done()
-			assert.NoError(t, s.add(ctx, ProviderOpenAI, fmt.Sprintf("k%02d", i), fmt.Sprintf("v%02d", i)))
+			assert.NoError(t, s.add(ctx, ProviderOpenAI, fmt.Sprintf("k%02d", i), fmt.Sprintf("v%02d", i), ""))
 		}(i)
 	}
 	wg.Wait()
