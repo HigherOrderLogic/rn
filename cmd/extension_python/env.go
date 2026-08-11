@@ -33,6 +33,7 @@ import (
 
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/extension_python/pyshim"
 	"unstable.build/go-tui/debug"
 )
 
@@ -119,11 +120,12 @@ func ensureEnvironment(
 	kind projectKind,
 	fs workspaceapi.FileSystem,
 	dir string,
+	dataDir string,
 ) error {
 	notifID, _ := notify.Notify(browserapi.LevelInfo, "Preparing Python environment")
 
 	total, step := int64(4), int64(3)
-	installed, err := ensureInterpreter(ctx, uvBin, exec, notify, notifID, dir)
+	installed, err := ensureInterpreter(ctx, uvBin, exec, notify, notifID, fs, dir, dataDir)
 	if err != nil {
 		return err
 	}
@@ -140,24 +142,30 @@ func ensureEnvironment(
 }
 
 // ensureInterpreter resolves a Python interpreter, installing one when
-// `uv python find` fails so a fresh machine bootstraps on first run. It
-// reports the find/install step and returns whether an install ran.
+// `uv python find` fails so a fresh machine bootstraps on first run, or
+// when the managed-fallback link the python shims exec is missing so an
+// install migrated from the old layout (uv links in python/bin) relinks
+// into uvbin without re-downloading. It reports the find/install step
+// and returns whether an install ran.
 //
 // The install passes `--default` so uv links the bare `python` and
 // `python3` executables (not just the versioned `python3.X`) into
-// UV_PYTHON_BIN_DIR. That dir is first on the Rune PATH (config.yaml
-// gui.env), so a terminal `python`/`python3` resolves to the confined
-// uv-managed interpreter instead of falling through to a system Python.
+// UV_PYTHON_BIN_DIR (<dataDir>/python/uvbin per config.yaml gui.env),
+// which the Rune-owned shims in <dataDir>/python/bin fall back to when
+// no project venv applies.
 func ensureInterpreter(
 	ctx context.Context,
 	uvBin string,
 	exec workspaceapi.Executor,
 	notify browserapi.Notifications,
 	notifID string,
+	fs workspaceapi.FileSystem,
 	dir string,
+	dataDir string,
 ) (bool, error) {
 	_ = notify.UpdateNotificationProgress(notifID, "Finding Python interpreter", 1, 4)
-	if err := runUV(ctx, uvBin, exec, dir, "python", "find"); err == nil {
+	if err := runUV(ctx, uvBin, exec, dir, "python", "find"); err == nil &&
+		managedFallbackPresent(fs, dataDir) {
 		return false, nil
 	}
 	_ = notify.UpdateNotificationProgress(notifID, "Installing Python interpreter", 2, 4)
@@ -165,6 +173,17 @@ func ensureInterpreter(
 		return true, err
 	}
 	return true, nil
+}
+
+// managedFallbackPresent reports whether the shim's managed-interpreter
+// fallback target exists. An empty dataDir skips the probe (no shims are
+// written without a data dir).
+func managedFallbackPresent(fs workspaceapi.FileSystem, dataDir string) bool {
+	if dataDir == "" {
+		return true
+	}
+	_, err := fs.Stat(pyshim.FallbackPath(dataDir))
+	return err == nil
 }
 
 // runSyncStep installs or verifies the project dependencies for the

@@ -25,19 +25,23 @@ package debugshell
 
 import (
 	"context"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/google/go-dap"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/unstablebuild/rune-go-sdk/api/config"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/extension_python/pyshim"
 	"unstable.build/go-tui/ide/idedebug"
 	"unstable.build/go-tui/ide/syntax"
 	"unstable.build/go-tui/text"
@@ -49,23 +53,33 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/term"
 )
 
-// pythonAdapterConfig builds the DAP adapter registry for debugpy,
-// declaring the launch/attach argument templates in configuration
-// (the M1 contract) rather than hardcoding them. The {addr}
-// placeholder is substituted with the host:port the manager binds.
-func pythonAdapterConfig(pythonBin string) idedebug.Config {
+// pyDebugpyPin mirrors the debugpy version the python language package
+// pins in config.yaml (debugger.python.command and
+// extensions.python.config.debugpy).
+const pyDebugpyPin = "1.8.17"
+
+// pythonAdapterConfig mirrors the python language package's
+// config.yaml: the adapter runs the pinned debugpy through uvx
+// (isolated from the project env, never mutating it) and the launch
+// template routes the debuggee through the venv-aware python shim, so
+// it executes in the nearest project venv enclosing the program,
+// resolved per launch. The {host}/{port} placeholders are substituted
+// with the address the manager binds.
+func pythonAdapterConfig(uvxBin, shim string) idedebug.Config {
 	return idedebug.Config{
 		MaxRetries:        1,
 		InitializeTimeout: 15 * time.Second,
 		Adapters: map[string]idedebug.AdapterConfig{
 			"python": {
-				Command: []string{pythonBin, "-m", "debugpy.adapter",
+				Command: []string{uvxBin, "--from", "debugpy==" + pyDebugpyPin,
+					"python", "-m", "debugpy.adapter",
 					"--host", "{host}", "--port", "{port}"},
 				AdapterID: "debugpy",
 				LaunchArgs: map[string]string{
 					"request": "launch",
 					"type":    "python",
 					"console": "internalConsole",
+					"python":  shim,
 				},
 				AttachArgs: map[string]string{
 					"request": "attach",
@@ -77,19 +91,19 @@ func pythonAdapterConfig(pythonBin string) idedebug.Config {
 }
 
 // pyPkgManager satisfies idedebug.PkgManager and syntax.PkgManager
-// for the Python e2e harness: it returns the debugpy-capable python
-// interpreter plus, for the "python" language id, the tree-sitter
-// grammar files so the parser-driven breakpoint/variables features
-// run exactly as they do for Go.
+// for the Python e2e harness: for the "python" language id it returns
+// the tree-sitter grammar files so the parser-driven
+// breakpoint/variables features run exactly as they do for Go. The
+// adapter binary needs no package resolution — the uvx command is
+// absolute, matching the packaged config.
 type pyPkgManager struct {
-	bin     string
 	grammar string
 }
 
 func (p *pyPkgManager) LibDir(
 	_ context.Context, langID string,
 ) (iterator.Iterator[string], error) {
-	files := []string{p.bin}
+	var files []string
 	if p.grammar != "" && langID == "python" {
 		entries, err := os.ReadDir(p.grammar)
 		if err == nil {
@@ -130,14 +144,24 @@ func pyGrammarDir(t *testing.T) string {
 // debugpy adapter, wiring the real Python tree-sitter grammar so the
 // parser-driven breakpoint and variables-location features behave as
 // they do for Go.
-func newPyE2EHarness(t *testing.T, pythonBin, dir string) *e2eHarness {
+func newPyE2EHarness(t *testing.T, dir string) *e2eHarness {
+	t.Helper()
+	uvxBin, shim := pySetupNewWay(t, dir)
+	return newPyE2EHarnessDAP(t, dir, pythonAdapterConfig(uvxBin, shim))
+}
+
+// newPyE2EHarnessDAP is newPyE2EHarness with an explicit DAP adapter
+// registry, so tests can exercise alternative adapter topologies
+// (e.g. connect:// direct-connect attach).
+func newPyE2EHarnessDAP(
+	t *testing.T, dir string, dapCfg idedebug.Config,
+) *e2eHarness {
 	t.Helper()
 	scheme := newLocalScheme()
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
 
-	pkg := &pyPkgManager{bin: pythonBin, grammar: pyGrammarDir(t)}
-	dapCfg := pythonAdapterConfig(pythonBin)
+	pkg := &pyPkgManager{grammar: pyGrammarDir(t)}
 	mgr := idedebug.New(uri, scheme, pkg, dapCfg)
 
 	br := newFakeBrowser()
@@ -181,42 +205,59 @@ func newPyE2EHarness(t *testing.T, pythonBin, dir string) *e2eHarness {
 	return hh
 }
 
-// findDebugpy returns the path to a Python interpreter that can
-// import debugpy, or skips the test when none is available. It
-// probes the interpreters on PATH and, since debugpy is commonly
-// installed in an isolated pipx venv whose interpreter is not on
-// PATH, the venv interpreter resolved from the debugpy console
-// script.
-func findDebugpy(t *testing.T) string {
+// findUVTool resolves uv or uvx from PATH or the Rune install dir
+// (where the python language package stages them), skipping the test
+// when absent — production always has them on the Rune PATH.
+func findUVTool(t *testing.T, name string) string {
 	t.Helper()
-	candidates := []string{"python3", "python"}
-	for _, name := range []string{"debugpy", "debugpy-adapter"} {
-		script, err := exec.LookPath(name)
-		if err != nil {
-			continue
-		}
-		if resolved, err := filepath.EvalSymlinks(script); err == nil {
-			script = resolved
-		}
-		// pipx/venv layout: <venv>/bin/<script> alongside python.
-		candidates = append(candidates,
-			filepath.Join(filepath.Dir(script), "python"),
-			filepath.Join(filepath.Dir(script), "python3"))
+	if p, err := exec.LookPath(name); err == nil {
+		return p
 	}
-	for _, bin := range candidates {
-		if !filepath.IsAbs(bin) {
-			resolved, err := exec.LookPath(bin)
-			if err != nil {
-				continue
-			}
-			bin = resolved
-		}
-		if err := exec.Command(bin, "-c", "import debugpy").Run(); err == nil {
-			return bin
-		}
+	p := filepath.Join(os.Getenv("HOME"), ".rune", "bin", name)
+	if info, err := os.Stat(p); err == nil && !info.IsDir() {
+		return p
 	}
-	t.Skip("debugpy not found, skipping python debugger e2e test")
+	t.Skipf("%s not found, skipping python debugger e2e test", name)
 	return ""
+}
+
+// pySetupNewWay provisions the production Python debug topology for the
+// workspace dir the way the python package and extension set it up: a
+// project .venv (what `uv sync` leaves behind), the venv-aware python
+// shims written exactly as extension_python writes them, and the pinned
+// debugpy resolved into uvx's cache (the extension's prewarm). The shim
+// dir gets no managed fallback, so a launch only reaches a stopped
+// state if the launch template's `python` shim actually resolved the
+// project venv. Skips when uv/uvx or the pinned debugpy is unavailable
+// (e.g. offline with a cold cache).
+func pySetupNewWay(t *testing.T, dir string) (uvxBin, shim string) {
+	t.Helper()
+	uvBin := findUVTool(t, "uv")
+	uvxBin = findUVTool(t, "uvx")
+
+	venv := exec.Command(uvBin, "venv")
+	venv.Dir = dir
+	if out, err := venv.CombinedOutput(); err != nil {
+		t.Skipf("uv venv failed: %v\n%s", err, out)
+	}
+
+	warm := exec.Command(uvxBin, "--from", "debugpy=="+pyDebugpyPin,
+		"python", "-c", "import debugpy")
+	if out, err := warm.CombinedOutput(); err != nil {
+		t.Skipf("debugpy==%s not resolvable via uvx: %v\n%s",
+			pyDebugpyPin, err, out)
+	}
+
+	dataDir := t.TempDir()
+	uri, err := workspaceapi.ParseURI("file://" + dataDir)
+	require.NoError(t, err)
+	fs, err := workspace.NewFileScheme(
+		context.Background(), config.NopConfig(), uri,
+	)
+	require.NoError(t, err)
+	defer func() { _ = fs.Close() }()
+	require.NoError(t, pyshim.Write(fs, dataDir))
+	return uvxBin, filepath.Join(pyshim.Dir(dataDir), "python3")
 }
 
 // setupBuggyPy copies testdata/buggy_py to a fresh temp directory
@@ -265,16 +306,17 @@ func pyFirstStmtLine(t *testing.T, path string) int {
 // (initialize → launch → set-breakpoint → configured → stopped →
 // continue → terminate), the stopped and variables location lists,
 // expression evaluation, the prompt jump-backward, and the captured
-// program output. The M1 payoff is that the debugpy launch template
-// declared in configuration is what reaches the adapter on the wire.
-// It self-skips when debugpy or the Python grammar is not installed.
+// program output. The launch template mirrors the packaged config, so
+// the payoff is that the uvx adapter command and the shim-routed
+// `python` launch key are what reach the adapter on the wire — and the
+// debuggee provably runs on the project venv interpreter. It self-skips
+// when uv/uvx or the Python grammar is not installed.
 func TestE2E_Python_Launch(t *testing.T) {
 	t.Parallel()
-	pythonBin := findDebugpy(t)
 	tmpDir := setupBuggyPy(t)
 	mainPath := filepath.Join(tmpDir, "main.py")
 
-	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	h := newPyE2EHarness(t, tmpDir)
 	defer h.close()
 	ctx := h.ctx
 
@@ -308,6 +350,18 @@ func TestE2E_Python_Launch(t *testing.T) {
 	assert.Equal(t, bpLine, stack[0].Line)
 	require.NotNil(t, stack[0].Source)
 	assert.Equal(t, mainPath, stack[0].Source.Path)
+
+	// The launch template's `python` shim must have routed the debuggee
+	// into the project venv resolved from the program's directory —
+	// the monorepo-correct per-launch contract.
+	ev, err := h.mgr.Evaluate(ctx, h.sessionID(t), &dap.EvaluateArguments{
+		Expression: "__import__('sys').executable",
+		FrameId:    stack[0].Id,
+		Context:    "repl",
+	})
+	require.NoError(t, err)
+	assert.Contains(t, ev.Result, filepath.Join(tmpDir, ".venv", "bin", "python"),
+		"debuggee must run on the project venv interpreter")
 
 	// 6a. the stopped location list must span the line, use black on
 	// yellow, and carry the stack-trace text as its Message.
@@ -493,11 +547,10 @@ func pyFunctionLineRange(t *testing.T, path, name string) (int, int) {
 // and the debuggee stops, rather than running to completion.
 func TestE2E_Python_BreakpointOnEmptyLine(t *testing.T) {
 	t.Parallel()
-	pythonBin := findDebugpy(t)
 	tmpDir := setupBuggyPy(t)
 	mainPath := filepath.Join(tmpDir, "main.py")
 
-	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	h := newPyE2EHarness(t, tmpDir)
 	defer h.close()
 	ctx := h.ctx
 
@@ -548,11 +601,10 @@ func TestE2E_Python_BreakpointOnEmptyLine(t *testing.T) {
 // error rather than silently failing to bind.
 func TestE2E_Python_BreakpointOnTrailingComment(t *testing.T) {
 	t.Parallel()
-	pythonBin := findDebugpy(t)
 	tmpDir := setupBuggyPy(t)
 	mainPath := filepath.Join(tmpDir, "main.py")
 
-	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	h := newPyE2EHarness(t, tmpDir)
 	defer h.close()
 	ctx := h.ctx
 
@@ -578,11 +630,10 @@ func TestE2E_Python_BreakpointOnTrailingComment(t *testing.T) {
 // captures for it, and the breakpoint must bind on the line itself.
 func TestE2E_Python_BreakpointOnLiteralOnlyReturn(t *testing.T) {
 	t.Parallel()
-	pythonBin := findDebugpy(t)
 	tmpDir := setupBuggyPy(t)
 	mainPath := filepath.Join(tmpDir, "main.py")
 
-	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	h := newPyE2EHarness(t, tmpDir)
 	defer h.close()
 	ctx := h.ctx
 
@@ -602,13 +653,103 @@ func TestE2E_Python_BreakpointOnLiteralOnlyReturn(t *testing.T) {
 		"breakpoint should sit on the literal-only return line")
 }
 
-// Note on attach: there is no Python attach E2E counterpart to the Go
-// TestE2E_Attach. debugpy attaches by connecting to a process already
-// running under `debugpy --listen` (a nested connect:{host,port} DAP
-// argument, which the M1 template now supports via dotted keys and is
-// unit-tested in idedebug). Driving that handshake end to end is
-// timing-sensitive and debugpy-version-specific, so it is intentionally
-// left to the idedebug unit tests rather than a flaky E2E here.
+// TestE2E_Python_AttachConnect is the Python attach counterpart to the
+// Go TestE2E_Attach. debugpy attach-by-connect inverts the adapter
+// topology: the debuggee runs under `python -m debugpy --listen
+// host:port`, which spawns the adapter on the debuggee side, and the
+// client must dial that adapter directly instead of spawning its own
+// (a freshly spawned adapter parses but never dials the attach
+// template's connect:{host,port}, so the spawn model hangs forever
+// waiting for a debug server that is wired to the other adapter).
+// The connect:// adapter command drives that direct-connect topology
+// through the full debugshell lifecycle: initialize dials the
+// listening adapter with retry, attach + breakpoint + configured stop
+// the debuggee inside sum_to.
+func TestE2E_Python_AttachConnect(t *testing.T) {
+	t.Parallel()
+	uvBin := findUVTool(t, "uv")
+	tmpDir := setupBuggyPy(t)
+	mainPath := filepath.Join(tmpDir, "main.py")
+
+	// The debuggee-side debugpy must resolve before starting the
+	// listener, or the listen port never opens (offline, cold cache).
+	probe := exec.Command(uvBin, "run", "--with", "debugpy=="+pyDebugpyPin,
+		"python", "-c", "import debugpy")
+	probe.Dir = tmpDir
+	if out, err := probe.CombinedOutput(); err != nil {
+		t.Skipf("debugpy==%s not resolvable via uv run: %v\n%s",
+			pyDebugpyPin, err, out)
+	}
+
+	// Reserve a port for the debuggee-side adapter. There is a small
+	// TOCTOU window before debugpy binds it; the initialize dial
+	// retries until the adapter is listening either way.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	addr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
+	// Start the debuggee in "wait" mode under debugpy --listen so it
+	// loops calling sum_to until we attach — via `uv run --with
+	// debugpy`, the attach recipe the Python docs give users, which
+	// overlays debugpy on the project env without mutating it.
+	cmd := exec.Command(uvBin, "run", "--with", "debugpy=="+pyDebugpyPin,
+		"python", "-m", "debugpy", "--listen", addr, mainPath, "wait")
+	cmd.Dir = tmpDir
+	require.NoError(t, cmd.Start())
+	t.Cleanup(func() {
+		_ = cmd.Process.Signal(syscall.SIGKILL)
+		_, _ = cmd.Process.Wait()
+	})
+
+	dapCfg := idedebug.Config{
+		MaxRetries:        1,
+		InitializeTimeout: 30 * time.Second,
+		Adapters: map[string]idedebug.AdapterConfig{
+			"python": {
+				Command:   []string{"connect://" + addr},
+				AdapterID: "debugpy",
+				AttachArgs: map[string]string{
+					"request": "attach",
+					"type":    "python",
+				},
+			},
+		},
+	}
+	h := newPyE2EHarnessDAP(t, tmpDir, dapCfg)
+	defer h.close()
+	ctx := h.ctx
+
+	// 1. initialize dials the debuggee-spawned adapter directly.
+	it, err := h.run(ctx, subInitialize, "python")
+	require.NoError(t, err)
+	go h.drainIterator(it)
+
+	// 2. attach to the already-running debuggee.
+	_, err = h.run(ctx, subAttach, mainPath)
+	require.NoError(t, err)
+	h.waitMilestone(t, "initialized", 30*time.Second)
+
+	// 3. breakpoint inside sum_to, then configurationDone resumes.
+	bpLine := pyFirstStmtLine(t, mainPath)
+	h.setBreakpoint(t, mainPath, bpLine)
+	_, err = h.run(ctx, subConfigured)
+	require.NoError(t, err)
+	h.waitMilestone(t, "stopped", 30*time.Second)
+
+	// 4. the top frame must be sum_to at the breakpoint line.
+	threadID := h.firstThreadID(t)
+	stack := h.stackTrace(t, threadID)
+	require.NotEmpty(t, stack)
+	assert.Equal(t, "sum_to", stack[0].Name)
+	assert.Equal(t, bpLine, stack[0].Line)
+	require.NotNil(t, stack[0].Source)
+	assert.Equal(t, mainPath, stack[0].Source.Path)
+
+	// 5. terminate must clear the local session even though the
+	// adapter lifecycle is owned by the debuggee.
+	_, _ = h.run(ctx, subTerminate)
+}
 
 // TestE2E_Python_CtrlCDoesNotStopEventStream mirrors the Go test:
 // cancelling the per-command context that drains `debugger
@@ -618,11 +759,10 @@ func TestE2E_Python_BreakpointOnLiteralOnlyReturn(t *testing.T) {
 // iterator's drain loop.
 func TestE2E_Python_CtrlCDoesNotStopEventStream(t *testing.T) {
 	t.Parallel()
-	pythonBin := findDebugpy(t)
 	tmpDir := setupBuggyPy(t)
 	mainPath := filepath.Join(tmpDir, "main.py")
 
-	h := newPyE2EHarness(t, pythonBin, tmpDir)
+	h := newPyE2EHarness(t, tmpDir)
 	defer h.close()
 
 	initCtx, initCancel := context.WithCancel(h.ctx)
@@ -699,11 +839,10 @@ func TestE2E_Python_CtrlCDoesNotStopEventStream(t *testing.T) {
 // — both reflect the debuggee's stdout.
 func TestE2E_Python_OutputAppearsInIDEEditorBuffer(t *testing.T) {
 	t.Parallel()
-	pythonBin := findDebugpy(t)
 	tmpDir := setupBuggyPy(t)
 	mainPath := filepath.Join(tmpDir, "main.py")
 
-	h := newPyIDEHarness(t, pythonBin, tmpDir)
+	h := newPyIDEHarness(t, tmpDir)
 	defer h.close()
 	ctx := h.ctx
 
@@ -760,8 +899,9 @@ func TestE2E_Python_OutputAppearsInIDEEditorBuffer(t *testing.T) {
 // newPyIDEHarness mirrors newIDEHarness but targets the Python
 // debugpy adapter, so the full FS-watch → ReloadTab path is exercised
 // for a Python debug session.
-func newPyIDEHarness(t *testing.T, pythonBin, dir string) *ideHarness {
+func newPyIDEHarness(t *testing.T, dir string) *ideHarness {
 	t.Helper()
+	uvxBin, shim := pySetupNewWay(t, dir)
 	uri, err := workspaceapi.ParseURI("file://" + dir)
 	require.NoError(t, err)
 
@@ -784,8 +924,8 @@ func newPyIDEHarness(t *testing.T, pythonBin, dir string) *ideHarness {
 	comp.Browser().Resize(120, 40)
 
 	procExec := newLocalScheme()
-	pkg := &pyPkgManager{bin: pythonBin}
-	dapCfg := pythonAdapterConfig(pythonBin)
+	pkg := &pyPkgManager{}
+	dapCfg := pythonAdapterConfig(uvxBin, shim)
 	mgr := idedebug.New(uri, procExec, pkg, dapCfg)
 
 	hh.scheme = scheme

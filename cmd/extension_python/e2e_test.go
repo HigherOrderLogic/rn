@@ -257,6 +257,8 @@ dependencies = []
 	require.NoError(t, err)
 	assert.True(t, info.IsDir(), "uv sync should create a .venv directory")
 
+	assertShimResolvesVenv(t, env)
+
 	params, count := env.lsp.captured()
 	require.Equal(t, 1, count, "the workspace-root project must initialize exactly once")
 	assert.Equal(t, "file://"+dir, params.RootURI)

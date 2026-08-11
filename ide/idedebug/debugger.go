@@ -71,7 +71,21 @@ func setNestedArg(m map[string]any, keys []string, val string) {
 		}
 		m = next
 	}
-	m[keys[len(keys)-1]] = val
+	m[keys[len(keys)-1]] = typedArgValue(val)
+}
+
+// typedArgValue converts a template value to the JSON type adapters
+// expect: integers and booleans are sent typed (debugpy rejects a
+// string listen.port and lldb-dap expects stopOnEntry as a bool);
+// everything else stays a string.
+func typedArgValue(val string) any {
+	if n, err := strconv.ParseInt(val, 10, 64); err == nil {
+		return n
+	}
+	if val == "true" || val == "false" {
+		return val == "true"
+	}
+	return val
 }
 
 // CreateSession starts a new debug session for the given
