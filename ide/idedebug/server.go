@@ -49,6 +49,13 @@ var errNoServer = errors.New("no debug server")
 
 const defaultDialRetryDelay = 100 * time.Millisecond
 
+// connectScheme marks an adapter command that names an already
+// listening adapter endpoint instead of an executable to spawn. This
+// is the debugpy attach-by-connect topology: the debuggee runs under
+// `python -m debugpy --listen host:port`, which spawns the adapter on
+// the debuggee side, and the client is expected to dial it directly.
+const connectScheme = "connect://"
+
 type debugServer struct {
 	mu         sync.Mutex
 	writeMu    sync.Mutex
@@ -127,6 +134,9 @@ func (s *debugServer) notifyClose(reason string) {
 }
 
 func (s *debugServer) start(ctx context.Context) error {
+	if addr, ok := strings.CutPrefix(s.cfg.command, connectScheme); ok {
+		return s.startConnect(ctx, addr)
+	}
 	// Pick a free TCP port for the adapter to listen on.
 	addr, err := findFreeAddr()
 	if err != nil {
@@ -183,6 +193,48 @@ func (s *debugServer) start(ctx context.Context) error {
 	if err != nil {
 		s.closeConn()
 		s.cancel() // kill the spawned process
+		return fmt.Errorf("initialize %s: %w", s.cfg.command, err)
+	}
+
+	s.mu.Lock()
+	s.caps = caps
+	s.mu.Unlock()
+	return nil
+}
+
+// startConnect attaches to an adapter that is already listening at
+// addr instead of spawning one. The watcher channel is fed a nil
+// (clean-exit) error when the connection drops so watchSession ends
+// the session instead of retrying a respawn: the remote adapter's
+// lifecycle is owned by whoever started it, not by this client.
+func (s *debugServer) startConnect(ctx context.Context, addr string) error {
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return fmt.Errorf("adapter connect address %q: %w", addr, err)
+	}
+
+	s.log.Info("connecting to listening adapter", "addr", addr)
+	conn, err := dialWithRetry(ctx, addr, s.dialRetryDelay, nil)
+	if err != nil {
+		return fmt.Errorf("connect to %s: %w", addr, err)
+	}
+
+	watchCh := make(chan error, 1)
+	s.mu.Lock()
+	s.watcher = watchCh
+	s.conn = conn
+	s.reader = bufio.NewReader(conn)
+	s.alive = true
+	s.mu.Unlock()
+
+	s.wg.Add(1)
+	go debug.CapturePanicReport(func() {
+		s.readLoop()
+		watchCh <- nil
+	})
+
+	caps, err := s.initialize(ctx)
+	if err != nil {
+		s.closeConn()
 		return fmt.Errorf("initialize %s: %w", s.cfg.command, err)
 	}
 

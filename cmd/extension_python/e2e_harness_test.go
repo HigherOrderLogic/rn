@@ -25,7 +25,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -38,13 +37,13 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
 	"github.com/unstablebuild/rune-go-sdk/term"
+	"unstable.build/go-tui/cmd/extension_python/pyshim"
 )
 
 // realFS is a minimal workspaceapi.FileSystem backed by the OS and
 // rooted at a workspace directory. Relative paths resolve against root,
 // so the extension's detection and URI logic run against a real tree
-// while the test controls the root. Only the methods the extension uses
-// (URI, Stat, ReadDir) are implemented; the rest report not-supported.
+// while the test controls the root.
 type realFS struct{ root string }
 
 func (f realFS) resolve(p string) string {
@@ -62,12 +61,16 @@ func (f realFS) Stat(p string) (os.FileInfo, error) { return os.Stat(f.resolve(p
 
 func (f realFS) ReadDir(p string) ([]os.DirEntry, error) { return os.ReadDir(f.resolve(p)) }
 
-func (f realFS) OpenFile(string, int, os.FileMode) (workspaceapi.File, error) {
-	return nil, errors.New("realFS: OpenFile not supported")
+func (f realFS) OpenFile(p string, flag int, mode os.FileMode) (workspaceapi.File, error) {
+	file, err := os.OpenFile(f.resolve(p), flag, mode)
+	if err != nil {
+		return nil, err
+	}
+	return file, nil
 }
-func (f realFS) Remove(string) error { return errors.New("realFS: Remove not supported") }
-func (f realFS) MkdirAll(string, os.FileMode) error {
-	return errors.New("realFS: MkdirAll not supported")
+func (f realFS) Remove(p string) error { return os.Remove(f.resolve(p)) }
+func (f realFS) MkdirAll(p string, mode os.FileMode) error {
+	return os.MkdirAll(f.resolve(p), mode)
 }
 
 // fakeEditor is a textapi.Editor that records the open-event
@@ -172,10 +175,12 @@ func (l *captureLSP) waitForInit(t *testing.T, timeout time.Duration) {
 }
 
 // scenarioEnv is the result of running the extension against a scenario:
-// the workspace directory, the executor rooted there, and the captured
-// LSP/notifications for assertions.
+// the workspace directory, the data dir the shims were written to, the
+// executor rooted there, and the captured LSP/notifications for
+// assertions.
 type scenarioEnv struct {
 	dir     string
+	dataDir string
 	exec    realExecutor
 	lsp     *captureLSP
 	notify  *fakeNotifications
@@ -245,17 +250,34 @@ func runExtensionOnScenario(t *testing.T, name string) scenarioEnv {
 	return runExtensionOnDir(t, dir)
 }
 
+// seedManagedFallback pre-creates the uvbin interpreter stub the shims
+// fall back to, so the extension's bring-up never runs `uv python
+// install` against the ambient uv directories. The scenarios always
+// resolve a project .venv, so the stub is probed for existence but
+// never executed.
+func seedManagedFallback(t *testing.T, dataDir string) {
+	t.Helper()
+	fallback := pyshim.FallbackPath(dataDir)
+	require.NoError(t, os.MkdirAll(filepath.Dir(fallback), 0o755))
+	require.NoError(t, os.WriteFile(fallback, []byte("#!/bin/sh\nexit 127\n"), 0o755))
+}
+
 // runExtensionOnDir runs the extension's full bring-up against the
 // already-prepared workspace directory dir, using a real FileSystem and
 // Executor with a fake LSP and Notifications, and returns the resulting
 // environment for assertions.
 func runExtensionOnDir(t *testing.T, dir string) scenarioEnv {
 	t.Helper()
+	dataDir := t.TempDir()
+	seedManagedFallback(t, dataDir)
 	ex := newDirExecutor(dir)
 	lsp := &captureLSP{}
 	notify := newFakeNotifications()
 	editor := &fakeEditor{}
-	env := scenarioEnv{dir: dir, exec: ex, lsp: lsp, notify: notify, editor: editor}
+	env := scenarioEnv{
+		dir: dir, dataDir: dataDir,
+		exec: ex, lsp: lsp, notify: notify, editor: editor,
+	}
 
 	ext := &pyExtension{}
 	err := ext.extendWorkspaceWith(context.Background(),
@@ -266,6 +288,7 @@ func runExtensionOnDir(t *testing.T, dir string) scenarioEnv {
 		editor,
 		fakeInstaller{fs: realFS{root: dir}, root: ""},
 		config.NopConfig(),
+		dataDir,
 		func(m textapi.CommandManual, _ textapi.REPLHandler) error {
 			env.manuals = append(env.manuals, m)
 			return nil

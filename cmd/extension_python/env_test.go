@@ -192,7 +192,7 @@ func TestEnsureEnvironmentRunsInProjectDir(t *testing.T) {
 	ex.respond("uv pip install -r requirements.txt", scriptedCmd{})
 	notify := newFakeNotifications()
 
-	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindRequirements, fs, dir)
+	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindRequirements, fs, dir, "")
 	require.NoError(t, err)
 
 	for _, key := range ex.callsSnapshot() {
@@ -279,7 +279,7 @@ func TestEnsureEnvironmentCommands(t *testing.T) {
 				ex.respond(k, v)
 			}
 			notify := newFakeNotifications()
-			err := ensureEnvironment(context.Background(), "uv", ex, notify, tc.kind, fs, "")
+			err := ensureEnvironment(context.Background(), "uv", ex, notify, tc.kind, fs, "", "")
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantCalls, ex.callsSnapshot())
 
@@ -306,7 +306,7 @@ func TestEnsureEnvironmentInstallsInterpreterOnFirstRun(t *testing.T) {
 	ex.respond("uv python install --default", scriptedCmd{})
 	ex.respond("uv sync", scriptedCmd{})
 	notify := newFakeNotifications()
-	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindProject, fs, "")
+	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindProject, fs, "", "")
 	require.NoError(t, err)
 	assert.Equal(t, []string{"uv python find", "uv python install --default", "uv sync"}, ex.callsSnapshot())
 
@@ -315,6 +315,35 @@ func TestEnsureEnvironmentInstallsInterpreterOnFirstRun(t *testing.T) {
 	assert.Equal(t, int64(4), last.progress)
 	assert.Contains(t, notify.progressMessages(), "Installing Python interpreter")
 	assertMonotonicProgress(t, notify)
+}
+
+// TestEnsureInterpreterRelinksMissingManagedFallback covers installs
+// migrated from the layout where uv's links lived in python/bin: the
+// interpreter is found, but the shim's uvbin fallback target is absent,
+// so an install must run to relink it.
+func TestEnsureInterpreterRelinksMissingManagedFallback(t *testing.T) {
+	fs := newFakeFS()
+	ex := newFakeExecutor()
+	ex.respond("uv python find", scriptedCmd{})
+	ex.respond("uv python install --default", scriptedCmd{})
+	ex.respond("uv sync", scriptedCmd{})
+	notify := newFakeNotifications()
+	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindProject, fs, "", "/data")
+	require.NoError(t, err)
+	assert.Equal(t,
+		[]string{"uv python find", "uv python install --default", "uv sync"},
+		ex.callsSnapshot())
+}
+
+func TestEnsureInterpreterSkipsInstallWhenFallbackPresent(t *testing.T) {
+	fs := newFakeFS().addFile("/data/python/uvbin/python3")
+	ex := newFakeExecutor()
+	ex.respond("uv python find", scriptedCmd{})
+	ex.respond("uv sync", scriptedCmd{})
+	notify := newFakeNotifications()
+	err := ensureEnvironment(context.Background(), "uv", ex, notify, kindProject, fs, "", "/data")
+	require.NoError(t, err)
+	assert.Equal(t, []string{"uv python find", "uv sync"}, ex.callsSnapshot())
 }
 
 var assertErr = &interpreterMissingError{}

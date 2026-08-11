@@ -32,6 +32,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -80,6 +81,11 @@ type AdapterConfig struct {
 	// replaced at runtime with a bound host:port the adapter
 	// should listen on; {host} and {port} expand to the
 	// components for adapters that take them separately.
+	//
+	// A single "connect://host:port" element instead dials an
+	// adapter that is already listening at that address (e.g. one
+	// spawned by `python -m debugpy --listen host:port`) rather
+	// than spawning a process.
 	Command []string
 	// AdapterID is the DAP adapter identifier advertised during
 	// the Initialize handshake. Defaults to the language ID.
@@ -224,7 +230,9 @@ func (m *Manager) startSession(
 		return nil, errors.New("debug adapter config with empty command")
 	}
 	var binPath string
-	if filepath.IsAbs(cfg.command) {
+	if strings.HasPrefix(cfg.command, connectScheme) {
+		binPath = cfg.command
+	} else if filepath.IsAbs(cfg.command) {
 		binPath = cfg.command
 	} else {
 		var err error

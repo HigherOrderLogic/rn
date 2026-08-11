@@ -26,12 +26,15 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"unstable.build/go-tui/cmd/extension_python/pyshim"
 )
 
 // TestE2E_Scenarios_EnvAndLSP runs the extension against each testdata
@@ -53,6 +56,8 @@ func TestE2E_Scenarios_EnvAndLSP(t *testing.T) {
 			got := runPython(t, env.dir)
 			assert.Equal(t, normalize(string(expected)), normalize(got),
 				"scenario %s produced unexpected program output", name)
+
+			assertShimResolvesVenv(t, env)
 
 			params, count := env.lsp.captured()
 			assert.Equal(t, 1, count, "LSP must be initialized exactly once")
@@ -79,6 +84,29 @@ func trimTrailing(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// assertShimResolvesVenv runs the python3 shim the bring-up wrote to the
+// data dir from inside the scenario workspace and asserts it executes
+// the project's .venv interpreter — the terminal contract: a bare
+// `python3` in a project dir resolves that project's environment.
+func assertShimResolvesVenv(t *testing.T, env scenarioEnv) {
+	t.Helper()
+	shim := filepath.Join(pyshim.Dir(env.dataDir), "python3")
+	cmd := exec.Command(shim, "-c", "import sys; print(sys.prefix)")
+	cmd.Dir = env.dir
+	// A controlled environment so an activated venv or dev PATH cannot
+	// leak into the resolution.
+	cmd.Env = []string{"PATH=/usr/bin:/bin"}
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "shim must execute the scenario venv python: %s", out)
+
+	got, err := filepath.EvalSymlinks(strings.TrimSpace(string(out)))
+	require.NoError(t, err)
+	want, err := filepath.EvalSymlinks(filepath.Join(env.dir, ".venv"))
+	require.NoError(t, err)
+	assert.Equal(t, want, got,
+		"shim must resolve the project venv, not another interpreter")
 }
 
 // TestE2E_NestedProjectDiscovery covers a workspace with no root Python

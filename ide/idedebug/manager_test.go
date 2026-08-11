@@ -176,6 +176,149 @@ func newTestSessionID(i int) string {
 	return "session-" + string(rune('a'+i))
 }
 
+// closeRecorder records the reason passed to OnClose so tests can
+// assert session teardown semantics.
+type closeRecorder struct{ ch chan string }
+
+func (closeRecorder) OnEvent(dap.EventMessage) {}
+func (r closeRecorder) OnClose(reason string) {
+	select {
+	case r.ch <- reason:
+	default:
+	}
+}
+
+// startFakeDAPAdapter listens on an ephemeral port and speaks just
+// enough DAP to satisfy the client handshake: every request is
+// answered with a success response. The returned stop function closes
+// the client connection, simulating a remote adapter going away.
+func startFakeDAPAdapter(t *testing.T) (addr string, stop func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ln.Close() })
+
+	var (
+		mu   sync.Mutex
+		conn net.Conn
+	)
+	go rdebug.CapturePanicReport(func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		mu.Lock()
+		conn = c
+		mu.Unlock()
+		reader := bufio.NewReader(c)
+		for {
+			msg, err := dap.ReadProtocolMessage(reader)
+			if err != nil {
+				_ = c.Close()
+				return
+			}
+			req, ok := msg.(dap.RequestMessage)
+			if !ok {
+				continue
+			}
+			resp := dap.Response{
+				ProtocolMessage: dap.ProtocolMessage{
+					Seq:  req.GetSeq() + 1000,
+					Type: "response",
+				},
+				Command:    req.GetRequest().Command,
+				RequestSeq: req.GetSeq(),
+				Success:    true,
+			}
+			var out dap.Message
+			if req.GetRequest().Command == "initialize" {
+				out = &dap.InitializeResponse{Response: resp}
+			} else {
+				out = &resp
+			}
+			if err := dap.WriteProtocolMessage(c, out); err != nil {
+				_ = c.Close()
+				return
+			}
+		}
+	})
+	return ln.Addr().String(), func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if conn != nil {
+			_ = conn.Close()
+		}
+	}
+}
+
+// TestCreateSessionDirectConnect locks in the connect:// adapter
+// command contract: instead of spawning an adapter process, the
+// manager dials an adapter that is already listening (the debugpy
+// attach-by-connect topology, where `python -m debugpy --listen`
+// spawns the adapter on the debuggee side). The nil executor and
+// pkgManager in the test manager prove no spawn or binary lookup
+// happens on this path.
+func TestCreateSessionDirectConnect(t *testing.T) {
+	t.Parallel()
+
+	t.Run("dials the listening adapter and initializes", func(t *testing.T) {
+		t.Parallel()
+		addr, stop := startFakeDAPAdapter(t)
+		defer stop()
+
+		uri, err := workspaceapi.ParseURI("file:///tmp/test")
+		require.NoError(t, err)
+		m := New(uri, nil, nil, Config{
+			InitializeTimeout: 5 * time.Second,
+			Adapters: map[string]AdapterConfig{
+				"python": {
+					Command:   []string{"connect://" + addr},
+					AdapterID: "debugpy",
+				},
+			},
+		})
+		t.Cleanup(func() { _ = m.Close() })
+
+		closed := closeRecorder{ch: make(chan string, 1)}
+		sid, _, err := m.CreateSession(context.Background(), "python",
+			debugapi.ClientCapabilities{}, closed)
+		require.NoError(t, err)
+		require.NotEmpty(t, sid)
+
+		// The remote adapter dropping the connection must end the
+		// session cleanly ("terminated"), not trigger a respawn.
+		stop()
+		select {
+		case reason := <-closed.ch:
+			assert.Equal(t, "terminated", reason)
+		case <-time.After(5 * time.Second):
+			t.Fatal("OnClose not called after remote adapter closed the connection")
+		}
+		require.Eventually(t, func() bool {
+			_, err := m.Threads(context.Background(), sid)
+			return errors.Is(err, debugapi.ErrSessionNotFound)
+		}, 5*time.Second, 20*time.Millisecond,
+			"session not removed after remote adapter closed the connection")
+	})
+
+	t.Run("invalid connect address errors", func(t *testing.T) {
+		t.Parallel()
+		uri, err := workspaceapi.ParseURI("file:///tmp/test")
+		require.NoError(t, err)
+		m := New(uri, nil, nil, Config{
+			InitializeTimeout: time.Second,
+			Adapters: map[string]AdapterConfig{
+				"python": {Command: []string{"connect://"}},
+			},
+		})
+		t.Cleanup(func() { _ = m.Close() })
+
+		_, _, err = m.CreateSession(context.Background(), "python",
+			debugapi.ClientCapabilities{}, fakeSubscriber{})
+		require.ErrorContains(t, err, "connect address")
+	})
+}
+
 // TestSubstituteAddr asserts that adapter argv placeholders expand
 // to the bound endpoint: {addr} to host:port and {host}/{port} to
 // the split components.
@@ -503,8 +646,43 @@ func TestAttachArgs(t *testing.T) {
 			"type":    "python",
 			"connect": map[string]any{
 				"host": "127.0.0.1",
-				"port": "5688",
+				// debugpy rejects a string port: template values that
+				// are integers must be sent as JSON numbers.
+				"port": float64(5688),
 			},
+		}, args)
+	})
+
+	t.Run("integer and boolean template values are sent typed", func(t *testing.T) {
+		t.Parallel()
+		// debugpy validates e.g. listen.port with a strict int check
+		// and lldb-dap expects stopOnEntry as a bool, so template
+		// values that parse as integers or booleans must not be sent
+		// as JSON strings.
+		cfg := debugConfig{
+			langID:  "python",
+			command: "python",
+			attachArgs: map[string]string{
+				"request":     "attach",
+				"type":        "python",
+				"listen.host": "127.0.0.1",
+				"listen.port": "5678",
+				"subProcess":  "true",
+				"pathToken":   "false-positive",
+			},
+		}
+		cmd, args := captureRequestArgs(t, cfg,
+			attachReq(debugapi.AttachRequestArguments{}))
+		assert.Equal(t, "attach", cmd)
+		assert.Equal(t, map[string]any{
+			"request": "attach",
+			"type":    "python",
+			"listen": map[string]any{
+				"host": "127.0.0.1",
+				"port": float64(5678),
+			},
+			"subProcess": true,
+			"pathToken":  "false-positive",
 		}, args)
 	})
 }

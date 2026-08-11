@@ -35,6 +35,8 @@ import (
 	"github.com/unstablebuild/rune-go-sdk/api/semanticapi"
 	"github.com/unstablebuild/rune-go-sdk/api/textapi"
 	"github.com/unstablebuild/rune-go-sdk/api/workspaceapi"
+	"unstable.build/go-tui/cmd/extension_python/pyshim"
+	"unstable.build/go-tui/debug"
 	"unstable.build/go-tui/extension/langext"
 )
 
@@ -74,6 +76,7 @@ func (e *pyExtension) ExtendWorkspace(
 		w.Editor(ctx),
 		w,
 		cfg,
+		w.DataDir(ctx),
 		w.RegisterREPLCommand,
 	)
 }
@@ -93,6 +96,7 @@ func (e *pyExtension) extendWorkspaceWith(
 	editor textapi.Editor,
 	inst installer,
 	cfg config.Config,
+	dataDir string,
 	registerREPL func(textapi.CommandManual, textapi.REPLHandler) error,
 ) error {
 	// The REPL command's cwd is always the workspace root, independent of
@@ -113,7 +117,7 @@ func (e *pyExtension) extendWorkspaceWith(
 		FileMatch:   isPythonFile,
 		WatchEvents: pyWatchEvents(cfg, notify),
 		InitRoot: func(ctx context.Context, root langext.Root) error {
-			return initializeProjectRoot(ctx, fs, exec, notify, lsp, inst, cfg, root)
+			return initializeProjectRoot(ctx, fs, exec, notify, lsp, inst, cfg, dataDir, root)
 		},
 	})
 	if err := init.Start(); err != nil {
@@ -134,7 +138,8 @@ func (e *pyExtension) extendWorkspaceWith(
 
 // initializeProjectRoot performs the language-specific bring-up for a
 // discovered project root: it bootstraps the uv environment rooted there
-// (best-effort), resolves ty/ruff, applies config overrides, and
+// (best-effort), installs the venv-aware python shims, prewarms the
+// debugpy adapter env, resolves ty/ruff, applies config overrides, and
 // initializes the language server with the nested root URI.
 func initializeProjectRoot(
 	ctx context.Context,
@@ -144,15 +149,29 @@ func initializeProjectRoot(
 	lsp semanticapi.LSP,
 	inst installer,
 	cfg config.Config,
+	dataDir string,
 	root langext.Root,
 ) error {
 	kind := detectProjectAt(ctx, fs, root.Dir)
 
 	uvBin := resolvePyTool(ctx, fs, exec, inst, "uv")
-	if err := ensureEnvironment(ctx, uvBin, exec, notify, kind, fs, root.Dir); err != nil {
+	if err := ensureEnvironment(ctx, uvBin, exec, notify, kind, fs, root.Dir, dataDir); err != nil {
 		_, _ = notify.Notify(browserapi.LevelWarn,
 			"Python environment setup failed, continuing without a synced env: %v", err)
 		slog.Warn("python env setup failed", "root", root.Dir, "error", err)
+	}
+
+	if dataDir != "" {
+		if err := pyshim.Write(fs, dataDir); err != nil {
+			slog.Warn("python shim install failed", "dataDir", dataDir, "error", err)
+		}
+	}
+
+	if pin := debugpyPin(cfg, notify); pin != "" {
+		uvxBin := resolvePyTool(ctx, fs, exec, inst, "uvx")
+		go debug.CapturePanicReport(func() {
+			prewarmDebugpy(ctx, uvxBin, exec, root.Dir, pin)
+		})
 	}
 
 	tyBin := resolvePyTool(ctx, fs, exec, inst, "ty")
@@ -200,6 +219,45 @@ func pyLogLevel(cfg config.Config, notify browserapi.Notifications) string {
 					"\"trace\", \"debug\", \"info\", \"warn\", \"error\"; got %q", level)
 		}
 		return ""
+	}
+}
+
+// debugpyPin reads the optional `debugpy` config key: the version pin
+// used to prewarm the debug adapter's uvx environment right after the
+// project env syncs, so the first debug launch works offline. Unset
+// skips the prewarm; the pin must match the one in the package's
+// debugger.python.command so the prewarmed env is the one the adapter
+// resolves.
+func debugpyPin(cfg config.Config, notify browserapi.Notifications) string {
+	if cfg == nil {
+		return ""
+	}
+	pin, err := cfg.GetString("debugpy")
+	switch {
+	case errors.Is(err, config.ErrNotFound):
+		return ""
+	case err != nil:
+		_, _ = notify.Notify(browserapi.LevelWarn,
+			"extensions.python.config.debugpy must be a string: %v", err)
+		return ""
+	}
+	return pin
+}
+
+// prewarmDebugpy resolves the pinned debugpy into uvx's cached env by
+// running a no-op python through it. Best-effort: a failure only means
+// the first debug launch pays the resolution cost (or fails offline).
+func prewarmDebugpy(
+	ctx context.Context,
+	uvxBin string,
+	exec workspaceapi.Executor,
+	dir, pin string,
+) {
+	if uvxBin == "" {
+		uvxBin = "uvx"
+	}
+	if err := runUV(ctx, uvxBin, exec, dir, "--from", "debugpy=="+pin, "python", "-c", ""); err != nil {
+		slog.Warn("debugpy prewarm failed", "pin", pin, "error", err)
 	}
 }
 
