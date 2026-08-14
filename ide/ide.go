@@ -275,7 +275,7 @@ func (i *IDE) Config() config.Config {
 func (i *IDE) Ready() tui.Handler {
 	i.initRunning()
 	i.maybeStartTutorial()
-	i.maybeOpenHomePrompt()
+	i.maybeReopenLastSession()
 	return &i.root
 }
 
@@ -284,12 +284,11 @@ func (i *IDE) Ready() tui.Handler {
 // mounts only after the shader has fully settled.
 const tutorialInitShaderBuffer = 1000 * time.Millisecond
 
-// homePromptInitShaderBuffer is the extra delay added on top of the init
-// shader duration before the home-workspace command prompt is
-// pre-opened. It is shorter than tutorialInitShaderBuffer because the
-// pre-open is a lightweight convenience that should appear promptly once
-// the shader settles.
-const homePromptInitShaderBuffer = 250 * time.Millisecond
+// reopenPromptInitShaderBuffer is the extra delay added on top of the
+// init shader duration before the last-session reopen offer runs. It is
+// shorter than tutorialInitShaderBuffer because the offer should appear
+// promptly once the shader settles.
+const reopenPromptInitShaderBuffer = 250 * time.Millisecond
 
 func (i *IDE) maybeStartTutorial() {
 	name := i.options.startingTutorial
@@ -315,48 +314,26 @@ func (i *IDE) maybeStartTutorial() {
 	dispatch()
 }
 
-// maybeOpenHomePrompt pre-opens the command prompt with the
-// workspaceopen command when the user lands on the home workspace and no
-// first-run tutorial is configured. The home workspace is not a real
-// workspace, so this lets returning users immediately fuzzy-search and
-// re-open a previously opened workspace from command history.
-func (i *IDE) maybeOpenHomePrompt() {
-	if i.options.disableHomePrompt {
-		return
-	}
-	// The tutorial owns the prompt during first-run onboarding; avoid a
-	// double-prompt by deferring to it when it will start.
-	if name := i.options.startingTutorial; name != "" {
-		if _, ok := i.tutorial.tutorials[name]; ok {
-			return
-		}
-	}
-	// A workspace requested at launch installs asynchronously, so the
-	// home workspace may still be focused at Ready; skip in that case so
-	// the prompt does not open over the workspace that is loading in.
+// maybeReopenLastSession offers to reopen the workspaces left open by
+// the previous session. A workspace requested at launch consumes the
+// snapshot itself once its async install completes, so this only covers
+// the bare launch.
+func (i *IDE) maybeReopenLastSession() {
 	if i.workspaceHandler.startupWorkspace {
 		return
 	}
-	if !i.workspaceHandler.focusEx().home {
+	if len(i.workspaceHandler.lastSessionReopenTargets()) == 0 {
 		return
 	}
 	dispatch := func() {
 		i.options.scheduleFn(func() {
-			ex := i.workspaceHandler.focusEx()
-			// The pre-open is a convenience, not a takeover: if the user
-			// already opened the command prompt themselves before this
-			// deferred dispatch ran — even if they have since dismissed
-			// it — leave them in control and skip the pre-open.
-			if ex.promptOpened {
-				return
-			}
-			ex.Dispatch("echo", "{prompt}workspaceopen<space>")
+			i.workspaceHandler.maybeReopenLastSession()
 		})
 	}
-	// Defer behind the init shader the same way maybeStartTutorial does so
-	// the shader does not animate on top of the freshly-mounted prompt.
+	// Defer behind the init shader the same way maybeStartTutorial does
+	// so the shader does not animate on top of the reopen prompt.
 	if i.options.initShaderFn != nil && i.options.initShaderDuration > 0 {
-		i.options.afterFunc(i.options.initShaderDuration+homePromptInitShaderBuffer, func() {
+		i.options.afterFunc(i.options.initShaderDuration+reopenPromptInitShaderBuffer, func() {
 			debug.CapturePanicReport(dispatch)
 		})
 		return

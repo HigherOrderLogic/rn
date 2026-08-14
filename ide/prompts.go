@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/unstablebuild/rune-go-sdk/api/browserapi"
@@ -114,6 +115,53 @@ func (h *openRestorePromptHandler) OnSelect(idx int, option string) {
 }
 
 func (h *openRestorePromptHandler) OnClose() error {
+	return nil
+}
+
+func (h *workspaceManagerHandler) openReopenSessionPrompt(
+	ex *ex, targets []idehistory.SessionWorkspace,
+) {
+	promptHandler := &reopenSessionPromptHandler{wm: h, targets: targets}
+	promptHandler.promptWindow = ex.comp.Prompt(
+		h.reopenSessionPromptMessage(targets),
+		[]string{yesOpt, noOpt},
+		yesNoKeyCombs,
+		promptHandler,
+	)
+}
+
+func (h *workspaceManagerHandler) reopenSessionPromptMessage(
+	targets []idehistory.SessionWorkspace,
+) string {
+	var msg strings.Builder
+	msg.WriteString("Do you want to **open** the following workspaces " +
+		"from your last session?\n")
+	for _, w := range targets {
+		msg.WriteString("\n- " + h.workspaceDisplayPath(w.URI))
+	}
+	return msg.String()
+}
+
+type reopenSessionPromptHandler struct {
+	wm           *workspaceManagerHandler
+	promptWindow browser.Window
+	targets      []idehistory.SessionWorkspace
+}
+
+func (h *reopenSessionPromptHandler) OnSelect(idx int, option string) {
+	if h.promptWindow != nil {
+		_ = h.promptWindow.Close()
+	}
+	if option == yesOpt {
+		h.wm.reopenSessionWorkspaces(h.targets)
+		return
+	}
+	// Overwrite the declined snapshot with what is actually open, so the
+	// offer is not repeated on the next start.
+	h.wm.persistLastSession()
+}
+
+func (h *reopenSessionPromptHandler) OnClose() error {
 	return nil
 }
 

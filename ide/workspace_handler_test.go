@@ -7789,3 +7789,215 @@ func TestWorkspaceRootURI(t *testing.T) {
 			"a nil workspace is a wiring bug and must fail loudly")
 	})
 }
+
+// newLastSessionHandler builds a handler whose IDE storage lives in
+// dataDir, so a test can hand the same dataDir to a later handler and
+// exercise the cross-session reopen path.
+func newLastSessionHandler(
+	t *testing.T, dataDir string, uri *workspaceapi.URI,
+) *testWorkspaceManagerHandler {
+	t.Helper()
+	cc := defaultConfigWithWrap(false)
+	cc.ringBell = func() {}
+	mu, sched, drain := buildTestSchedulerForCfg(t, &cc)
+	manager := workspace.NewManager(config.NopConfig(), sched)
+	require.NoError(t, manager.RegisterScheme(workspace.MemoryScheme,
+		workspace.NewMemoryScheme))
+	return newTestWorkspaceManagerHandlerWithManagerMu(t, manager, mu, drain,
+		uri, cc, FuncExtensionsRunner(testRunnerFn), nil, dataDir, nil,
+		nopShutdownShaderConfig())
+}
+
+// seedLastSession writes the last-session document a previous run would
+// have left behind in dataDir.
+func seedLastSession(
+	t *testing.T, dataDir string, workspaces ...idehistory.SessionWorkspace,
+) {
+	t.Helper()
+	storage := localstorage.New(
+		context.Background(), dataDir, docbson.Marshaler())
+	defer func() { require.NoError(t, storage.Close()) }()
+	store := idehistory.New(storageapi.WithPartition(storage, "ide"))
+	require.NoError(t, store.StoreLastSession(context.Background(),
+		idehistory.Session{Workspaces: workspaces}))
+}
+
+func loadLastSession(
+	t *testing.T, m *testWorkspaceManagerHandler,
+) []idehistory.SessionWorkspace {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	session, err := m.state.LoadLastSession(context.Background())
+	require.NoError(t, err)
+	return session.Workspaces
+}
+
+func floatingWindows(m *testWorkspaceManagerHandler) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	n := 0
+	m.focusBrowser().IterateWindows(func(w browser.Window) {
+		if w.IsFloating() {
+			n++
+		}
+	})
+	return n
+}
+
+// TestWorkspaceManagerPersistsLastSession pins that the persisted
+// last-session document tracks every mutation of the installed set, so
+// a crash at any point still leaves an accurate snapshot behind.
+func TestWorkspaceManagerPersistsLastSession(t *testing.T) {
+	dataDir := t.TempDir()
+	uriA := mustURI(t, "memory:///session/a")
+	uriB := mustURI(t, "memory:///session/b")
+
+	m := newLastSessionHandler(t, dataDir, &uriA)
+	m.mu.Lock()
+	m.Resize(80, 24)
+	m.mu.Unlock()
+
+	assert.Equal(t, []idehistory.SessionWorkspace{{URI: uriA, Slot: 0}},
+		loadLastSession(t, m), "the startup workspace must be recorded")
+
+	m.mu.Lock()
+	require.NoError(t, m.addWorkspace(uriB, false, false, -1))
+	m.mu.Unlock()
+	m.waitForWorkspace(t, uriB)
+	assert.Equal(t, []idehistory.SessionWorkspace{
+		{URI: uriA, Slot: 0}, {URI: uriB, Slot: 1},
+	}, loadLastSession(t, m), "an added workspace must be recorded")
+
+	m.mu.Lock()
+	require.NoError(t, m.moveWorkspace("left"))
+	m.mu.Unlock()
+	assert.Equal(t, []idehistory.SessionWorkspace{
+		{URI: uriB, Slot: 0}, {URI: uriA, Slot: 1},
+	}, loadLastSession(t, m), "a moved workspace must be recorded in its new slot")
+
+	m.mu.Lock()
+	_, _, err := m.closeWorkspace()
+	require.NoError(t, err)
+	m.mu.Unlock()
+	m.drainPendingWorkspaces()
+	assert.Equal(t, []idehistory.SessionWorkspace{{URI: uriA, Slot: 1}},
+		loadLastSession(t, m), "a closed workspace must be dropped")
+
+	require.NoError(t, m.Close())
+}
+
+// TestWorkspaceManagerReopensLastSession covers the startup offer to
+// reopen the workspaces the previous session left open.
+func TestWorkspaceManagerReopensLastSession(t *testing.T) {
+	uriA := mustURI(t, "memory:///reopen/a")
+	uriB := mustURI(t, "memory:///reopen/b")
+
+	t.Run("the launched workspace is deduped from the offer", func(t *testing.T) {
+		m := newLastSessionHandler(t, t.TempDir(), &uriA)
+
+		m.mu.Lock()
+		m.lastSession = idehistory.Session{Workspaces: []idehistory.SessionWorkspace{
+			{URI: uriA, Slot: 0}, {URI: uriB, Slot: 2},
+		}}
+		targets := m.lastSessionReopenTargets()
+		m.mu.Unlock()
+		assert.Equal(t,
+			[]idehistory.SessionWorkspace{{URI: uriB, Slot: 2}}, targets)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("prompt declined leaves only the launched workspace", func(t *testing.T) {
+		dataDir := t.TempDir()
+		seedLastSession(t, dataDir,
+			idehistory.SessionWorkspace{URI: uriA, Slot: 0},
+			idehistory.SessionWorkspace{URI: uriB, Slot: 1})
+
+		m := newLastSessionHandler(t, dataDir, &uriA)
+		m.drainSched()
+
+		m.mu.Lock()
+		_, installed := m.findInstalledSlot(uriB)
+		targets := []idehistory.SessionWorkspace{{URI: uriB, Slot: 1}}
+		m.mu.Unlock()
+		assert.False(t, installed,
+			"the reopen must wait for consent")
+		assert.Equal(t, 1, floatingWindows(m),
+			"a reopen prompt must be offered")
+
+		m.mu.Lock()
+		(&reopenSessionPromptHandler{
+			wm: m.workspaceManagerHandler, targets: targets,
+		}).OnSelect(1, noOpt)
+		m.mu.Unlock()
+
+		_, installed = m.findInstalledSlot(uriB)
+		assert.False(t, installed)
+		assert.Equal(t, []idehistory.SessionWorkspace{{URI: uriA, Slot: 0}},
+			loadLastSession(t, m),
+			"declining must overwrite the snapshot so it is not offered again")
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("prompt accepted reopens the workspaces", func(t *testing.T) {
+		dataDir := t.TempDir()
+		seedLastSession(t, dataDir,
+			idehistory.SessionWorkspace{URI: uriA, Slot: 0},
+			idehistory.SessionWorkspace{URI: uriB, Slot: 1})
+
+		m := newLastSessionHandler(t, dataDir, &uriA)
+		m.drainSched()
+
+		m.mu.Lock()
+		(&reopenSessionPromptHandler{
+			wm:      m.workspaceManagerHandler,
+			targets: []idehistory.SessionWorkspace{{URI: uriB, Slot: 2}},
+		}).OnSelect(0, yesOpt)
+		m.mu.Unlock()
+		m.waitForWorkspace(t, uriB)
+
+		m.mu.Lock()
+		slotB, okB := m.findInstalledSlot(uriB)
+		m.mu.Unlock()
+		require.True(t, okB)
+		assert.Equal(t, 2, slotB,
+			"a reopened workspace must land in its recorded slot")
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("no previous session makes no offer", func(t *testing.T) {
+		dataDir := t.TempDir()
+		m := newLastSessionHandler(t, dataDir, &uriA)
+		m.drainSched()
+
+		assert.Equal(t, 0, floatingWindows(m))
+		m.mu.Lock()
+		count := m.workspaceCount
+		m.mu.Unlock()
+		assert.Equal(t, 1, count)
+
+		require.NoError(t, m.Close())
+	})
+
+	t.Run("the offer lists the workspaces", func(t *testing.T) {
+		m := newLastSessionHandler(t, t.TempDir(), &uriA)
+
+		m.mu.Lock()
+		m.userHome = "/Users/someone"
+		msg := m.reopenSessionPromptMessage([]idehistory.SessionWorkspace{
+			{URI: mustURI(t, "file:///Users/someone/src/rune"), Slot: 0},
+			{URI: uriB, Slot: 1},
+		})
+		m.mu.Unlock()
+		assert.Equal(t,
+			"Do you want to **open** the following workspaces "+
+				"from your last session?\n"+
+				"\n- ~/src/rune"+
+				"\n- "+uriB.String(), msg)
+
+		require.NoError(t, m.Close())
+	})
+}

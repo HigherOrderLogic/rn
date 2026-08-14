@@ -181,6 +181,13 @@ type workspaceManagerHandler struct {
 	// the async cwd workspace install has completed.
 	startupWorkspace bool
 
+	// lastSession is the set of workspaces that were open when the
+	// previous session ended. It is loaded once, before the current
+	// session starts overwriting the persisted document, and consumed
+	// by the one-shot maybeReopenLastSession.
+	lastSession   idehistory.Session
+	reopenPending bool
+
 	packageConfigMergeHook func(idepkg.ConfigMergeEvent) (idepkg.ConfigMergeResult, error)
 
 	watchedFilesChangeHook func(int)
@@ -775,6 +782,15 @@ func (h *workspaceManagerHandler) init(
 	h.state = idehistory.New(h.ideStorage)
 	h.initScavenger(ctx)
 
+	// Read the previous session before any workspace install can
+	// overwrite the document with the current one.
+	lastSession, loadErr := h.state.LoadLastSession(ctx)
+	if loadErr != nil {
+		log.Warnf("load last session: %v", loadErr)
+	}
+	h.lastSession = lastSession
+	h.reopenPending = len(h.lastSession.Workspaces) > 0
+
 	// best effort
 	user, err := user.Current()
 	if err == nil {
@@ -1077,12 +1093,18 @@ func (h *workspaceManagerHandler) makeWorkspaceTabName(
 	if w == nil {
 		return strconv.Itoa(i + 1)
 	}
-	if w.uri.Scheme() == workspace.FileScheme && h.userHome != "" {
-		path := w.uri.Path()
-		path = strings.ReplaceAll(path, h.userHome, "~")
-		return path
+	return h.workspaceDisplayPath(w.uri)
+}
+
+// workspaceDisplayPath renders uri for humans, shortening the user's
+// home directory to ~.
+func (h *workspaceManagerHandler) workspaceDisplayPath(
+	uri workspaceapi.URI,
+) string {
+	if uri.Scheme() == workspace.FileScheme && h.userHome != "" {
+		return strings.ReplaceAll(uri.Path(), h.userHome, "~")
 	}
-	return w.uri.String()
+	return uri.String()
 }
 
 func (h *workspaceManagerHandler) Resize(width, height int) {
@@ -1948,6 +1970,9 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	shouldRestore, promptRecommended bool,
 ) {
 	defer h.shaderRunner.stopLoading()
+	// One-shot: only the first install of the session consumes the
+	// previous session's snapshot.
+	defer h.maybeReopenLastSession()
 
 	if pending.canceled.Load() {
 		h.beginPendingWorkspaceTeardown(pending)
@@ -2039,6 +2064,7 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	h.workspaces[pending.slot] = wh
 	h.workspaceCount++
 	h.switchToWorkspace(pending.slot)
+	h.persistLastSession()
 
 	if built.notice != nil {
 		notice := built.notice
@@ -2827,6 +2853,7 @@ func (h *workspaceManagerHandler) closeWorkspace() (
 
 	h.workspaces[focus] = nil
 	h.workspaceCount--
+	h.persistLastSession()
 
 	for i := h.focus; i >= 0; i-- {
 		if h.workspaces[i] != nil {
@@ -2902,6 +2929,7 @@ func (h *workspaceManagerHandler) moveWorkspace(args ...string) error {
 	h.workspaces[next] = temp
 	h.focus = next
 	h.events.setFocus(h.focusURI())
+	h.persistLastSession()
 	h.Resize(h.width, h.height)
 	return err
 }
@@ -3505,6 +3533,73 @@ func (h *workspaceManagerHandler) persistWorkspaceStateOnClose(hm *workspaceHand
 
 func (h *workspaceManagerHandler) Interrupt(ctx context.Context) error {
 	return h.events.globalInterrupter().Interrupt(ctx)
+}
+
+// persistLastSession records the currently installed workspaces so the
+// next run can offer to reopen them. It runs synchronously on the event
+// loop: the document is small and the write must not race with the
+// installs and closes that mutate h.workspaces.
+func (h *workspaceManagerHandler) persistLastSession() {
+	session := idehistory.Session{FocusSlot: h.focus, SavedAt: time.Now()}
+	for i, w := range h.workspaces {
+		if w == nil {
+			continue
+		}
+		session.Workspaces = append(session.Workspaces,
+			idehistory.SessionWorkspace{URI: w.uri, Slot: i})
+	}
+	if err := h.state.StoreLastSession(context.Background(), session); err != nil {
+		log.Warnf("persist last session: %v", err)
+	}
+}
+
+// lastSessionReopenTargets returns the previous session's workspaces
+// that are neither installed nor already loading.
+func (h *workspaceManagerHandler) lastSessionReopenTargets() []idehistory.SessionWorkspace {
+	var targets []idehistory.SessionWorkspace
+	for _, w := range h.lastSession.Workspaces {
+		if _, ok := h.findInstalledSlot(w.URI); ok {
+			continue
+		}
+		if h.isPending(w.URI) {
+			continue
+		}
+		targets = append(targets, w)
+	}
+	return targets
+}
+
+// maybeReopenLastSession offers to reopen the workspaces left open by
+// the previous session. It is a one-shot startup action. Reopening
+// other workspaces is always an explicit choice: unlike per-workspace
+// state restore, it is deliberately not covered by
+// workspace.auto_restore.
+func (h *workspaceManagerHandler) maybeReopenLastSession() {
+	if !h.reopenPending {
+		return
+	}
+	h.reopenPending = false
+	targets := h.lastSessionReopenTargets()
+	h.lastSession = idehistory.Session{}
+	if len(targets) == 0 {
+		return
+	}
+	h.openReopenSessionPrompt(h.focusEx(), targets)
+}
+
+func (h *workspaceManagerHandler) reopenSessionWorkspaces(
+	targets []idehistory.SessionWorkspace,
+) {
+	for _, w := range targets {
+		slot := w.Slot
+		if slot < 0 || slot >= len(h.workspaces) || !h.slotIsFree(slot) {
+			slot = -1
+		}
+		if err := h.addWorkspace(w.URI, true, false, slot); err != nil {
+			_, _ = h.notifications.current().Notify(browserapi.LevelError,
+				"Failed to reopen workspace %s: %v", w.URI.String(), err)
+		}
+	}
 }
 
 func (h *workspaceManagerHandler) waitInflight() {

@@ -30,6 +30,9 @@ import (
 const (
 	workspaceStateDocumentKind   = "workspace-state"
 	workspaceStateDocumentPrefix = "workspace-state:"
+
+	lastSessionDocumentKind = "last-session"
+	lastSessionDocumentID   = "last-session"
 )
 
 // State is the unified workspace state persisted by Store.
@@ -91,6 +94,21 @@ type Snapshotter interface {
 	Tasks() []TaskSession
 	Layout() (tcomponent.TileLayout, bool)
 	FileWindowIDs() map[string]uint64
+}
+
+// SessionWorkspace is a workspace that was installed in a given slot
+// when the session snapshot was taken.
+type SessionWorkspace struct {
+	URI  workspaceapi.URI
+	Slot int
+}
+
+// Session records which workspaces were open at a point in time, so a
+// later run of the IDE can offer to reopen them.
+type Session struct {
+	Workspaces []SessionWorkspace
+	FocusSlot  int
+	SavedAt    time.Time
 }
 
 // Store persists workspace state directly through a storageapi.Service.
@@ -184,6 +202,52 @@ func (s *Store) LoadWorkspaceState(
 			"idehistory: load %q: %w", uri.String(), err)
 	}
 	return doc.toState(), nil
+}
+
+// StoreLastSession records which workspaces are currently open so a
+// later run can offer to reopen them.
+func (s *Store) StoreLastSession(ctx context.Context, session Session) error {
+	doc := lastSessionDocument{
+		Kind:      lastSessionDocumentKind,
+		FocusSlot: session.FocusSlot,
+		SavedAt:   session.SavedAt,
+	}
+	for _, w := range session.Workspaces {
+		doc.Workspaces = append(doc.Workspaces, sessionWorkspaceDoc{
+			URI:  w.URI.String(),
+			Slot: w.Slot,
+		})
+	}
+	if err := s.storage.Set(ctx, lastSessionDocumentID, doc); err != nil {
+		return fmt.Errorf("idehistory: store last session: %w", err)
+	}
+	return nil
+}
+
+// LoadLastSession returns the workspaces recorded by the most recent
+// StoreLastSession call. If nothing was ever persisted, the zero
+// Session is returned.
+func (s *Store) LoadLastSession(ctx context.Context) (Session, error) {
+	var doc lastSessionDocument
+	err := s.storage.Get(ctx, lastSessionDocumentID, &doc)
+	if errors.Is(err, storageapi.ErrNotFound) {
+		return Session{}, nil
+	}
+	if err != nil {
+		return Session{}, fmt.Errorf("idehistory: load last session: %w", err)
+	}
+	session := Session{FocusSlot: doc.FocusSlot, SavedAt: doc.SavedAt}
+	for _, w := range doc.Workspaces {
+		uri, err := workspaceapi.ParseURI(w.URI)
+		if err != nil {
+			continue
+		}
+		session.Workspaces = append(session.Workspaces, SessionWorkspace{
+			URI:  uri,
+			Slot: w.Slot,
+		})
+	}
+	return session, nil
 }
 
 // ListWorkspaceURIs returns the URI of every workspace that has
@@ -313,6 +377,18 @@ type taskDoc struct {
 	WindowID                 uint64
 	WindowMinimized          bool
 	WindowMinimizedAlignment component.Alignment
+}
+
+type lastSessionDocument struct {
+	Kind       string
+	Workspaces []sessionWorkspaceDoc
+	FocusSlot  int
+	SavedAt    time.Time
+}
+
+type sessionWorkspaceDoc struct {
+	URI  string
+	Slot int
 }
 
 func workspaceStateDocumentID(uri workspaceapi.URI) string {

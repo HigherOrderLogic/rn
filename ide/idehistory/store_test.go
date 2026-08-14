@@ -215,6 +215,96 @@ func TestStoreReturnsBackendError(t *testing.T) {
 	assert.Contains(t, err.Error(), "boom")
 }
 
+func TestLastSessionRoundTrip(t *testing.T) {
+	cases := []struct {
+		name  string
+		store []Session
+		want  Session
+	}{
+		{
+			name: "never stored",
+			want: Session{},
+		},
+		{
+			name: "workspaces and focus",
+			store: []Session{{
+				Workspaces: []SessionWorkspace{
+					{URI: mustURI(t, "memory:///one"), Slot: 0},
+					{URI: mustURI(t, "memory:///two"), Slot: 3},
+				},
+				FocusSlot: 3,
+				SavedAt:   time.Unix(1700000000, 0).UTC(),
+			}},
+			want: Session{
+				Workspaces: []SessionWorkspace{
+					{URI: mustURI(t, "memory:///one"), Slot: 0},
+					{URI: mustURI(t, "memory:///two"), Slot: 3},
+				},
+				FocusSlot: 3,
+				SavedAt:   time.Unix(1700000000, 0).UTC(),
+			},
+		},
+		{
+			name: "last write wins",
+			store: []Session{
+				{Workspaces: []SessionWorkspace{
+					{URI: mustURI(t, "memory:///stale"), Slot: 0},
+				}},
+				{Workspaces: []SessionWorkspace{
+					{URI: mustURI(t, "memory:///fresh"), Slot: 1},
+				}},
+			},
+			want: Session{Workspaces: []SessionWorkspace{
+				{URI: mustURI(t, "memory:///fresh"), Slot: 1},
+			}},
+		},
+		{
+			name: "empty session clears the offer",
+			store: []Session{
+				{Workspaces: []SessionWorkspace{
+					{URI: mustURI(t, "memory:///gone"), Slot: 0},
+				}},
+				{},
+			},
+			want: Session{},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := New(newCountingStorage())
+			for _, s := range tc.store {
+				require.NoError(t, store.StoreLastSession(context.Background(), s))
+			}
+			got, err := store.LoadLastSession(context.Background())
+			require.NoError(t, err)
+			assert.Equal(t, tc.want.Workspaces, got.Workspaces)
+			assert.Equal(t, tc.want.FocusSlot, got.FocusSlot)
+			assert.True(t, tc.want.SavedAt.Equal(got.SavedAt))
+		})
+	}
+}
+
+// TestLastSessionSkipsUnparseableURI pins that a document written by a
+// future or corrupted version cannot break startup.
+func TestLastSessionSkipsUnparseableURI(t *testing.T) {
+	cs := newCountingStorage()
+	store := New(cs)
+	require.NoError(t, cs.Set(context.Background(), lastSessionDocumentID,
+		lastSessionDocument{
+			Kind: lastSessionDocumentKind,
+			Workspaces: []sessionWorkspaceDoc{
+				{URI: "not-a-uri", Slot: 0},
+				{URI: "memory:///good", Slot: 1},
+			},
+		}))
+
+	got, err := store.LoadLastSession(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got.Workspaces, 1)
+	assert.Equal(t, mustURI(t, "memory:///good"), got.Workspaces[0].URI)
+	assert.Equal(t, 1, got.Workspaces[0].Slot)
+}
+
 func TestStoreNotClosedByCloseStore(t *testing.T) {
 	backing := &failingCloseStorage{Service: storagestub.NewInMemoryService()}
 	_ = New(backing) // never call Close on the backing service
