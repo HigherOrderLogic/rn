@@ -317,6 +317,7 @@ func TestStoreWorkspaceStateForClose(t *testing.T) {
 	uri := mustURI(t, "memory:///for-close")
 
 	snap := stubSnapshotter{
+		name:      "renamed",
 		layout:    tcomponent.TileLayout{WindowID: 42},
 		hasLayout: true,
 		terminals: []TerminalSession{{Name: "t1"}},
@@ -332,10 +333,12 @@ func TestStoreWorkspaceStateForClose(t *testing.T) {
 	assert.Equal(t, "t1", got.Terminals[0].Name)
 	require.Len(t, got.Tasks, 1)
 	assert.Equal(t, "task1", got.Tasks[0].Name)
+	assert.Equal(t, "renamed", got.Name)
 }
 
 // stubSnapshotter is a minimal Snapshotter for tracker tests.
 type stubSnapshotter struct {
+	name      string
 	layout    tcomponent.TileLayout
 	hasLayout bool
 	terminals []TerminalSession
@@ -343,6 +346,7 @@ type stubSnapshotter struct {
 	winIDs    map[string]uint64
 }
 
+func (s stubSnapshotter) Name() string                 { return s.name }
 func (s stubSnapshotter) Terminals() []TerminalSession { return s.terminals }
 func (s stubSnapshotter) Tasks() []TaskSession         { return s.tasks }
 func (s stubSnapshotter) Layout() (tcomponent.TileLayout, bool) {

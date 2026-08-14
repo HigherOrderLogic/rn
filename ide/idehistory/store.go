@@ -37,6 +37,7 @@ const (
 
 // State is the unified workspace state persisted by Store.
 type State struct {
+	Name      string
 	Files     []File
 	Layout    tcomponent.TileLayout
 	HasLayout bool
@@ -49,6 +50,9 @@ type State struct {
 // a layout on workspace close, so observing a layout with no
 // files/terminals/tasks is the common "empty workspace" case and
 // triggering restore on it produces an empty-but-visible window.
+//
+// The workspace name is likewise not content: it is applied whenever
+// the workspace opens, without going through restore.
 func (s State) IsEmpty() bool {
 	return len(s.Files) == 0 &&
 		len(s.Terminals) == 0 &&
@@ -90,6 +94,9 @@ type TaskSession struct {
 // Snapshotter supplies live workspace state when the Store needs to
 // persist a fresh snapshot at close/reload time.
 type Snapshotter interface {
+	// Name is the workspace's display name, empty when it has not
+	// been renamed.
+	Name() string
 	Terminals() []TerminalSession
 	Tasks() []TaskSession
 	Layout() (tcomponent.TileLayout, bool)
@@ -171,8 +178,24 @@ func (s *Store) StoreWorkspaceStateForClose(
 		state.HasLayout = hasLayout
 		state.Terminals = snap.Terminals()
 		state.Tasks = snap.Tasks()
+		state.Name = snap.Name()
 	}
 	return s.StoreWorkspaceState(ctx, uri, state)
+}
+
+// PersistWorkspaceState rewrites uri's state from its registered
+// tracker. Callers use it when something outside the editor's event
+// stream changed persisted state and must not wait for the next
+// editor event to make it durable. It is a no-op when uri has no
+// tracker.
+func (s *Store) PersistWorkspaceState(
+	ctx context.Context, uri workspaceapi.URI,
+) error {
+	t, ok := s.trackers[uri.String()]
+	if !ok {
+		return nil
+	}
+	return s.StoreWorkspaceState(ctx, uri, t.buildState())
 }
 
 // ClearWorkspaceState deletes the persisted state for uri.
@@ -343,6 +366,7 @@ func (s *Store) DirtyFilesOpen() bool {
 type workspaceStateDocument struct {
 	Kind         string
 	WorkspaceURI string
+	Name         string
 	Files        []fileDoc
 	Layout       tcomponent.TileLayout
 	HasLayout    bool
@@ -401,6 +425,7 @@ func newWorkspaceStateDocument(
 	doc := workspaceStateDocument{
 		Kind:         workspaceStateDocumentKind,
 		WorkspaceURI: uri.String(),
+		Name:         state.Name,
 		Layout:       state.Layout,
 		HasLayout:    state.HasLayout,
 	}
@@ -434,6 +459,7 @@ func newWorkspaceStateDocument(
 
 func (d workspaceStateDocument) toState() State {
 	state := State{
+		Name:      d.Name,
 		Layout:    normalizeTileLayout(d.Layout),
 		HasLayout: d.HasLayout,
 	}

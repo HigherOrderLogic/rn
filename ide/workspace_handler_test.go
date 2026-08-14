@@ -7790,10 +7790,10 @@ func TestWorkspaceRootURI(t *testing.T) {
 	})
 }
 
-// newLastSessionHandler builds a handler whose IDE storage lives in
-// dataDir, so a test can hand the same dataDir to a later handler and
-// exercise the cross-session reopen path.
-func newLastSessionHandler(
+// newHandlerWithDataDir builds a handler whose IDE storage lives in
+// dataDir, so a test can seed that storage beforehand or hand the same
+// dataDir to a later handler.
+func newHandlerWithDataDir(
 	t *testing.T, dataDir string, uri *workspaceapi.URI,
 ) *testWorkspaceManagerHandler {
 	t.Helper()
@@ -7853,7 +7853,7 @@ func TestWorkspaceManagerPersistsLastSession(t *testing.T) {
 	uriA := mustURI(t, "memory:///session/a")
 	uriB := mustURI(t, "memory:///session/b")
 
-	m := newLastSessionHandler(t, dataDir, &uriA)
+	m := newHandlerWithDataDir(t, dataDir, &uriA)
 	m.mu.Lock()
 	m.Resize(80, 24)
 	m.mu.Unlock()
@@ -7894,7 +7894,7 @@ func TestWorkspaceManagerReopensLastSession(t *testing.T) {
 	uriB := mustURI(t, "memory:///reopen/b")
 
 	t.Run("the launched workspace is deduped from the offer", func(t *testing.T) {
-		m := newLastSessionHandler(t, t.TempDir(), &uriA)
+		m := newHandlerWithDataDir(t, t.TempDir(), &uriA)
 
 		m.mu.Lock()
 		m.lastSession = idehistory.Session{Workspaces: []idehistory.SessionWorkspace{
@@ -7914,7 +7914,7 @@ func TestWorkspaceManagerReopensLastSession(t *testing.T) {
 			idehistory.SessionWorkspace{URI: uriA, Slot: 0},
 			idehistory.SessionWorkspace{URI: uriB, Slot: 1})
 
-		m := newLastSessionHandler(t, dataDir, &uriA)
+		m := newHandlerWithDataDir(t, dataDir, &uriA)
 		m.drainSched()
 
 		m.mu.Lock()
@@ -7947,7 +7947,7 @@ func TestWorkspaceManagerReopensLastSession(t *testing.T) {
 			idehistory.SessionWorkspace{URI: uriA, Slot: 0},
 			idehistory.SessionWorkspace{URI: uriB, Slot: 1})
 
-		m := newLastSessionHandler(t, dataDir, &uriA)
+		m := newHandlerWithDataDir(t, dataDir, &uriA)
 		m.drainSched()
 
 		m.mu.Lock()
@@ -7970,7 +7970,7 @@ func TestWorkspaceManagerReopensLastSession(t *testing.T) {
 
 	t.Run("no previous session makes no offer", func(t *testing.T) {
 		dataDir := t.TempDir()
-		m := newLastSessionHandler(t, dataDir, &uriA)
+		m := newHandlerWithDataDir(t, dataDir, &uriA)
 		m.drainSched()
 
 		assert.Equal(t, 0, floatingWindows(m))
@@ -7983,7 +7983,7 @@ func TestWorkspaceManagerReopensLastSession(t *testing.T) {
 	})
 
 	t.Run("the offer lists the workspaces", func(t *testing.T) {
-		m := newLastSessionHandler(t, t.TempDir(), &uriA)
+		m := newHandlerWithDataDir(t, t.TempDir(), &uriA)
 
 		m.mu.Lock()
 		m.userHome = "/Users/someone"
@@ -8000,4 +8000,39 @@ func TestWorkspaceManagerReopensLastSession(t *testing.T) {
 
 		require.NoError(t, m.Close())
 	})
+}
+
+// TestWorkspaceManagerRestoresWorkspaceName pins that a name set with
+// workspacerename is persisted as soon as it is set and comes back when
+// the workspace is opened again.
+func TestWorkspaceManagerRestoresWorkspaceName(t *testing.T) {
+	dataDir := t.TempDir()
+	uri := mustURI(t, "memory:///named/workspace")
+	m := newHandlerWithDataDir(t, dataDir, &uri)
+
+	m.mu.Lock()
+	m.Resize(80, 24)
+	require.NoError(t, m.commandRenameWorkspace("api"))
+	require.Equal(t, "api", m.workspaces[m.focus].tabname)
+	state, err := m.state.LoadWorkspaceState(context.Background(), uri)
+	require.NoError(t, err)
+	m.mu.Unlock()
+	assert.Equal(t, "api", state.Name,
+		"a rename must be durable without waiting for the workspace to close")
+
+	m.mu.Lock()
+	require.NoError(t, m.commandCloseWorkspace())
+	require.Equal(t, 0, m.workspaceCount)
+	require.NoError(t, m.addWorkspace(uri, true, false, -1))
+	m.mu.Unlock()
+	m.waitForWorkspace(t, uri)
+
+	m.mu.Lock()
+	name := m.workspaces[m.focus].tabname
+	barName := m.makeWorkspaceTabName(m.focus, m.workspaces[m.focus])
+	m.mu.Unlock()
+	assert.Equal(t, "api", name)
+	assert.Equal(t, "api", barName)
+
+	require.NoError(t, m.Close())
 }

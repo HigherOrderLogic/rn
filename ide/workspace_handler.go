@@ -2100,7 +2100,13 @@ func (h *workspaceManagerHandler) installPendingWorkspace(
 	}
 	fexplorerURI, _ := workspaceapi.ParseURI(fileExplorerURI)
 	wh.historyCloser = h.state.SubscribeEvents(
-		ctx, uri, &ex.comp, exSnapshotter{ex: ex}, fexplorerURI)
+		ctx, uri, &ex.comp, exSnapshotter{ex: ex, wh: wh}, fexplorerURI)
+	// The name identifies the workspace rather than its contents, so it
+	// comes back whether or not the session itself is restored.
+	if state.Name != "" {
+		wh.tabname = state.Name
+		h.Resize(h.width, h.height)
+	}
 	if !shouldRestore {
 		if err := h.state.ClearWorkspaceState(ctx, uri); err != nil {
 			_, _ = h.notifications.current().Notify(browserapi.LevelError,
@@ -2590,6 +2596,10 @@ func (h *workspaceManagerHandler) commandRenameWorkspace(args ...string) error {
 	handler := h.workspaces[h.focus]
 	handler.tabname = name
 	h.Resize(h.width, h.height)
+	if err := h.state.PersistWorkspaceState(
+		context.Background(), handler.uri); err != nil {
+		log.Warnf("persist workspace name %s: %v", handler.uri.String(), err)
+	}
 	return nil
 }
 
@@ -3522,7 +3532,8 @@ func (h *workspaceManagerHandler) exHandler(focus tui.Handler) *ex {
 
 func (h *workspaceManagerHandler) persistWorkspaceStateOnClose(hm *workspaceHandler) {
 	if err := h.state.StoreWorkspaceStateForClose(
-		context.Background(), hm.uri, exSnapshotter{ex: hm.ex}); err != nil {
+		context.Background(), hm.uri,
+		exSnapshotter{ex: hm.ex, wh: hm}); err != nil {
 		log.Warnf("persist workspace state %s: %v", hm.uri.String(), err)
 	}
 	if hm.historyCloser != nil {

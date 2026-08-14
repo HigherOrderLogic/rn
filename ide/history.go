@@ -22,6 +22,17 @@ import (
 // ex's components.
 type exSnapshotter struct {
 	ex *ex
+	// wh is the workspace the ex belongs to, when there is one. It is
+	// read live rather than captured because the name changes under
+	// the subscription, via workspacerename.
+	wh *workspaceHandler
+}
+
+func (s exSnapshotter) Name() string {
+	if s.wh == nil {
+		return ""
+	}
+	return s.wh.tabname
 }
 
 // Terminals snapshots every open terminal in the ex into

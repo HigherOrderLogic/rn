@@ -130,6 +130,7 @@ func (t *tracker) buildState() State {
 		state.HasLayout = hasLayout
 		state.Terminals = t.snap.Terminals()
 		state.Tasks = t.snap.Tasks()
+		state.Name = t.snap.Name()
 	}
 	return state
 }
