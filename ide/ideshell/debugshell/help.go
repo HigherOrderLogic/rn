@@ -184,6 +184,10 @@ func helpLines() iterator.Iterator[component.Responsive] {
 		"Repeat `-e` to set debuggee env vars; use `--` to allow a program path " +
 		"or args that start with `-`.\n")
 	b.WriteString("- **`attach`** `<pid|program>` — Send Attach\n")
+	b.WriteString("- **`attach`** `<langID> connect://host:port [program]` — " +
+		"Create a session against an adapter that is already listening " +
+		"(e.g. `python -m debugpy --listen 127.0.0.1:5678 app.py`) and " +
+		"send Attach. No prior `initialize` is needed.\n")
 	b.WriteString("- **`configured`** — Send all in-memory breakpoints, then ConfigurationDone\n")
 	b.WriteString("- **`terminate`** — End the current debug session\n")
 	b.WriteString("- **`restart`** — Restart the current debug session\n")

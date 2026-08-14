@@ -151,8 +151,7 @@ func newPyE2EHarness(t *testing.T, dir string) *e2eHarness {
 }
 
 // newPyE2EHarnessDAP is newPyE2EHarness with an explicit DAP adapter
-// registry, so tests can exercise alternative adapter topologies
-// (e.g. connect:// direct-connect attach).
+// registry, so tests can exercise alternative adapter topologies.
 func newPyE2EHarnessDAP(
 	t *testing.T, dir string, dapCfg idedebug.Config,
 ) *e2eHarness {
@@ -661,10 +660,9 @@ func TestE2E_Python_BreakpointOnLiteralOnlyReturn(t *testing.T) {
 // (a freshly spawned adapter parses but never dials the attach
 // template's connect:{host,port}, so the spawn model hangs forever
 // waiting for a debug server that is wired to the other adapter).
-// The connect:// adapter command drives that direct-connect topology
-// through the full debugshell lifecycle: initialize dials the
-// listening adapter with retry, attach + breakpoint + configured stop
-// the debuggee inside sum_to.
+// `debugger attach python connect://host:port <program>` drives that
+// topology in one gesture on top of the normal packaged adapter
+// config: no config editing and no separate initialize.
 func TestE2E_Python_AttachConnect(t *testing.T) {
 	t.Parallel()
 	uvBin := findUVTool(t, "uv")
@@ -702,42 +700,27 @@ func TestE2E_Python_AttachConnect(t *testing.T) {
 		_, _ = cmd.Process.Wait()
 	})
 
-	dapCfg := idedebug.Config{
-		MaxRetries:        1,
-		InitializeTimeout: 30 * time.Second,
-		Adapters: map[string]idedebug.AdapterConfig{
-			"python": {
-				Command:   []string{"connect://" + addr},
-				AdapterID: "debugpy",
-				AttachArgs: map[string]string{
-					"request": "attach",
-					"type":    "python",
-				},
-			},
-		},
-	}
-	h := newPyE2EHarnessDAP(t, tmpDir, dapCfg)
+	// The harness keeps the packaged adapter config (which spawns
+	// uvx debugpy); the endpoint on the attach command overrides the
+	// transport for this session only.
+	h := newPyE2EHarness(t, tmpDir)
 	defer h.close()
 	ctx := h.ctx
 
-	// 1. initialize dials the debuggee-spawned adapter directly.
-	it, err := h.run(ctx, subInitialize, "python")
+	// 1. one command dials the debuggee-spawned adapter and attaches.
+	it, err := h.run(ctx, subAttach, "python", "connect://"+addr, mainPath)
 	require.NoError(t, err)
 	go h.drainIterator(it)
-
-	// 2. attach to the already-running debuggee.
-	_, err = h.run(ctx, subAttach, mainPath)
-	require.NoError(t, err)
 	h.waitMilestone(t, "initialized", 30*time.Second)
 
-	// 3. breakpoint inside sum_to, then configurationDone resumes.
+	// 2. breakpoint inside sum_to, then configurationDone resumes.
 	bpLine := pyFirstStmtLine(t, mainPath)
 	h.setBreakpoint(t, mainPath, bpLine)
 	_, err = h.run(ctx, subConfigured)
 	require.NoError(t, err)
 	h.waitMilestone(t, "stopped", 30*time.Second)
 
-	// 4. the top frame must be sum_to at the breakpoint line.
+	// 3. the top frame must be sum_to at the breakpoint line.
 	threadID := h.firstThreadID(t)
 	stack := h.stackTrace(t, threadID)
 	require.NotEmpty(t, stack)
@@ -746,7 +729,7 @@ func TestE2E_Python_AttachConnect(t *testing.T) {
 	require.NotNil(t, stack[0].Source)
 	assert.Equal(t, mainPath, stack[0].Source.Path)
 
-	// 5. terminate must clear the local session even though the
+	// 4. terminate must clear the local session even though the
 	// adapter lifecycle is owned by the debuggee.
 	_, _ = h.run(ctx, subTerminate)
 }

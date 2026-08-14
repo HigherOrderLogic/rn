@@ -62,6 +62,9 @@ type fakeDebugger struct {
 	createClient  []debugapi.ClientCapabilities
 	createErr     error
 	subscriber    debugapi.EventSubscriber
+	// connectCalls records the (langID, addr) pairs passed to
+	// CreateSessionConnect.
+	connectCalls [][2]string
 
 	launchCalls     []debugapi.LaunchRequestArguments
 	attachCalls     []debugapi.AttachRequestArguments
@@ -107,6 +110,21 @@ func (f *fakeDebugger) CreateSession(
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.createCalls = append(f.createCalls, langID)
+	f.createClient = append(f.createClient, client)
+	if f.createErr != nil {
+		return "", nil, f.createErr
+	}
+	f.subscriber = sub
+	return f.nextSessionID, &dap.Capabilities{}, nil
+}
+
+func (f *fakeDebugger) CreateSessionConnect(
+	_ context.Context, langID, addr string,
+	client debugapi.ClientCapabilities, sub debugapi.EventSubscriber,
+) (string, *dap.Capabilities, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.connectCalls = append(f.connectCalls, [2]string{langID, addr})
 	f.createClient = append(f.createClient, client)
 	if f.createErr != nil {
 		return "", nil, f.createErr
@@ -1102,6 +1120,117 @@ func TestHandler_Attach(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, dbg.attachCalls, 1)
 	assert.Equal(t, "myprog", dbg.attachCalls[0].Program)
+}
+
+// debuggerOnly hides fakeDebugger's CreateSessionConnect so the
+// endpoint form can be exercised against a debugger that lacks the
+// capability.
+type debuggerOnly struct{ debugapi.Debugger }
+
+// TestHandler_AttachConnectEndpoint covers the one-shot
+// `debugger attach <langID> connect://host:port [program]` form,
+// which creates the session and sends attach in a single gesture so
+// the endpoint never has to be written into the workspace config.
+func TestHandler_AttachConnectEndpoint(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("creates session and attaches", func(t *testing.T) {
+		h, dbg, _ := newTestHandler(t)
+		it, err := h.HandleCommand(ctx, repl.Command{
+			Name: CommandName,
+			Args: []string{
+				subAttach, "python", "connect://127.0.0.1:5678", "main.py",
+			},
+		}, nil)
+		require.NoError(t, err)
+		require.NotNil(t, it)
+		t.Cleanup(func() { _ = it.Close() })
+
+		assert.Empty(t, dbg.createCalls,
+			"endpoint form must not go through CreateSession")
+		assert.Equal(t, [][2]string{{"python", "127.0.0.1:5678"}},
+			dbg.connectCalls)
+		require.Len(t, dbg.attachCalls, 1)
+		assert.Equal(t, "main.py", dbg.attachCalls[0].Program)
+
+		h.mu.Lock()
+		phase, sid := h.phase, h.sessionID
+		h.mu.Unlock()
+		assert.Equal(t, phaseStarted, phase)
+		assert.Equal(t, "s-test", sid)
+
+		// The returned iterator is the session event stream: it
+		// announces the session and stays open until it closes.
+		v, ok := it.Next(ctx)
+		require.True(t, ok)
+		require.NotNil(t, v)
+		require.NotNil(t, dbg.subscriber)
+		dbg.subscriber.OnClose("terminated")
+		v, ok = it.Next(ctx)
+		require.True(t, ok)
+		require.NotNil(t, v)
+		_, ok = it.Next(ctx)
+		require.False(t, ok)
+	})
+
+	t.Run("program is optional", func(t *testing.T) {
+		h, dbg, _ := newTestHandler(t)
+		it, err := h.HandleCommand(ctx, repl.Command{
+			Name: CommandName,
+			Args: []string{subAttach, "python", "connect://127.0.0.1:5678"},
+		}, nil)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = it.Close() })
+		require.Len(t, dbg.attachCalls, 1)
+		assert.Empty(t, dbg.attachCalls[0].Program)
+		assert.Zero(t, dbg.attachCalls[0].PID)
+	})
+
+	t.Run("rejected while a session is active", func(t *testing.T) {
+		h, dbg, _ := newTestHandler(t)
+		initSession(t, h, dbg, "python")
+		_, err := h.HandleCommand(ctx, repl.Command{
+			Name: CommandName,
+			Args: []string{subAttach, "python", "connect://127.0.0.1:5678"},
+		}, nil)
+		require.ErrorIs(t, err, errSessionActive)
+		assert.Empty(t, dbg.connectCalls)
+	})
+
+	t.Run("debugger without the capability errors", func(t *testing.T) {
+		dbg := newFakeDebugger()
+		h := New(debuggerOnly{dbg}, nil, nil, passThroughParser{}, passThroughFS{},
+			Config{ScheduleNextTick: syncScheduleNextTick})
+		_, err := h.HandleCommand(ctx, repl.Command{
+			Name: CommandName,
+			Args: []string{subAttach, "python", "connect://127.0.0.1:5678"},
+		}, nil)
+		require.ErrorContains(t, err, "not supported")
+		assert.Empty(t, dbg.attachCalls)
+	})
+
+	for _, tc := range []struct {
+		name string
+		args []string
+	}{
+		{"missing langID", []string{"connect://127.0.0.1:5678"}},
+		{"missing host:port", []string{"python", "connect://5678"}},
+		{"endpoint not second", []string{"connect://127.0.0.1:5678", "python"}},
+		{"too many arguments", []string{
+			"python", "connect://127.0.0.1:5678", "main.py", "extra",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, dbg, _ := newTestHandler(t)
+			_, err := h.HandleCommand(ctx, repl.Command{
+				Name: CommandName,
+				Args: append([]string{subAttach}, tc.args...),
+			}, nil)
+			require.ErrorContains(t, err,
+				"debugger attach <langID> connect://host:port")
+			assert.Empty(t, dbg.connectCalls)
+		})
+	}
 }
 
 func TestHandler_LifecycleSequenceErrors(t *testing.T) {

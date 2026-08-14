@@ -929,6 +929,49 @@ func TestDebuggerConfigsTemplates(t *testing.T) {
 	})
 }
 
+// TestDebuggerConfigsConnectCommand asserts that a connect:// adapter
+// command is validated at config load: the remainder must be a
+// host:port endpoint and the command must carry no extra arguments,
+// so a typo surfaces as a config error instead of a dial failure at
+// session creation.
+func TestDebuggerConfigsConnectCommand(t *testing.T) {
+	t.Parallel()
+
+	newConfig := func(command string) ideConfig {
+		return ideConfig{cfg: map[string]any{
+			"debugger": map[string]any{
+				"python": map[string]any{"command": command},
+			},
+		}, errors: map[string]error{}}
+	}
+
+	t.Run("valid endpoint parses", func(t *testing.T) {
+		t.Parallel()
+		c := newConfig("connect://127.0.0.1:5678")
+		got := c.debuggerConfigs()
+		require.Contains(t, got, "python")
+		assert.Equal(t, []string{"connect://127.0.0.1:5678"},
+			got["python"].Command)
+		assert.Empty(t, c.errors)
+	})
+
+	t.Run("missing port records error", func(t *testing.T) {
+		t.Parallel()
+		c := newConfig("connect://nohostport")
+		got := c.debuggerConfigs()
+		assert.NotContains(t, got, "python")
+		assert.Contains(t, c.errors, "debugger.python.command")
+	})
+
+	t.Run("extra arguments record error", func(t *testing.T) {
+		t.Parallel()
+		c := newConfig("connect://127.0.0.1:5678 extra")
+		got := c.debuggerConfigs()
+		assert.NotContains(t, got, "python")
+		assert.Contains(t, c.errors, "debugger.python.command")
+	})
+}
+
 // TestHighlightTabCharEmptyDisables asserts that an explicitly empty
 // focus_tab_highlight_char value disables the highlight (returns 0)
 // while an absent key falls back to the browser default.

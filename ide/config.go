@@ -33,6 +33,7 @@ import (
 	"image/png"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"slices"
 	"strings"
@@ -429,6 +430,10 @@ func (c ideConfig) debuggerConfigs() map[string]idedebug.AdapterConfig {
 				"command is empty")
 			return
 		}
+		if err := validateConnectCommand(argv); err != nil {
+			c.errors["debugger."+langID+".command"] = err
+			return
+		}
 		adapterID := langID
 		if s, err := entry.GetString("adapter_id"); err == nil && s != "" {
 			adapterID = s
@@ -446,6 +451,24 @@ func (c ideConfig) debuggerConfigs() map[string]idedebug.AdapterConfig {
 		}
 	})
 	return ret
+}
+
+// validateConnectCommand checks a `connect://host:port` adapter
+// command so a malformed endpoint is reported at config load rather
+// than as a dial failure when a debug session is created. Commands
+// that spawn an adapter process are left alone.
+func validateConnectCommand(argv []string) error {
+	addr, ok := strings.CutPrefix(argv[0], "connect://")
+	if !ok {
+		return nil
+	}
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return fmt.Errorf("adapter connect address %q: %w", addr, err)
+	}
+	if len(argv) > 1 {
+		return errors.New("connect:// command takes no arguments")
+	}
+	return nil
 }
 
 // debuggerArgsTemplate reads an optional string->string argument

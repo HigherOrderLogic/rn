@@ -103,6 +103,32 @@ func (m *Manager) CreateSession(
 		return "", nil, fmt.Errorf("%w: %s",
 			debugapi.ErrNoAdapterConfigured, langID)
 	}
+	return m.createSession(ctx, langID, adapter, client, subscriber)
+}
+
+// CreateSessionConnect starts a session against a debug adapter that
+// is already listening at addr (e.g. one spawned by `python -m
+// debugpy --listen host:port`) instead of spawning one. The language's
+// configured adapter ID and launch/attach templates still apply; only
+// the transport is overridden, so an endpoint can be supplied per
+// session without editing the workspace configuration.
+func (m *Manager) CreateSessionConnect(
+	ctx context.Context, langID, addr string,
+	client debugapi.ClientCapabilities, subscriber debugapi.EventSubscriber,
+) (string, *dap.Capabilities, error) {
+	adapter, ok := m.cfg.Adapters[langID]
+	if !ok {
+		return "", nil, fmt.Errorf("%w: %s",
+			debugapi.ErrNoAdapterConfigured, langID)
+	}
+	adapter.Command = []string{connectScheme + addr}
+	return m.createSession(ctx, langID, adapter, client, subscriber)
+}
+
+func (m *Manager) createSession(
+	ctx context.Context, langID string, adapter AdapterConfig,
+	client debugapi.ClientCapabilities, subscriber debugapi.EventSubscriber,
+) (string, *dap.Capabilities, error) {
 	if len(adapter.Command) == 0 {
 		return "", nil, fmt.Errorf(
 			"debug adapter for %s has empty command", langID)

@@ -190,9 +190,13 @@ func (r closeRecorder) OnClose(reason string) {
 
 // startFakeDAPAdapter listens on an ephemeral port and speaks just
 // enough DAP to satisfy the client handshake: every request is
-// answered with a success response. The returned stop function closes
-// the client connection, simulating a remote adapter going away.
-func startFakeDAPAdapter(t *testing.T) (addr string, stop func()) {
+// answered with a success response. Received requests are published
+// on the returned channel so tests can assert on the wire payloads.
+// The returned stop function closes the client connection, simulating
+// a remote adapter going away.
+func startFakeDAPAdapter(
+	t *testing.T,
+) (addr string, requests <-chan dap.RequestMessage, stop func()) {
 	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
@@ -202,6 +206,7 @@ func startFakeDAPAdapter(t *testing.T) (addr string, stop func()) {
 		mu   sync.Mutex
 		conn net.Conn
 	)
+	reqCh := make(chan dap.RequestMessage, 16)
 	go rdebug.CapturePanicReport(func() {
 		c, err := ln.Accept()
 		if err != nil {
@@ -220,6 +225,10 @@ func startFakeDAPAdapter(t *testing.T) (addr string, stop func()) {
 			req, ok := msg.(dap.RequestMessage)
 			if !ok {
 				continue
+			}
+			select {
+			case reqCh <- req:
+			default:
 			}
 			resp := dap.Response{
 				ProtocolMessage: dap.ProtocolMessage{
@@ -242,7 +251,7 @@ func startFakeDAPAdapter(t *testing.T) (addr string, stop func()) {
 			}
 		}
 	})
-	return ln.Addr().String(), func() {
+	return ln.Addr().String(), reqCh, func() {
 		mu.Lock()
 		defer mu.Unlock()
 		if conn != nil {
@@ -263,7 +272,7 @@ func TestCreateSessionDirectConnect(t *testing.T) {
 
 	t.Run("dials the listening adapter and initializes", func(t *testing.T) {
 		t.Parallel()
-		addr, stop := startFakeDAPAdapter(t)
+		addr, _, stop := startFakeDAPAdapter(t)
 		defer stop()
 
 		uri, err := workspaceapi.ParseURI("file:///tmp/test")
@@ -315,6 +324,79 @@ func TestCreateSessionDirectConnect(t *testing.T) {
 
 		_, _, err = m.CreateSession(context.Background(), "python",
 			debugapi.ClientCapabilities{}, fakeSubscriber{})
+		require.ErrorContains(t, err, "connect address")
+	})
+}
+
+// TestCreateSessionConnect covers the one-shot attach-by-connect
+// entry point: the endpoint replaces only the adapter transport, so
+// the language's configured adapter ID and attach template still
+// apply even though the configured command spawns a process.
+func TestCreateSessionConnect(t *testing.T) {
+	t.Parallel()
+
+	newManager := func(t *testing.T) *Manager {
+		t.Helper()
+		uri, err := workspaceapi.ParseURI("file:///tmp/test")
+		require.NoError(t, err)
+		m := New(uri, nil, nil, Config{
+			InitializeTimeout: 5 * time.Second,
+			Adapters: map[string]AdapterConfig{
+				"python": {
+					Command:   []string{"python", "-m", "debugpy.adapter"},
+					AdapterID: "debugpy",
+					AttachArgs: map[string]string{
+						"request": "attach",
+						"type":    "python",
+					},
+				},
+			},
+		})
+		t.Cleanup(func() { _ = m.Close() })
+		return m
+	}
+
+	t.Run("dials endpoint keeping adapter id and template", func(t *testing.T) {
+		t.Parallel()
+		addr, requests, stop := startFakeDAPAdapter(t)
+		defer stop()
+
+		m := newManager(t)
+		sid, _, err := m.CreateSessionConnect(context.Background(), "python",
+			addr, debugapi.ClientCapabilities{}, fakeSubscriber{})
+		require.NoError(t, err)
+		require.NotEmpty(t, sid)
+
+		init, ok := (<-requests).(*dap.InitializeRequest)
+		require.True(t, ok, "first request must be initialize")
+		assert.Equal(t, "debugpy", init.Arguments.AdapterID)
+
+		require.NoError(t, m.Attach(context.Background(), sid,
+			debugapi.AttachRequestArguments{Program: "main.py"}))
+		attach, ok := (<-requests).(*dap.AttachRequest)
+		require.True(t, ok, "second request must be attach")
+		var args map[string]any
+		require.NoError(t, json.Unmarshal(attach.Arguments, &args))
+		assert.Equal(t, map[string]any{
+			"request": "attach",
+			"type":    "python",
+			"program": "main.py",
+		}, args)
+	})
+
+	t.Run("unknown language errors", func(t *testing.T) {
+		t.Parallel()
+		m := newManager(t)
+		_, _, err := m.CreateSessionConnect(context.Background(), "ruby",
+			"127.0.0.1:5678", debugapi.ClientCapabilities{}, fakeSubscriber{})
+		assert.ErrorIs(t, err, debugapi.ErrNoAdapterConfigured)
+	})
+
+	t.Run("malformed address errors", func(t *testing.T) {
+		t.Parallel()
+		m := newManager(t)
+		_, _, err := m.CreateSessionConnect(context.Background(), "python",
+			"nohostport", debugapi.ClientCapabilities{}, fakeSubscriber{})
 		require.ErrorContains(t, err, "connect address")
 	})
 }

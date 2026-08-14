@@ -28,7 +28,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -73,7 +75,7 @@ func (h *Handler) dispatch(
 	case subLaunch:
 		return h.cmdLaunch(ctx, args)
 	case subAttach:
-		return h.cmdAttach(ctx, args)
+		return h.cmdAttach(ctx, args, pw)
 	case subConfigured:
 		return h.cmdConfigured(ctx)
 	case subTerminate:
@@ -557,10 +559,31 @@ func (h *Handler) cmdInitialize(
 	// the session even though `debugger terminate` is the
 	// only documented way to end it.
 	ctx = context.WithoutCancel(ctx)
+	sid, ch, err := h.beginSession(ctx, "initialize",
+		func(ctx context.Context) (string, error) {
+			sid, _, err := h.dbg.CreateSession(
+				ctx, langID, defaultClientCapabilities(), h)
+			return sid, err
+		})
+	if err != nil {
+		return nil, err
+	}
+	return newSessionIterator(langID, sid, ch, pw,
+		h.clearInstalledLocations), nil
+}
+
+// beginSession reserves the session event channel and the output
+// sink, runs create to establish the adapter session, and records
+// the resulting session on the handler in the initialized phase.
+// what prefixes any returned error (the subcommand name).
+func (h *Handler) beginSession(
+	ctx context.Context, what string,
+	create func(context.Context) (string, error),
+) (string, chan sessionEvent, error) {
 	h.mu.Lock()
 	if h.sessionID != "" {
 		h.mu.Unlock()
-		return nil, errSessionActive
+		return "", nil, errSessionActive
 	}
 	// Reserve the channel up front so OnEvent calls made
 	// synchronously from CreateSession are not dropped.
@@ -568,37 +591,36 @@ func (h *Handler) cmdInitialize(
 	h.events = ch
 	h.mu.Unlock()
 
+	release := func() {
+		h.mu.Lock()
+		if h.events == ch {
+			h.events = nil
+		}
+		h.mu.Unlock()
+	}
+
 	// Create the per-session output sink BEFORE CreateSession
 	// so OutputEvents emitted during the adapter handshake
 	// (e.g. delve's "Type 'dlv help' ..." console message) are
 	// captured. cmdLaunch/cmdAttach previously installed the
 	// sink, which dropped any OutputEvent fired earlier.
 	if _, err := h.startOutputCapture(); err != nil {
-		h.mu.Lock()
-		if h.events == ch {
-			h.events = nil
-		}
-		h.mu.Unlock()
-		return nil, fmt.Errorf("initialize: %w", err)
+		release()
+		return "", nil, fmt.Errorf("%s: %w", what, err)
 	}
 
-	sid, _, err := h.dbg.CreateSession(ctx, langID, defaultClientCapabilities(), h)
+	sid, err := create(ctx)
 	if err != nil {
 		h.stopOutputCapture()
-		h.mu.Lock()
-		if h.events == ch {
-			h.events = nil
-		}
-		h.mu.Unlock()
-		return nil, fmt.Errorf("initialize: %w", err)
+		release()
+		return "", nil, fmt.Errorf("%s: %w", what, err)
 	}
 
 	h.mu.Lock()
 	h.sessionID = sid
 	h.phase = phaseInitialized
 	h.mu.Unlock()
-	return newSessionIterator(langID, sid, ch, pw,
-		h.clearInstalledLocations), nil
+	return sid, ch, nil
 }
 
 func (h *Handler) cmdLaunch(
@@ -748,10 +770,13 @@ func parseLaunchArgs(
 }
 
 func (h *Handler) cmdAttach(
-	ctx context.Context, args []string,
+	ctx context.Context, args []string, pw repl.ProgressWriter,
 ) (iterator.Iterator[component.Responsive], error) {
 	if len(args) == 0 {
-		return nil, errors.New("usage: debugger attach <pid|program>")
+		return nil, errors.New(attachUsage)
+	}
+	if slices.ContainsFunc(args, isConnectEndpoint) {
+		return h.cmdAttachConnect(ctx, args, pw)
 	}
 	sid, err := h.requireInitializedOnly()
 	if err != nil {
@@ -805,6 +830,82 @@ func (h *Handler) cmdAttach(
 	out = append(out,
 		"Run `debugger configured` when configuration is complete.")
 	return newLaunchIterator(out, initCh), nil
+}
+
+const attachUsage = "usage: debugger attach <pid|program> | " +
+	"debugger attach <langID> connect://host:port [program]"
+
+// connectEndpointPrefix marks the attach argument that names an
+// already listening debug adapter (e.g. one started by
+// `python -m debugpy --listen host:port`).
+const connectEndpointPrefix = "connect://"
+
+func isConnectEndpoint(arg string) bool {
+	return strings.HasPrefix(arg, connectEndpointPrefix)
+}
+
+// sessionConnector is the optional debugapi.Debugger capability that
+// backs the endpoint form of attach. The production debugger
+// (*idedebug.Manager) implements it; a debugger that does not gets a
+// clear error instead of a silent fallback.
+type sessionConnector interface {
+	CreateSessionConnect(
+		ctx context.Context, langID, addr string,
+		client debugapi.ClientCapabilities, sub debugapi.EventSubscriber,
+	) (string, *dap.Capabilities, error)
+}
+
+// cmdAttachConnect handles `debugger attach <langID>
+// connect://host:port [program]`: it creates the session against the
+// listening adapter and sends the attach request in one gesture, so
+// the per-session endpoint never has to be written into the
+// workspace configuration. It requires that no session is active and
+// returns the session event iterator, since no `initialize` ran to
+// produce one.
+func (h *Handler) cmdAttachConnect(
+	ctx context.Context, args []string, pw repl.ProgressWriter,
+) (iterator.Iterator[component.Responsive], error) {
+	if len(args) < 2 || len(args) > 3 || !isConnectEndpoint(args[1]) {
+		return nil, errors.New(attachUsage)
+	}
+	langID := args[0]
+	addr := strings.TrimPrefix(args[1], connectEndpointPrefix)
+	if _, _, err := net.SplitHostPort(addr); err != nil {
+		return nil, fmt.Errorf("%s: %w", attachUsage, err)
+	}
+	connector, ok := h.dbg.(sessionConnector)
+	if !ok {
+		return nil, errors.New(
+			"attach: connecting to a listening adapter is not supported " +
+				"by this debugger")
+	}
+	aArgs := debugapi.AttachRequestArguments{}
+	if len(args) == 3 {
+		aArgs.Program = args[2]
+	}
+	// Detach from the caller's ctx for the same reason as
+	// cmdInitialize: Ctrl-C cancels the REPL's per-command context
+	// but must not tear down the debug session.
+	ctx = context.WithoutCancel(ctx)
+	sid, ch, err := h.beginSession(ctx, subAttach,
+		func(ctx context.Context) (string, error) {
+			sid, _, err := connector.CreateSessionConnect(
+				ctx, langID, addr, defaultClientCapabilities(), h)
+			return sid, err
+		})
+	if err != nil {
+		return nil, err
+	}
+	if err := h.dbg.Attach(ctx, sid, aArgs); err != nil {
+		// Leave the session up: the user can retry the attach or
+		// terminate it.
+		return nil, fmt.Errorf("attach: %w", err)
+	}
+	h.mu.Lock()
+	h.phase = phaseStarted
+	h.mu.Unlock()
+	return newSessionIterator(langID, sid, ch, pw,
+		h.clearInstalledLocations), nil
 }
 
 func (h *Handler) cmdConfigured(
